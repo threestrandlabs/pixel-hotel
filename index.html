@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<title>Pixel Hotel</title>
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+<div id="app">
+  <header id="topbar">
+    <div id="brand">🏨 Pixel Hotel</div>
+    <div id="roomName">Grand Lobby</div>
+    <div id="coinsDisplay">💰 <span id="coinsValue">0</span></div>
+    <div id="topButtons">
+      <button id="btnInventory" class="pixel-btn" title="Inventory (I)">🛋️ Items</button>
+      <button id="btnQuests" class="pixel-btn" title="Quests (Q)">📜 Quests</button>
+      <button id="btnMute" class="pixel-btn" title="Mute/unmute (M)">🔇</button>
+      <button id="btnHelp" class="pixel-btn" title="Help (H)">❓</button>
+      <button id="btnSave" class="pixel-btn" title="Save (S)">💾 Save</button>
+      <button id="btnReset" class="pixel-btn" title="Reset progress">♻️ Reset</button>
+    </div>
+  </header>
+
+  <main id="gameArea">
+    <canvas id="gameCanvas" width="960" height="600"></canvas>
+    <div id="toast" class="hidden"></div>
+    <div id="placingBar" class="hidden">
+      <span id="placingLabel">Placing item...</span>
+      <button id="btnRotate" class="pixel-btn">⟳ Rotate (R)</button>
+      <button id="btnCancelPlace" class="pixel-btn">✕ Cancel (Esc)</button>
+    </div>
+  </main>
+
+  <div id="chatDock">
+    <div id="chatLog" aria-live="polite"></div>
+    <form id="chatForm" autocomplete="off">
+      <input id="chatInput" type="text" maxlength="90" placeholder="Say something... (try 'hello')" />
+      <button type="submit" class="pixel-btn">Send</button>
+    </form>
+  </div>
+
+  <aside id="inventoryPanel" class="panel hidden">
+    <div class="panel-header">
+      <span>Inventory &amp; Shop</span>
+      <button class="panel-close" data-close="inventoryPanel">✕</button>
+    </div>
+    <div class="panel-tabs">
+      <button class="tab-btn active" data-tab="shopTab">Shop</button>
+      <button class="tab-btn" data-tab="bagTab">My Items</button>
+      <button class="tab-btn" data-tab="roomTab">In This Room</button>
+    </div>
+    <div id="shopTab" class="tab-content"></div>
+    <div id="bagTab" class="tab-content hidden"></div>
+    <div id="roomTab" class="tab-content hidden"></div>
+  </aside>
+
+  <aside id="questPanel" class="panel hidden">
+    <div class="panel-header">
+      <span>Quests</span>
+      <button class="panel-close" data-close="questPanel">✕</button>
+    </div>
+    <div id="questList"></div>
+  </aside>
+
+  <div id="helpOverlay" class="overlay hidden">
+    <div class="overlay-box">
+      <h2>Welcome to Pixel Hotel!</h2>
+      <ul>
+        <li><b>Click a floor tile</b> to walk there.</li>
+        <li><b>Click a chair/sofa</b> to walk over and sit.</li>
+        <li><b>Type in the chat box</b> and press Enter to talk — nearby guests reply!</li>
+        <li><b>🛋️ Items</b> — buy furniture, then place/move/rotate/pick it up.</li>
+        <li><b>📜 Quests</b> — complete goals for coins and unlocks.</li>
+        <li><b>Door tiles</b> at the top wall lead between rooms.</li>
+      </ul>
+      <p class="kbd-hint">Shortcuts: <kbd>I</kbd> inventory · <kbd>Q</kbd> quests · <kbd>M</kbd> mute · <kbd>H</kbd> help · <kbd>S</kbd> save · <kbd>R</kbd> rotate (while placing) · <kbd>Esc</kbd> cancel</p>
+      <button id="btnHelpClose" class="pixel-btn">Got it!</button>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+node_modules/
+test-results/
+tests/screenshots/*.png
+playwright-report/
+.playwright/
+*.log
+claude_run*.log
+.DS_Store
