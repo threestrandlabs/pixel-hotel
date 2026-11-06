@@ -160,6 +160,13 @@ async function main() {
     check('coins persist after reload', stateAfterReload.coins === coinsBeforeSave);
     await page.screenshot({ path: path.join(SCREENSHOT_DIR, '05-after-reload.png') });
 
+    // ---- showroom screenshot showing all 8 new collection items ----
+    await page.evaluate(() => window.__pixelHotel.loadShowroom());
+    await page.waitForTimeout(300);
+    const showroomPlaced = await page.evaluate(() => window.__pixelHotel.getState().rooms.rooftop.placed);
+    check('showroom has all 8 new collection items placed', showroomPlaced.length === 8);
+    await page.screenshot({ path: path.join(SCREENSHOT_DIR, '06-showroom.png') });
+
     await browser.close();
   } finally {
     killServer();

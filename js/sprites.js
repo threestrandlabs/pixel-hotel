@@ -284,89 +284,21 @@ export function buildDoorSegment(baseColor, kind = 'north') {
 
 // ---------- Furniture ----------
 
-function basicBox(w, h, topH, topColor, sideColorL, sideColorR) {
-  const s = makeGrid(w, h);
-  fillRect(s, 0, 0, w, topH, topColor);
-  fillRect(s, 0, topH, Math.floor(w / 2), h - topH, sideColorL);
-  fillRect(s, Math.floor(w / 2), topH, w - Math.floor(w / 2), h - topH, sideColorR);
-  return s;
-}
-
-export function buildStoolSprite() {
-  const s = makeGrid(28, 30);
-  fillDiamond(s, 14, 10, 12, 7, '#caa05a');
-  fillDiamond(s, 14, 10, 8, 4, shade('#caa05a', 0.2));
-  fillRect(s, 6, 13, 4, 12, '#8a6a3a');
-  fillRect(s, 18, 13, 4, 12, '#6e5327');
-  fillRect(s, 10, 13, 4, 14, '#7a5d31');
-  return s;
-}
-
-export function buildLampSprite() {
-  const s = makeGrid(20, 38);
-  fillRect(s, 2, 34, 16, 4, '#4a4a4a');
-  fillRect(s, 9, 16, 2, 18, '#6a6a6a');
-  fillCircle(s, 10, 11, 9, '#ff9f5a');
-  fillCircle(s, 10, 11, 5, '#ffd79a');
-  return s;
-}
-
-export function buildPlantSprite() {
-  const s = makeGrid(24, 34);
-  fillRect(s, 6, 24, 12, 10, '#a6703a');
-  fillRect(s, 6, 24, 12, 3, '#c28a4e');
-  fillCircle(s, 12, 16, 9, '#3f9a4f');
-  fillCircle(s, 6, 12, 6, '#4bb25f');
-  fillCircle(s, 18, 12, 6, '#36803f');
-  fillCircle(s, 12, 6, 6, '#4bb25f');
-  return s;
-}
-
-export function buildRugSprite() {
-  const s = makeGrid(ISO.TILE_W * 2, ISO.TILE_H * 2);
-  fillDiamond(s, s.w / 2, s.h / 2, s.w / 2 - 4, s.h / 2 - 4, '#c7496b');
-  fillDiamond(s, s.w / 2, s.h / 2, s.w / 2 - 14, s.h / 2 - 14, '#e2748f');
-  fillDiamond(s, s.w / 2, s.h / 2, s.w / 2 - 26, s.h / 2 - 26, '#c7496b');
-  fillDiamond(s, s.w / 2, s.h / 2, 10, 6, '#f6c667');
-  s.ax = s.w / 2;
-  s.ay = s.h / 2;
-  return s;
-}
-
-export function buildNeonSignSprite() {
-  const s = makeGrid(30, 34);
-  fillRect(s, 2, 2, 26, 20, '#1a1a2a');
-  fillRect(s, 4, 4, 22, 16, '#241f3a');
-  for (let i = 0; i < 5; i++) fillRect(s, 6 + i * 4, 8, 2, 8, i % 2 === 0 ? '#ff5fd1' : '#5fe0ff');
-  fillRect(s, 12, 22, 6, 12, '#4a4a4a');
-  return s;
-}
-
-export function buildJukeboxSprite() {
-  const s = makeGrid(26, 38);
-  fillRect(s, 2, 4, 22, 30, '#7a2f3a');
-  fillRect(s, 4, 6, 18, 12, '#ffe9a8');
-  fillCircle(s, 13, 12, 5, '#c7496b');
-  fillRect(s, 4, 20, 18, 10, '#4a1f27');
-  fillRect(s, 6, 22, 4, 2, '#f6c667');
-  fillRect(s, 12, 22, 4, 2, '#5fe0ff');
-  fillRect(s, 18, 22, 2, 2, '#ff5fd1');
-  fillRect(s, 2, 34, 22, 4, '#2a2a2a');
-  return s;
-}
-
 // Small isometric prism toolkit: (u,v) are tile units along the x/y grid axes,
 // z is pixels of height. Sprites made this way carry ax/ay, the pixel that
 // must land on the footprint centre (the renderer honours them).
-function isoSprite(tw, th, height, draw) {
+export function isoSprite(tw, th, height, draw) {
   const s = makeGrid((tw + th) * 32 + 2, (tw + th) * 16 + height + 2);
   const px0 = th * 32 + 1;
   const py0 = height + 1;
   const P = (u, v, z) => [px0 + (u - v) * 32, py0 + (u + v) * 16 - z];
   const box = (u0, v0, u1, v1, z0, z1, top, left, right) => {
-    fillPolygon(s, [P(u0, v1, z1), P(u1, v1, z1), P(u1, v1, z0), P(u0, v1, z0)], left);
-    fillPolygon(s, [P(u1, v0, z1), P(u1, v1, z1), P(u1, v1, z0), P(u1, v0, z0)], right);
-    fillPolygon(s, [P(u0, v0, z1), P(u1, v0, z1), P(u1, v1, z1), P(u0, v1, z1)], top);
+    const topC = left !== undefined ? top : shade(top, 0.14);
+    const leftC = left !== undefined ? left : top;
+    const rightC = right !== undefined ? right : shade(top, -0.22);
+    fillPolygon(s, [P(u0, v1, z1), P(u1, v1, z1), P(u1, v1, z0), P(u0, v1, z0)], leftC);
+    fillPolygon(s, [P(u1, v0, z1), P(u1, v1, z1), P(u1, v1, z0), P(u1, v0, z0)], rightC);
+    fillPolygon(s, [P(u0, v0, z1), P(u1, v0, z1), P(u1, v1, z1), P(u0, v1, z1)], topC);
   };
   draw(box, P, s);
   const out = outline(s, '#2a1d2e');
@@ -376,53 +308,328 @@ function isoSprite(tw, th, height, draw) {
   return out;
 }
 
-// Sofa: backrest on the far (low u/v) edge, so the sitter faces the viewer.
-export function buildSofaSprite(color = '#e2607a', rot = 0) {
-  const [tw, th] = rot % 2 ? [1, 2] : [2, 1];
-  const c = [color, shade(color, -0.15), shade(color, -0.3)];
-  const lt = [shade(color, 0.25), color, shade(color, -0.15)];
-  return isoSprite(tw, th, 36, (box) => {
-    const along = rot % 2 ? th : tw; // length along the sofa
-    // [u,v] helpers: a = position along the sofa, d = depth across it
-    const b2 = (a0, a1, d0, d1, z0, z1, col) => (rot % 2
-      ? box(d0, a0, d1, a1, z0, z1, ...col)
-      : box(a0, d0, a1, d1, z0, z1, ...col));
-    const dep = 1;
-    b2(0.03, along - 0.03, 0.05, dep - 0.05, 0, 12, lt.map((x) => shade(x, -0.1)));
-    b2(0.03, along - 0.03, 0.05, 0.3, 12, 36, c);
-    b2(0.03, 0.2, 0.3, dep - 0.05, 12, 26, c);
-    for (let i = 0; i < along; i++) b2(0.22 + i, i + 0.98 - 0.0, 0.3, dep - 0.08, 12, 19, lt);
-    b2(along - 0.2, along - 0.03, 0.3, dep - 0.05, 12, 26, c);
+const WOOD = ['#c98f55', '#a8703d', '#8a5a30']; // top, left, right
+
+export function buildStoolSprite() {
+  return isoSprite(1, 1, 26, (box) => {
+    // 4 sturdy wooden legs touching floor (z = 0 .. 10)
+    box(0.20, 0.20, 0.34, 0.34, 0, 10, ...WOOD);
+    box(0.66, 0.20, 0.80, 0.34, 0, 10, ...WOOD);
+    box(0.20, 0.66, 0.34, 0.80, 0, 10, ...WOOD);
+    box(0.66, 0.66, 0.80, 0.80, 0, 10, ...WOOD);
+    // Footrest cross-stretchers (z = 4 .. 6)
+    box(0.22, 0.22, 0.78, 0.30, 4, 6, ...WOOD);
+    box(0.22, 0.70, 0.78, 0.78, 4, 6, ...WOOD);
+    box(0.22, 0.22, 0.30, 0.78, 4, 6, ...WOOD);
+    box(0.70, 0.22, 0.78, 0.78, 4, 6, ...WOOD);
+    // Wooden seat base slab (z = 10 .. 12)
+    box(0.16, 0.16, 0.84, 0.84, 10, 12, ...WOOD);
+    // Tufted leather seat cushion (z = 12 .. 14)
+    box(0.12, 0.12, 0.88, 0.88, 12, 14, '#e0b25e', '#caa05a', '#9e7a38');
+    // Button tuft
+    box(0.44, 0.44, 0.56, 0.56, 14, 15, '#f4d084', '#e0b25e', '#b88d3e');
   });
 }
 
-const WOOD = ['#c98f55', '#a8703d', '#8a5a30']; // top, left, right
+// Sofa: 4-way volumetric orientation, coherent contact plane
+export function buildSofaSprite(color = '#e2607a', rot = 0) {
+  const r = ((rot % 4) + 4) % 4;
+  const [tw, th] = r % 2 ? [1, 2] : [2, 1];
+  const topC = shade(color, 0.14), midC = color, darkC = shade(color, -0.22);
+  const col = [topC, midC, darkC];
+  const lt = [shade(color, 0.25), shade(color, 0.10), shade(color, -0.12)];
+  const dk = [shade(color, -0.10), shade(color, -0.22), shade(color, -0.35)];
+
+  return isoSprite(tw, th, 36, (box) => {
+    // 4 low wooden feet (z = 0 .. 3)
+    box(0.06, 0.06, 0.18, 0.18, 0, 3, ...WOOD);
+    box(tw - 0.18, 0.06, tw - 0.06, 0.18, 0, 3, ...WOOD);
+    box(0.06, th - 0.18, 0.18, th - 0.06, 0, 3, ...WOOD);
+    box(tw - 0.18, th - 0.18, tw - 0.06, th - 0.06, 0, 3, ...WOOD);
+
+    if (r === 0) {
+      // 2x1 facing down (+v): backrest on north edge
+      box(0.04, 0.04, 1.96, 0.96, 3, 8, ...dk); // lower plinth
+      box(0.04, 0.06, 1.96, 0.32, 8, 34, ...col); // backrest
+      box(0.04, 0.32, 0.24, 0.96, 8, 22, ...col); // left armrest
+      box(1.76, 0.32, 1.96, 0.96, 8, 22, ...col); // right armrest
+      // seat cushions (z = 8 .. 13)
+      box(0.26, 0.32, 0.98, 0.94, 8, 13, ...lt);
+      box(1.02, 0.32, 1.74, 0.94, 8, 13, ...lt);
+    } else if (r === 1) {
+      // 1x2 facing right (+u): backrest on west edge
+      box(0.04, 0.04, 0.96, 1.96, 3, 8, ...dk);
+      box(0.06, 0.04, 0.32, 1.96, 8, 34, ...col);
+      box(0.32, 0.04, 0.96, 0.24, 8, 22, ...col);
+      box(0.32, 1.76, 0.96, 1.96, 8, 22, ...col);
+      box(0.32, 0.26, 0.94, 0.98, 8, 13, ...lt);
+      box(0.32, 1.02, 0.94, 1.74, 8, 13, ...lt);
+    } else if (r === 2) {
+      // 2x1 facing up (-v): backrest on south edge
+      box(0.04, 0.04, 1.96, 0.96, 3, 8, ...dk);
+      box(0.26, 0.06, 0.98, 0.68, 8, 13, ...lt);
+      box(1.02, 0.06, 1.74, 0.68, 8, 13, ...lt);
+      box(0.04, 0.04, 0.24, 0.68, 8, 22, ...col);
+      box(1.76, 0.04, 1.96, 0.68, 8, 22, ...col);
+      box(0.04, 0.68, 1.96, 0.94, 8, 34, ...col);
+    } else {
+      // 1x2 facing left (-u): backrest on east edge
+      box(0.04, 0.04, 0.96, 1.96, 3, 8, ...dk);
+      box(0.06, 0.26, 0.68, 0.98, 8, 13, ...lt);
+      box(0.06, 1.02, 0.68, 1.74, 8, 13, ...lt);
+      box(0.04, 0.04, 0.68, 0.24, 8, 22, ...col);
+      box(0.04, 1.76, 0.68, 1.96, 8, 22, ...col);
+      box(0.68, 0.04, 0.94, 1.96, 8, 34, ...col);
+    }
+  });
+}
+
+export function buildLampSprite() {
+  const CHROME = ['#9e9eac', '#7c7c8a', '#5c5c68'];
+  return isoSprite(1, 1, 46, (box) => {
+    // Brushed chrome tiered pedestal base (z = 0 .. 8)
+    box(0.24, 0.24, 0.76, 0.76, 0, 4, ...CHROME);
+    box(0.30, 0.30, 0.70, 0.70, 4, 8, ...CHROME);
+    // Glowing liquid cylinder chamber (z = 8 .. 32)
+    box(0.34, 0.34, 0.66, 0.66, 8, 32, '#ff9040', '#e06020', '#b03810');
+    // Internal floating thermal lava blobs
+    box(0.38, 0.38, 0.62, 0.62, 11, 17, '#ffea70', '#ffc040', '#d08020');
+    box(0.40, 0.40, 0.60, 0.60, 23, 29, '#fff298', '#ffd450', '#e49424');
+    // Brushed chrome top cone & finial cap (z = 32 .. 42)
+    box(0.30, 0.30, 0.70, 0.70, 32, 37, ...CHROME);
+    box(0.38, 0.38, 0.62, 0.62, 37, 40, ...CHROME);
+    box(0.44, 0.44, 0.56, 0.56, 40, 44, '#d8d8e4', '#b0b0c0', '#888898');
+  });
+}
+
+export function buildPlantSprite() {
+  const POT = ['#cc7d47', '#b06532', '#8c4b22'];
+  const SOIL = ['#3d281a', '#2c1c12', '#20140c'];
+  const LEAF1 = ['#66dd77', '#44aa55', '#2e7c3b'];
+  const LEAF2 = ['#55cc66', '#3db04e', '#2a8037'];
+  const LEAF3 = ['#77ee88', '#55cc66', '#3db04e'];
+
+  return isoSprite(1, 1, 40, (box) => {
+    // Terracotta pot base and flared rim (z = 0 .. 14)
+    box(0.28, 0.28, 0.72, 0.72, 0, 10, ...POT);
+    box(0.24, 0.24, 0.76, 0.76, 10, 14, ...POT);
+    // Dark nutrient soil (z = 13 .. 14)
+    box(0.26, 0.26, 0.74, 0.74, 13, 14, ...SOIL);
+    // Main stem core
+    box(0.45, 0.45, 0.55, 0.55, 14, 26, '#3a8c44', '#286b32', '#1c4a22');
+    // Multi-faceted fern fronds layered in 3D
+    box(0.12, 0.30, 0.42, 0.58, 18, 24, ...LEAF2); // west frond
+    box(0.42, 0.12, 0.70, 0.40, 20, 26, ...LEAF1); // north frond
+    box(0.32, 0.60, 0.62, 0.88, 16, 22, ...LEAF2); // south frond
+    box(0.60, 0.34, 0.88, 0.64, 17, 23, ...LEAF1); // east frond
+    // Mid & crown foliage tiers
+    box(0.30, 0.30, 0.70, 0.70, 24, 30, ...LEAF1);
+    box(0.40, 0.40, 0.60, 0.60, 30, 37, ...LEAF3);
+  });
+}
+
+// Thin rugs are physically thin cuboid surfaces, not tall blocks
+export function buildRugSprite() {
+  const RUG_BERRY = ['#c7496b', '#a83854', '#7a243a'];
+  const RUG_ROSE = ['#e2748f', '#c05872', '#8c384e'];
+  const RUG_GOLD = ['#f6c667', '#d8a442', '#a07424'];
+  const RUG_CREAM = ['#fff2a8', '#f6c667', '#c8922c'];
+
+  return isoSprite(2, 2, 4, (box) => {
+    // Outer border thin cuboid (z = 0 .. 2)
+    box(0.06, 0.06, 1.94, 1.94, 0, 2, ...RUG_BERRY);
+    // Rose field (z = 0 .. 2)
+    box(0.24, 0.24, 1.76, 1.76, 0, 2, ...RUG_ROSE);
+    // Inner ruby panel (z = 0 .. 2)
+    box(0.54, 0.54, 1.46, 1.46, 0, 2, ...RUG_BERRY);
+    // Gold starburst medallion (z = 0 .. 2)
+    box(0.76, 0.76, 1.24, 1.24, 0, 2, ...RUG_GOLD);
+    // Center jewel (z = 0 .. 2)
+    box(0.90, 0.90, 1.10, 1.10, 0, 2, ...RUG_CREAM);
+  });
+}
+
+export function buildNeonSignSprite() {
+  const IRON = ['#4a4a58', '#383844', '#262630'];
+  const CHASSIS = ['#222232', '#181824', '#0e0e16'];
+  const NEON_PINK = ['#ff70d8', '#ff40c8', '#b8208c'];
+  const NEON_CYAN = ['#70f4ff', '#40e8ff', '#1cb0c4'];
+  const NEON_GOLD = ['#fff090', '#ffe040', '#c8a818'];
+
+  return isoSprite(1, 1, 56, (box) => {
+    // Cast iron cross base (z = 0 .. 3)
+    box(0.20, 0.44, 0.80, 0.56, 0, 3, ...IRON);
+    box(0.44, 0.20, 0.56, 0.80, 0, 3, ...IRON);
+    // Vertical iron stanchion pole (z = 3 .. 26)
+    box(0.45, 0.45, 0.55, 0.55, 3, 26, ...IRON);
+    // Sign chassis backing box (z = 24 .. 52)
+    box(0.14, 0.40, 0.86, 0.60, 24, 52, ...CHASSIS);
+    // Outer neon pink border tubing
+    box(0.12, 0.38, 0.88, 0.62, 50, 52, ...NEON_PINK);
+    box(0.12, 0.38, 0.88, 0.62, 24, 26, ...NEON_PINK);
+    box(0.12, 0.38, 0.16, 0.62, 26, 50, ...NEON_PINK);
+    box(0.84, 0.38, 0.88, 0.62, 26, 50, ...NEON_PINK);
+    // Neon HOTEL letter glyphs (z = 28 .. 48)
+    box(0.22, 0.38, 0.32, 0.62, 28, 48, ...NEON_CYAN); // H
+    box(0.38, 0.38, 0.48, 0.62, 28, 48, ...NEON_GOLD); // O
+    box(0.54, 0.38, 0.64, 0.62, 28, 48, ...NEON_CYAN); // T
+    box(0.70, 0.38, 0.80, 0.62, 28, 48, ...NEON_GOLD); // E/L
+  });
+}
+
+export function buildJukeboxSprite() {
+  const CHROME = ['#9e9eac', '#7c7c8a', '#5c5c68'];
+  const MAHOGANY = ['#7c2836', '#601e2a', '#44121c'];
+  const GRILLE = ['#ffd470', '#e0b048', '#a87e28'];
+
+  return isoSprite(1, 1, 50, (box) => {
+    // Chrome plinth kickplate (z = 0 .. 5)
+    box(0.14, 0.14, 0.86, 0.86, 0, 5, ...CHROME);
+    // Lower speaker cabinet (z = 5 .. 20)
+    box(0.16, 0.16, 0.84, 0.84, 5, 20, ...MAHOGANY);
+    box(0.22, 0.80, 0.78, 0.86, 7, 18, ...GRILLE); // front cloth
+    // Middle selection control shelf (z = 20 .. 25)
+    box(0.14, 0.14, 0.86, 0.86, 20, 25, '#9a3648', '#782636', '#541624');
+    // Push buttons
+    box(0.24, 0.78, 0.36, 0.86, 22, 24, '#5fe0ff', '#38b8d4', '#1e788c');
+    box(0.44, 0.78, 0.56, 0.86, 22, 24, '#ffe27a', '#d8be56', '#9c8428');
+    box(0.64, 0.78, 0.76, 0.86, 22, 24, '#ff5fd1', '#d43da8', '#941c70');
+    // Upper record player viewing chamber (z = 25 .. 42)
+    box(0.18, 0.18, 0.82, 0.82, 25, 42, '#202838', '#161c28', '#0c1018');
+    // Vinyl record & tonearm turntable inside
+    box(0.30, 0.30, 0.70, 0.70, 27, 30, '#101014', '#08080a', '#040406');
+    box(0.46, 0.46, 0.54, 0.54, 30, 31, '#ff3850', '#c81c30', '#880c1e'); // label
+    // Glowing neon arch trim (z = 40 .. 48)
+    box(0.16, 0.16, 0.84, 0.84, 42, 46, '#ff5fd1', '#d43da8', '#941c70');
+    box(0.26, 0.26, 0.74, 0.74, 46, 50, '#ffe27a', '#d8be56', '#9c8428');
+  });
+}
+
+export function buildArmchairSprite(rot = 0) {
+  const r = ((rot % 4) + 4) % 4;
+  const AMBER = ['#e8a452', '#d28a3c', '#9c6020'];
+  const AMBER_LT = ['#f4bc74', '#e8a452', '#b8762c'];
+  const AMBER_DK = ['#b87428', '#9c5e1c', '#6e3e0e'];
+
+  return isoSprite(1, 1, 36, (box) => {
+    // 4 sturdy turned wooden legs (z = 0 .. 6)
+    box(0.16, 0.16, 0.28, 0.28, 0, 6, ...WOOD);
+    box(0.72, 0.16, 0.84, 0.28, 0, 6, ...WOOD);
+    box(0.16, 0.72, 0.28, 0.84, 0, 6, ...WOOD);
+    box(0.72, 0.72, 0.84, 0.84, 0, 6, ...WOOD);
+    // Base apron frame (z = 6 .. 8)
+    box(0.12, 0.12, 0.88, 0.88, 6, 8, ...AMBER_DK);
+
+    if (r === 0) {
+      // Facing down (+v): backrest on north edge, arms on west/east
+      box(0.10, 0.10, 0.90, 0.34, 8, 34, ...AMBER); // high backrest
+      box(0.10, 0.34, 0.28, 0.90, 8, 22, ...AMBER); // left armrest
+      box(0.72, 0.34, 0.90, 0.90, 8, 22, ...AMBER); // right armrest
+      box(0.28, 0.34, 0.72, 0.86, 8, 12, ...AMBER_LT); // plush cushion
+    } else if (r === 1) {
+      // Facing right (+u): backrest on west edge, arms on north/south
+      box(0.10, 0.10, 0.34, 0.90, 8, 34, ...AMBER);
+      box(0.34, 0.10, 0.90, 0.28, 8, 22, ...AMBER);
+      box(0.34, 0.72, 0.90, 0.90, 8, 22, ...AMBER);
+      box(0.34, 0.28, 0.86, 0.72, 8, 12, ...AMBER_LT);
+    } else if (r === 2) {
+      // Facing up (-v): backrest on south edge
+      box(0.28, 0.14, 0.72, 0.66, 8, 12, ...AMBER_LT);
+      box(0.10, 0.10, 0.28, 0.66, 8, 22, ...AMBER);
+      box(0.72, 0.10, 0.90, 0.66, 8, 22, ...AMBER);
+      box(0.10, 0.66, 0.90, 0.90, 8, 34, ...AMBER);
+    } else {
+      // Facing left (-u): backrest on east edge
+      box(0.14, 0.28, 0.66, 0.72, 8, 12, ...AMBER_LT);
+      box(0.10, 0.10, 0.66, 0.28, 8, 22, ...AMBER);
+      box(0.10, 0.72, 0.66, 0.90, 8, 22, ...AMBER);
+      box(0.66, 0.10, 0.90, 0.90, 8, 34, ...AMBER);
+    }
+  });
+}
+
+export function buildDeckchairSprite(rot = 0) {
+  const r = ((rot % 4) + 4) % 4;
+  const BEECH = ['#dfb882', '#b88a52', '#865e28'];
+  const STRIPE_RED = ['#f0506e', '#d83856', '#a01c38'];
+  const STRIPE_BLUE = ['#66b0f4', '#4894dc', '#2a6cb0'];
+  const STRIPE_CREAM = ['#fdf6e6', '#ded4c0', '#b0a690'];
+
+  return isoSprite(1, 1, 34, (box) => {
+    if (r === 0 || r === 2) {
+      // Cross scissor beechwood legs
+      box(0.14, 0.14, 0.24, 0.86, 0, 16, ...BEECH);
+      box(0.76, 0.14, 0.86, 0.86, 0, 16, ...BEECH);
+      // Fabric sling (z = 8 .. 30)
+      box(0.24, 0.18, 0.76, 0.42, 14, 30, ...STRIPE_RED);
+      box(0.24, 0.42, 0.76, 0.66, 10, 14, ...STRIPE_CREAM);
+      box(0.24, 0.66, 0.76, 0.86, 8, 11, ...STRIPE_BLUE);
+    } else {
+      // rot 1 or 3
+      box(0.14, 0.14, 0.86, 0.24, 0, 16, ...BEECH);
+      box(0.14, 0.76, 0.86, 0.86, 0, 16, ...BEECH);
+      box(0.18, 0.24, 0.42, 0.76, 14, 30, ...STRIPE_RED);
+      box(0.42, 0.24, 0.66, 0.76, 10, 14, ...STRIPE_CREAM);
+      box(0.66, 0.24, 0.86, 0.76, 8, 11, ...STRIPE_BLUE);
+    }
+  });
+}
 
 export function buildReceptionDesk(rot = 0) {
   const [tw, th] = rot % 2 ? [1, 3] : [3, 1];
-  return isoSprite(tw, th, 34, (box) => {
-    box(0.05, 0.1, tw - 0.05, th - 0.1, 0, 22, ...WOOD);
-    box(0.05, 0.1, tw - 0.05, th - 0.1, 22, 25, '#f2d9a6', '#d9b87a', '#bf9d62');
-    // bell + little lamp on top
-    box(tw / 2 - 0.1, th / 2 - 0.1, tw / 2 + 0.1, th / 2 + 0.1, 25, 30, '#ffe27a', '#e0b23a', '#b88a2a');
+  const MARBLE = ['#f6eedc', '#dcceb4', '#b8a88c'];
+  const BELL = ['#ffe27a', '#e0b23a', '#b88a2a'];
+
+  return isoSprite(tw, th, 38, (box) => {
+    // Plinth base molding (z = 0 .. 4)
+    box(0.04, 0.08, tw - 0.04, th - 0.08, 0, 4, '#7c4c22', '#643a16', '#48260c');
+    // Paneled wooden counter body (z = 4 .. 24)
+    box(0.06, 0.10, tw - 0.06, th - 0.10, 4, 24, ...WOOD);
+    // Polished marble slab counter top with overhang (z = 24 .. 28)
+    box(0.02, 0.05, tw - 0.02, th - 0.05, 24, 28, ...MARBLE);
+    // Brass counter service bell (z = 28 .. 33)
+    box(tw / 2 - 0.12, th / 2 - 0.12, tw / 2 + 0.12, th / 2 + 0.12, 28, 33, ...BELL);
+    // Guest register leather ledger book (z = 28 .. 30)
+    const bx = rot % 2 ? 0.35 : 0.65;
+    const by = rot % 2 ? 0.65 : 0.35;
+    box(bx, by, bx + 0.25, by + 0.25, 28, 30, '#542018', '#3e140e', '#280a06');
+    // Desk lamp with brass arch (z = 28 .. 38)
+    const lx = rot % 2 ? 0.35 : tw - 0.55;
+    const ly = rot % 2 ? th - 0.55 : 0.35;
+    box(lx, ly, lx + 0.18, ly + 0.18, 28, 38, ...BELL);
   });
 }
 
 export function buildBookshelf(rot = 0) {
   const [tw, th] = rot % 2 ? [1, 2] : [2, 1];
-  const book = ['#d2506b', '#4f8fd6', '#e8c04a', '#5cb06a', '#9a6ad0'];
-  return isoSprite(tw, th, 74, (box, P, s) => {
-    box(0.05, 0.1, tw - 0.05, th - 0.1, 0, 74, '#b27a45', '#8f5f33', '#704a28');
-    // book rows painted on the visible faces (left face = v max, right face = u max)
-    for (let row = 0; row < 4; row++) {
-      const z = 8 + row * 16;
-      const n = (rot % 2 ? th : tw) * 5;
+  const FRAME = ['#a86834', '#8a5024', '#663614'];
+  const bookColors = [
+    ['#d2506b', '#aa3850', '#7c2036'],
+    ['#4f8fd6', '#3470b4', '#204c84'],
+    ['#e8c04a', '#c49e32', '#90721c'],
+    ['#5cb06a', '#428e50', '#2a6436'],
+    ['#9a6ad0', '#784eb0', '#543082'],
+  ];
+
+  return isoSprite(tw, th, 74, (box) => {
+    // Outer wooden casing (z = 0 .. 74)
+    box(0.05, 0.08, tw - 0.05, th - 0.08, 0, 74, ...FRAME);
+    // 3 shelves of volumetric book rows
+    for (let row = 0; row < 3; row++) {
+      const z = 8 + row * 20;
+      // Shelf board
+      box(0.06, 0.09, tw - 0.06, th - 0.09, z - 2, z, ...FRAME);
+      const n = (rot % 2 ? th : tw) * 4;
       for (let i = 0; i < n; i++) {
-        const c = book[(i + row * 2) % book.length];
-        const t0 = 0.08 + (i / n) * (rot % 2 ? th : tw) * 0.9;
-        const t1 = t0 + (rot % 2 ? th : tw) * 0.9 / n * 0.8;
-        if (rot % 2) box(tw - 0.06, t0, tw - 0.02, t1, z, z + 11, c, shade(c, -0.2), shade(c, -0.35));
-        else box(t0, th - 0.1, t1, th - 0.06, z, z + 11, c, shade(c, -0.2), shade(c, -0.35));
+        const col = bookColors[(i + row * 2) % bookColors.length];
+        const t0 = 0.10 + (i / n) * ((rot % 2 ? th : tw) - 0.20);
+        const t1 = t0 + 0.14;
+        const bH = 12 + ((i * 7 + row * 11) % 5);
+        if (rot % 2) {
+          box(tw - 0.08, t0, tw - 0.02, t1, z, z + bH, ...col);
+        } else {
+          box(t0, th - 0.08, t1, th - 0.02, z, z + bH, ...col);
+        }
       }
     }
   });
@@ -430,73 +637,321 @@ export function buildBookshelf(rot = 0) {
 
 export function buildBarCounter(rot = 0) {
   const [tw, th] = rot % 2 ? [1, 3] : [3, 1];
-  return isoSprite(tw, th, 40, (box) => {
-    box(0.05, 0.1, tw - 0.05, th - 0.1, 0, 30, '#3a5a8a', '#2f4a73', '#253b5c');
-    box(0, 0.05, tw, th - 0.05, 30, 34, '#e8d6b0', '#c8b48a', '#a89468');
-    // bottles
-    box(tw * 0.2, th * 0.4, tw * 0.2 + 0.1, th * 0.4 + 0.1, 34, 42, '#5cc08a', '#3c9a68', '#2c7a50');
-    box(tw * 0.5, th * 0.4, tw * 0.5 + 0.1, th * 0.4 + 0.1, 34, 40, '#e0734a', '#b85a38', '#904630');
+  const BAR_BODY = ['#385482', '#283e62', '#1a2a44'];
+  const MAHOGANY = ['#9e5232', '#823e20', '#5c2810'];
+
+  return isoSprite(tw, th, 42, (box) => {
+    // Brass footrail (z = 0 .. 4)
+    box(0.04, 0.08, tw - 0.04, th - 0.08, 0, 4, '#c89e44', '#a47e30', '#74541c');
+    // Front paneled bar body (z = 4 .. 28)
+    box(0.06, 0.10, tw - 0.06, th - 0.10, 4, 28, ...BAR_BODY);
+    // Heavy polished mahogany top (z = 28 .. 32)
+    box(0.02, 0.04, tw - 0.02, th - 0.04, 28, 32, ...MAHOGANY);
+    // Glassware & beverage bottles on counter (z = 32 .. 42)
+    const n = rot % 2 ? th * 3 : tw * 3;
+    const bCols = [
+      ['#5cc08a', '#3c9a68', '#2c7a50'],
+      ['#e0734a', '#b85a38', '#904630'],
+      ['#e8c85a', '#c2a23e', '#8c7224'],
+      ['#78a4e8', '#5482c4', '#345c92'],
+    ];
+    for (let i = 0; i < n; i++) {
+      const col = bCols[i % bCols.length];
+      const t = 0.20 + (i / n) * ((rot % 2 ? th : tw) - 0.40);
+      const bx = rot % 2 ? 0.35 : t;
+      const by = rot % 2 ? t : 0.35;
+      box(bx, by, bx + 0.10, by + 0.10, 32, 40, ...col);
+    }
   });
 }
 
-export function buildArmchairSprite() {
-  const c = '#d28a3c';
-  const s = makeGrid(32, 36);
-  fillRect(s, 5, 4, 22, 14, shade(c, 0.1)); // backrest
-  fillRect(s, 2, 14, 6, 14, shade(c, -0.15)); // arms
-  fillRect(s, 24, 14, 6, 14, shade(c, -0.25));
-  fillRect(s, 7, 17, 18, 11, c); // seat cushion
-  fillRect(s, 7, 17, 18, 2, shade(c, 0.2));
-  fillRect(s, 4, 28, 4, 5, '#4a3020');
-  fillRect(s, 24, 28, 4, 5, '#4a3020');
-  const o = outline(s, '#2a1d2e');
-  o.ax = 16; o.ay = 36 - 16 + 2;
-  return o;
-}
-
-export function buildDeckchairSprite() {
-  const s = makeGrid(32, 36);
-  fillPolygon(s, [[8, 3], [24, 3], [26, 20], [6, 20]], '#f4f0e0'); // reclined back
-  for (let i = 0; i < 4; i++) fillRect(s, 6, 5 + i * 4, 20, 2, i % 2 ? '#e2607a' : '#5aa0e2');
-  fillPolygon(s, [[6, 20], [26, 20], [28, 28], [4, 28]], '#e8dcc0');
-  fillRect(s, 4, 28, 3, 6, '#8a5a30');
-  fillRect(s, 25, 28, 3, 6, '#6e4627');
-  const o = outline(s, '#2a1d2e');
-  o.ax = 16; o.ay = 36 - 16 + 2;
-  return o;
-}
-
 export function buildStringLightsSprite() {
-  const s = makeGrid(30, 64);
-  fillRect(s, 13, 8, 3, 54, '#5a4a3a');
-  fillRect(s, 9, 60, 11, 3, '#3a3a3a');
-  fillRect(s, 4, 8, 22, 2, '#3a3a3a'); // cross arm
-  const bulbs = ['#ffe27a', '#ff8fb0', '#8fe0ff', '#b6ff9f'];
-  for (let i = 0; i < 5; i++) {
-    const x = 4 + i * 5;
-    setPixel(s, x, 10, '#3a3a3a');
-    fillRect(s, x - 1, 11, 3, 3, bulbs[i % bulbs.length]);
-  }
-  const o = outline(s, '#2a1d2e');
-  o.ax = 15; o.ay = 64 - 16 + 2;
-  return o;
+  const IRON = ['#464654', '#343440', '#22222a'];
+  const BULBS = [
+    ['#ffe27a', '#f0be48', '#b88a24'],
+    ['#ff8fb0', '#e06488', '#a03858'],
+    ['#8fe0ff', '#5cc4e8', '#3488aa'],
+    ['#b6ff9f', '#80e068', '#50a040'],
+  ];
+
+  return isoSprite(1, 1, 72, (box) => {
+    // Fluted cast-iron base (z = 0 .. 6)
+    box(0.24, 0.24, 0.76, 0.76, 0, 3, ...IRON);
+    box(0.32, 0.32, 0.68, 0.68, 3, 6, ...IRON);
+    // Vertical iron lamppost column (z = 6 .. 60)
+    box(0.44, 0.44, 0.56, 0.56, 6, 60, ...IRON);
+    // Decorative scrolled crossbar arm (z = 54 .. 58)
+    box(0.12, 0.45, 0.88, 0.55, 54, 58, ...IRON);
+    // Top finial spear (z = 60 .. 68)
+    box(0.42, 0.42, 0.58, 0.58, 60, 64, '#ffe27a', '#d8a834', '#98721c');
+    box(0.46, 0.46, 0.54, 0.54, 64, 68, '#ffe27a', '#d8a834', '#98721c');
+    // 4 hanging festoon bulbs with glowing filaments
+    for (let i = 0; i < 4; i++) {
+      const u = 0.16 + i * 0.22;
+      const col = BULBS[i % BULBS.length];
+      box(u + 0.02, 0.46, u + 0.06, 0.54, 51, 54, '#1c1c24', '#14141a', '#0c0c10'); // socket
+      box(u, 0.44, u + 0.08, 0.56, 45, 51, ...col); // bulb
+    }
+  });
+}
+
+// ---------------- 8 Original Collection Items (v0.3.0) ----------------
+
+export function buildAquariumSprite(rot = 0) {
+  const [tw, th] = rot % 2 ? [1, 2] : [2, 1];
+  const STAND = ['#6e4222', '#563216', '#3e200c'];
+  const BRASS = ['#ffe27a', '#e0b23a', '#b88a2a'];
+  const HOOD = ['#4e4e5e', '#363644', '#20202a'];
+
+  return isoSprite(tw, th, 46, (box) => {
+    // Dark timber cabinet stand (z = 0 .. 14)
+    box(0.04, 0.08, tw - 0.04, th - 0.08, 0, 14, ...STAND);
+    // Polished brass trim band (z = 14 .. 16)
+    box(0.02, 0.06, tw - 0.02, th - 0.06, 14, 16, ...BRASS);
+    // Coral sand bed inside tank (z = 16 .. 18)
+    box(0.06, 0.10, tw - 0.06, th - 0.10, 16, 18, '#ecdca0', '#d2c082', '#a89458');
+    // Clear aquatic blue water prism (z = 18 .. 38)
+    box(0.06, 0.10, tw - 0.06, th - 0.10, 18, 38, '#6dd8d8', '#38b0b8', '#1c7882');
+    // Corals & sea greenery
+    box(0.18, 0.28, 0.36, 0.46, 18, 28, '#38c860', '#249442', '#166428');
+    box(tw - 0.38, 0.28, tw - 0.20, 0.46, 18, 26, '#ff6098', '#cc3870', '#901c4a');
+    // Darting neon fish (clownfish + neon tetra)
+    box(tw * 0.38, th * 0.40, tw * 0.38 + 0.22, th * 0.40 + 0.12, 26, 30, '#ff7820', '#d85810', '#9c3804');
+    box(tw * 0.65, th * 0.46, tw * 0.65 + 0.16, th * 0.46 + 0.10, 22, 25, '#40c8ff', '#2090cc', '#106090');
+    // Top canopy hood with ventilation louvers (z = 38 .. 44)
+    box(0.04, 0.08, tw - 0.04, th - 0.08, 38, 44, ...HOOD);
+    // Power indicator LED
+    box(tw - 0.22, th - 0.16, tw - 0.14, th - 0.10, 44, 45, '#40ff80', '#20d050', '#109030');
+  });
+}
+
+export function buildBobaBarSprite(rot = 0) {
+  const [tw, th] = rot % 2 ? [1, 2] : [2, 1];
+  const TILES = ['#9fe0cc', '#78bfa8', '#508c78'];
+  const BIRCH = ['#faeed0', '#deceaa', '#b8a680'];
+
+  return isoSprite(tw, th, 46, (box) => {
+    // Pastel tiled counter base (z = 0 .. 22)
+    box(0.05, 0.08, tw - 0.05, th - 0.08, 0, 22, ...TILES);
+    // Polished birch counter top with overhang (z = 22 .. 25)
+    box(0.02, 0.04, tw - 0.02, th - 0.04, 22, 25, ...BIRCH);
+    // Twin tea urn dispensers (z = 25 .. 38)
+    box(0.14 * tw, 0.24 * th, 0.14 * tw + 0.26, 0.24 * th + 0.26, 25, 38, '#d4a06a', '#b07c48', '#80542c');
+    box(0.38 * tw, 0.24 * th, 0.38 * tw + 0.26, 0.24 * th + 0.26, 25, 38, '#88cc66', '#66aa44', '#447a28');
+    // Cup sealer machine with digital display (z = 25 .. 36)
+    box(0.66 * tw, 0.22 * th, 0.66 * tw + 0.26, 0.22 * th + 0.26, 25, 36, '#e0e0ea', '#c0c0cc', '#9090a0');
+    // Prepared boba drink cups with dark tapioca pearls and wide straws
+    box(0.80 * tw, 0.50 * th, 0.80 * tw + 0.14, 0.50 * th + 0.14, 25, 33, '#e8b878', '#c49454', '#946a32');
+    box(0.80 * tw, 0.50 * th, 0.80 * tw + 0.14, 0.50 * th + 0.14, 25, 27, '#2a1a14', '#1c100c', '#100806'); // pearls
+    // Overhead mini sign frame (z = 38 .. 44)
+    box(0.20 * tw, 0.10 * th, tw - 0.20 * tw, 0.18 * th, 40, 44, '#ff9ec4', '#db789e', '#a44c70');
+  });
+}
+
+export function buildMiniArcadeSprite(rot = 0) {
+  const CHASSIS = ['#38244e', '#281838', '#180c24'];
+  const SCREEN = ['#204050', '#142c38', '#0c1a22'];
+
+  return isoSprite(1, 1, 52, (box) => {
+    // Upright arcade cabinet base with coin door (z = 0 .. 18)
+    box(0.14, 0.14, 0.86, 0.86, 0, 18, ...CHASSIS);
+    box(0.32, 0.82, 0.68, 0.88, 4, 15, '#22222a', '#181820', '#101014'); // coin door
+    box(0.46, 0.84, 0.54, 0.88, 9, 13, '#ffe27a', '#d8a834', '#98721c'); // slot
+    // Slanted control panel deck (z = 18 .. 24)
+    box(0.14, 0.44, 0.86, 0.88, 18, 24, '#241634', '#1a0e26', '#12081a');
+    // Ball-top red joystick & action buttons
+    box(0.28, 0.62, 0.36, 0.70, 24, 29, '#ff3850', '#d01c32', '#940e1e');
+    box(0.52, 0.64, 0.60, 0.72, 24, 26, '#40e0d0', '#2cb4a6', '#1c7c72');
+    box(0.68, 0.60, 0.76, 0.68, 24, 26, '#ffe040', '#d4b024', '#947810');
+    // Recessed glowing CRT monitor (z = 24 .. 42)
+    box(0.18, 0.24, 0.82, 0.70, 24, 42, ...SCREEN);
+    // 8-bit spaceship graphic on screen
+    box(0.44, 0.46, 0.56, 0.58, 30, 36, '#60ff80', '#3cd458', '#20943c');
+    // Glowing marquee header (z = 42 .. 50)
+    box(0.14, 0.20, 0.86, 0.56, 42, 50, '#ff40a0', '#d02078', '#940e4e');
+    box(0.22, 0.54, 0.78, 0.58, 44, 48, '#fff080', '#e0c840', '#9c8c18'); // illuminated logo
+  });
+}
+
+export function buildNoodleCartSprite(rot = 0) {
+  const [tw, th] = rot % 2 ? [1, 2] : [2, 1];
+  const CART_WOOD = ['#9e6634', '#825024', '#5c3614'];
+  const WHEEL = ['#4a3828', '#38281a', '#24180e'];
+  const AWNING_BLUE = ['#2b3a67', '#1e2848', '#121a30'];
+  const AWNING_WHITE = ['#f4f0dc', '#ded6be', '#b0a890'];
+
+  return isoSprite(tw, th, 54, (box) => {
+    // Spoke rolling wheels on floor (z = 0 .. 10)
+    box(0.10, 0.80, 0.26, 0.90, 0, 10, ...WHEEL);
+    box(tw - 0.26, 0.80, tw - 0.10, 0.90, 0, 10, ...WHEEL);
+    // Wooden food cart prep body (z = 8 .. 22)
+    box(0.06, 0.10, tw - 0.06, th - 0.10, 8, 22, ...CART_WOOD);
+    // Stainless steel soup / broth cauldron (z = 22 .. 32)
+    box(0.16 * tw, 0.24 * th, 0.16 * tw + 0.34, 0.24 * th + 0.34, 22, 32, '#c8d0d8', '#a4acb4', '#7c848c');
+    // Golden broth inside cauldron top
+    box(0.18 * tw, 0.26 * th, 0.18 * tw + 0.30, 0.26 * th + 0.30, 31, 32, '#f0b840', '#d49c24', '#946a10');
+    // Scallion & nori garnish on broth
+    box(0.20 * tw, 0.28 * th, 0.24 * tw, 0.32 * th, 32, 33, '#2a883a', '#1c6628', '#104418');
+    // Stack of ceramic ramen bowls (z = 22 .. 29)
+    box(0.56 * tw, 0.30 * th, 0.56 * tw + 0.22, 0.30 * th + 0.22, 22, 29, '#f4f0e6', '#d6d0c2', '#a8a294');
+    // Chopstick caddy (z = 22 .. 30)
+    box(tw - 0.24, 0.26 * th, tw - 0.12, 0.26 * th + 0.12, 22, 30, '#d24830', '#a8321e', '#7c2010');
+    // Canopy corner posts (z = 22 .. 44)
+    box(0.06, 0.10, 0.12, 0.16, 22, 44, ...CART_WOOD);
+    box(tw - 0.12, 0.10, tw - 0.06, 0.16, 22, 44, ...CART_WOOD);
+    box(0.06, th - 0.16, 0.12, th - 0.10, 22, 44, ...CART_WOOD);
+    box(tw - 0.12, th - 0.16, tw - 0.06, th - 0.10, 22, 44, ...CART_WOOD);
+    // Striped fabric awning roof (z = 44 .. 52)
+    box(0.02, 0.04, tw - 0.02, th - 0.04, 44, 52, ...AWNING_BLUE);
+    box(tw * 0.25, 0.02, tw * 0.45, th - 0.02, 45, 53, ...AWNING_WHITE);
+    box(tw * 0.65, 0.02, tw * 0.85, th - 0.02, 45, 53, ...AWNING_WHITE);
+    // Hanging red paper lantern (z = 30 .. 42) with gold tassel
+    box(tw - 0.25, 0.68, tw - 0.08, 0.85, 32, 42, '#f03838', '#cc2020', '#900e0e');
+    box(tw - 0.19, 0.74, tw - 0.14, 0.79, 29, 32, '#ffe27a', '#d8a834', '#98721c'); // gold tassel
+  });
+}
+
+export function buildKaraokeMachineSprite(rot = 0) {
+  const KIOSK = ['#282c4e', '#1c1e36', '#101222'];
+  const DISPLAY = ['#20d0f0', '#14a4c4', '#0c7088'];
+
+  return isoSprite(1, 1, 50, (box) => {
+    // Mirror stage plinth (z = 0 .. 4)
+    box(0.12, 0.12, 0.88, 0.88, 0, 4, '#442854', '#301a3e', '#200e2a');
+    // Console tower cabinet (z = 4 .. 38)
+    box(0.20, 0.20, 0.80, 0.54, 4, 38, ...KIOSK);
+    // Audio VU-meter spectrum LED display (z = 10 .. 22)
+    box(0.26, 0.52, 0.38, 0.56, 10, 18, '#40f060', '#28c442', '#16842a');
+    box(0.44, 0.52, 0.56, 0.56, 10, 22, '#ffe030', '#d4b418', '#947c0c');
+    box(0.62, 0.52, 0.74, 0.56, 10, 16, '#ff3040', '#cc1826', '#880c16');
+    // Lyrics video display (z = 24 .. 36)
+    box(0.24, 0.50, 0.76, 0.56, 24, 36, ...DISPLAY);
+    // Microphone stand in front (z = 4 .. 30)
+    box(0.44, 0.68, 0.56, 0.80, 4, 6, '#404050', '#2c2c38', '#1c1c24');
+    box(0.48, 0.72, 0.52, 0.76, 6, 26, '#c0c4d4', '#9aa0b0', '#6c7280');
+    box(0.44, 0.68, 0.56, 0.80, 26, 31, '#e0e4f4', '#b8bed0', '#80889c'); // mic head
+    // Top spinning disco ball mirror dome (z = 38 .. 46)
+    box(0.32, 0.24, 0.68, 0.50, 38, 46, '#f0f4ff', '#ccd4e8', '#94a0bc');
+  });
+}
+
+export function buildTelescopeSprite(rot = 0) {
+  const BRASS = ['#f6c667', '#d8a442', '#a07424'];
+  const BRASS_LT = ['#ffe088', '#f6c667', '#c08e2c'];
+  const TRIPOD = ['#7c4422', '#603216', '#44200c'];
+
+  return isoSprite(1, 1, 56, (box) => {
+    // 3 splayed mahogany tripod legs meeting at central hub (z = 0 .. 24)
+    // South leg
+    box(0.44, 0.72, 0.56, 0.84, 0, 8, ...TRIPOD);
+    box(0.45, 0.58, 0.55, 0.72, 8, 16, ...TRIPOD);
+    box(0.46, 0.48, 0.54, 0.58, 16, 24, ...TRIPOD);
+    // West leg
+    box(0.14, 0.24, 0.26, 0.36, 0, 8, ...TRIPOD);
+    box(0.24, 0.30, 0.36, 0.42, 8, 16, ...TRIPOD);
+    box(0.34, 0.38, 0.44, 0.48, 16, 24, ...TRIPOD);
+    // East leg
+    box(0.74, 0.24, 0.86, 0.36, 0, 8, ...TRIPOD);
+    box(0.64, 0.30, 0.76, 0.42, 8, 16, ...TRIPOD);
+    box(0.56, 0.38, 0.66, 0.48, 16, 24, ...TRIPOD);
+
+    // Equatorial mount hub & setting circles (z = 24 .. 28)
+    box(0.42, 0.42, 0.58, 0.58, 24, 28, ...BRASS);
+    // Counterweight rod extending to the right
+    box(0.58, 0.46, 0.76, 0.54, 22, 25, '#8c6418', '#6a480e', '#482e06');
+    box(0.70, 0.44, 0.78, 0.56, 21, 26, ...BRASS);
+
+    // Slender angled brass refractor tube pointing up & towards north-west
+    // Eyepiece / diagonal at bottom
+    box(0.54, 0.54, 0.66, 0.66, 25, 29, ...BRASS);
+    // Mid barrel section
+    box(0.40, 0.40, 0.54, 0.54, 29, 39, ...BRASS);
+    // Upper barrel section
+    box(0.30, 0.30, 0.44, 0.44, 39, 47, ...BRASS);
+    // Flared objective dew shield
+    box(0.22, 0.22, 0.38, 0.38, 47, 54, ...BRASS_LT);
+    // Coated objective lens reflection
+    box(0.24, 0.24, 0.36, 0.36, 54, 55, '#e0f8ff', '#a8e8f8', '#60b8d8');
+  });
+}
+
+export function buildKoiPondSprite(rot = 0) {
+  const SLATE = ['#6a6e7c', '#505460', '#383c46'];
+  const WATER = ['#48b8c8', '#2a8e9e', '#1a6472'];
+  const LILY = ['#4ebd5e', '#369e44', '#226e2e'];
+
+  return isoSprite(2, 2, 14, (box) => {
+    // Slate stone basin rim around all 4 sides (z = 0 .. 8)
+    box(0.04, 0.04, 1.96, 0.26, 0, 8, ...SLATE); // North rim
+    box(0.04, 1.74, 1.96, 1.96, 0, 8, ...SLATE); // South rim
+    box(0.04, 0.26, 0.26, 1.74, 0, 8, ...SLATE); // West rim
+    box(1.74, 0.26, 1.96, 1.74, 0, 8, ...SLATE); // East rim
+    // Clear turquoise water pool (z = 0 .. 5)
+    box(0.26, 0.26, 1.74, 1.74, 0, 5, ...WATER);
+    // Natural river boulder stepping stone (z = 0 .. 7)
+    box(0.85, 0.85, 1.25, 1.25, 0, 7, '#888e9c', '#6c727e', '#4c525c');
+    // Emerald floating lily pads on water surface (z = 5 .. 6)
+    box(0.42, 0.52, 0.70, 0.80, 5, 6, ...LILY);
+    box(0.54, 0.62, 0.62, 0.70, 6, 7, '#ff80b0', '#d85888', '#983058'); // pink lotus bud
+    box(1.30, 1.10, 1.56, 1.36, 5, 6, ...LILY);
+    // Swimming Kohaku koi (white with red patches)
+    box(0.70, 0.40, 1.10, 0.65, 3, 5, '#f4f4f8', '#d0d0d8', '#a0a0aa');
+    box(0.82, 0.46, 0.98, 0.58, 4, 5, '#e63820', '#b82410', '#801408'); // red mark
+    // Swimming Yamabuki koi (golden yellow)
+    box(1.10, 0.65, 1.45, 0.90, 2, 4, '#f8c830', '#d8a018', '#986c0c');
+  });
+}
+
+export function buildCapsuleDispenserSprite(rot = 0) {
+  const RED_BODY = ['#e03040', '#b8202e', '#80101c'];
+  const GLOBE = ['#88d8f0', '#58b4d0', '#308098'];
+  const CHROME = ['#e0e4ec', '#b8c0cc', '#848c98'];
+
+  return isoSprite(1, 1, 46, (box) => {
+    // Red gachapon pedestal stand (z = 0 .. 18)
+    box(0.18, 0.18, 0.82, 0.82, 0, 18, ...RED_BODY);
+    // Prize retrieval door flap (z = 2 .. 9)
+    box(0.32, 0.76, 0.68, 0.84, 2, 9, '#303038', '#202028', '#14141c');
+    // Rotating turn crank key (z = 11 .. 16)
+    box(0.40, 0.76, 0.60, 0.84, 11, 16, ...CHROME);
+    // Transparent spherical/prism toy capsule globe (z = 18 .. 36)
+    box(0.16, 0.16, 0.84, 0.84, 18, 36, ...GLOBE);
+    // Multi-colored toy prize capsules inside globe
+    box(0.24, 0.28, 0.44, 0.48, 20, 26, '#ff4050', '#d82030', '#94101e'); // red
+    box(0.54, 0.30, 0.74, 0.50, 20, 26, '#ffd830', '#d4b018', '#987c0c'); // yellow
+    box(0.34, 0.52, 0.54, 0.72, 22, 28, '#4ae060', '#2cb840', '#1a8428'); // green
+    box(0.30, 0.32, 0.50, 0.52, 27, 33, '#30c0ff', '#1890d0', '#0c6090'); // cyan
+    box(0.50, 0.50, 0.70, 0.70, 27, 33, '#b860f0', '#9038cc', '#601890'); // purple
+    // Molded crimson lid cap (z = 36 .. 42)
+    box(0.18, 0.18, 0.82, 0.82, 36, 40, ...RED_BODY);
+    box(0.30, 0.30, 0.70, 0.70, 40, 42, '#f44454', '#d02838', '#981420');
+  });
 }
 
 export const FURNITURE_BUILDERS = {
-  stool: () => buildStoolSprite(),
+  stool: (rot) => buildStoolSprite(rot),
   sofa: (rot) => buildSofaSprite('#e2607a', rot),
   rooftopSofa: (rot) => buildSofaSprite('#5aa0e2', rot),
-  lamp: () => buildLampSprite(),
-  plant: () => buildPlantSprite(),
-  rug: () => buildRugSprite(),
-  neonSign: () => buildNeonSignSprite(),
-  jukebox: () => buildJukeboxSprite(),
-  armchair: () => buildArmchairSprite(),
-  deckchair: () => buildDeckchairSprite(),
+  lamp: (rot) => buildLampSprite(rot),
+  plant: (rot) => buildPlantSprite(rot),
+  rug: (rot) => buildRugSprite(rot),
+  neonSign: (rot) => buildNeonSignSprite(rot),
+  jukebox: (rot) => buildJukeboxSprite(rot),
+  armchair: (rot) => buildArmchairSprite(rot),
+  deckchair: (rot) => buildDeckchairSprite(rot),
   receptionDesk: (rot) => buildReceptionDesk(rot),
   bookshelf: (rot) => buildBookshelf(rot),
   barCounter: (rot) => buildBarCounter(rot),
-  stringLights: () => buildStringLightsSprite(),
+  stringLights: (rot) => buildStringLightsSprite(rot),
+  // 8 new original collection items
+  aquarium: (rot) => buildAquariumSprite(rot),
+  bobaBar: (rot) => buildBobaBarSprite(rot),
+  miniArcade: (rot) => buildMiniArcadeSprite(rot),
+  noodleCart: (rot) => buildNoodleCartSprite(rot),
+  karaokeMachine: (rot) => buildKaraokeMachineSprite(rot),
+  telescope: (rot) => buildTelescopeSprite(rot),
+  koiPond: (rot) => buildKoiPondSprite(rot),
+  capsuleDispenser: (rot) => buildCapsuleDispenserSprite(rot),
 };
 
 export function shadeColor(hex, amt) {

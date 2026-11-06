@@ -103,21 +103,24 @@ function drawCharacter(ctx, e, screenX, screenY) {
   const look = LOOKS[e.spriteKey] || { ...LOOKS.player, shirt: e.color || LOOKS.player.shirt };
   const stride = e.walking ? (e.frame % 2 ? 1 : -1) : 0;
   const { canvas, ox, oy } = getCharacterCanvas(`${e.spriteKey}:${e.color}`, look, e.dir, { stride, sit: e.sitting });
-  // soft contact shadow on the floor, offset away from the room's upper-left light
-  ctx.fillStyle = 'rgba(30,15,40,0.22)';
-  for (const [rx, ry] of [[19, 9.5], [14, 7]]) {
-    ctx.beginPath(); ctx.ellipse(screenX + 2, screenY + 1, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
+  // soft contact shadow on the floor (when standing/walking), offset away from the room's upper-left light
+  if (!e.sitting) {
+    ctx.fillStyle = 'rgba(30,15,40,0.22)';
+    for (const [rx, ry] of [[19, 9.5], [14, 7]]) {
+      ctx.beginPath(); ctx.ellipse(screenX + 2, screenY + 1, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
+    }
   }
   const dx = Math.round(screenX - ox), dy = Math.round(screenY - oy); // ground centre sits on the tile centre
   ctx.drawImage(canvas, dx, dy);
   return { x: screenX, y: dy, w: 0, h: canvas.height };
 }
 
-function furnitureCanvas(itemId, rot) {
-  const key = `furn:${itemId}:${rot % 2}`;
+function furnitureCanvas(itemId, rot = 0) {
+  const r = ((rot % 4) + 4) % 4;
+  const key = `furn:${itemId}:${r}`;
   if (canvasCache.has(key)) return canvasCache.get(key);
   const builder = FURNITURE_BUILDERS[toSpriteKey(itemId)];
-  const sprite = builder ? builder(rot % 2) : FURNITURE_BUILDERS.stool();
+  const sprite = builder ? builder(r) : FURNITURE_BUILDERS.stool(r);
   const canvas = bakeSprite(key, sprite, 1);
   // ax/ay: pixel of the footprint centre; default is flat sprites' bottom-centre
   canvas.ax = sprite.ax ?? sprite.w / 2;
@@ -145,6 +148,20 @@ function drawFurniture(ctx, f, originX, originY) {
   const anchorX = f.x + f.footprint.w / 2 - 0.5;
   const anchorY = f.y + f.footprint.h / 2 - 0.5;
   const { sx, sy } = tileToScreen(anchorX, anchorY, originX, originY);
+
+  const item = getCatalogueItem(f.itemId);
+  if (!item?.flat) {
+    // Coherent contact shadow on the floor plane under non-flat furniture
+    const tw = f.footprint.w;
+    const th = f.footprint.h;
+    const rx = (tw + th) * 11;
+    const ry = (tw + th) * 5.5;
+    ctx.fillStyle = 'rgba(30,15,40,0.20)';
+    ctx.beginPath();
+    ctx.ellipse(sx + 2, sy + 1, rx, ry, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
   const canvas = furnitureCanvas(f.itemId, f.rot);
   ctx.drawImage(canvas, Math.round(sx - canvas.ax), Math.round(sy - canvas.ay));
 }

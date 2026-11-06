@@ -587,6 +587,7 @@ function refreshShopTab() {
       <div class="item-swatch" style="background:${swatchColor(item)}"></div>
       <div class="item-info">
         <div class="item-name">${item.name}</div>
+        ${item.description ? `<div class="item-desc" style="font-size:10px;color:#aaa;line-height:1.2;margin:2px 0 3px;">${item.description}</div>` : ''}
         <div>💰 ${item.price}${item.unlocked ? '' : ' <span class="locked-tag">locked</span>'}</div>
       </div>
       <div class="item-actions">
@@ -625,7 +626,10 @@ function refreshBagTab() {
     return `
     <div class="bag-item">
       <div class="item-swatch" style="background:${swatchColor(item)}"></div>
-      <div class="item-info"><div class="item-name">${item.name}</div></div>
+      <div class="item-info">
+        <div class="item-name">${item.name}</div>
+        ${item.description ? `<div class="item-desc" style="font-size:10px;color:#aaa;line-height:1.2;margin:2px 0 3px;">${item.description}</div>` : ''}
+      </div>
       <div class="item-actions">
         <button class="pixel-btn" data-place="${inv.instanceId}:${inv.itemId}">Place</button>
       </div>
@@ -652,7 +656,10 @@ function refreshRoomTab() {
     return `
     <div class="room-item">
       <div class="item-swatch" style="background:${swatchColor(item)}"></div>
-      <div class="item-info"><div class="item-name">${item.name}</div></div>
+      <div class="item-info">
+        <div class="item-name">${item.name}</div>
+        ${item.description ? `<div class="item-desc" style="font-size:10px;color:#aaa;line-height:1.2;margin:2px 0 3px;">${item.description}</div>` : ''}
+      </div>
       <div class="item-actions">
         <button class="pixel-btn" data-move="${p.instanceId}:${p.itemId}">Move</button>
         <button class="pixel-btn" data-pickup="${p.instanceId}">Pick up</button>
@@ -772,5 +779,27 @@ window.__pixelHotel = {
   },
   save: () => manualSave(),
   reset: () => { state = resetState(window.localStorage); },
+  loadShowroom: () => {
+    state.player.room = 'rooftop';
+    player.x = 7;
+    player.y = 5;
+    player.dir = 'left';
+    player.sitting = null;
+    // Position NPCs out of the display area so all 8 items are unobscured
+    for (const n of npcRuntimes) {
+      if (n.id === 'drpix') { n.x = 9; n.y = 6; n.renderX = 9; n.renderY = 6; n.dir = 'left'; n.sitting = null; }
+      if (n.id === 'lola') { n.x = 1; n.y = 6; n.renderX = 1; n.renderY = 6; n.dir = 'right'; n.sitting = null; }
+    }
+    state.rooms.rooftop.placed = [
+      { instanceId: 'show_aqua', itemId: 'aquarium', x: 1, y: 1, rot: 0 },
+      { instanceId: 'show_boba', itemId: 'boba_bar', x: 4, y: 1, rot: 0 },
+      { instanceId: 'show_noodle', itemId: 'noodle_cart', x: 7, y: 1, rot: 0 },
+      { instanceId: 'show_pond', itemId: 'koi_pond', x: 1, y: 3, rot: 0 },
+      { instanceId: 'show_arcade', itemId: 'mini_arcade', x: 4, y: 3, rot: 0 },
+      { instanceId: 'show_karaoke', itemId: 'karaoke_machine', x: 6, y: 3, rot: 0 },
+      { instanceId: 'show_tele', itemId: 'telescope', x: 8, y: 3, rot: 0 },
+      { instanceId: 'show_gacha', itemId: 'capsule_dispenser', x: 5, y: 5, rot: 0 },
+    ];
+  },
   getCanvas: () => canvas,
 };

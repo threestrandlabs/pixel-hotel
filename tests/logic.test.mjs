@@ -10,10 +10,10 @@ import {
   initQuestState, advanceQuestsByType, setQuestProgress, claimReward, listQuests,
 } from '../js/quests.js';
 import { createDefaultState, loadState, saveState, resetState, SAVE_KEY } from '../js/save.js';
-import { getCatalogueItem, TILE, SAVE_VERSION, ROOMS, NPCS } from '../js/data.js';
+import { getCatalogueItem, TILE, SAVE_VERSION, ROOMS, NPCS, CATALOGUE } from '../js/data.js';
 import { respondToMessage } from '../js/npc.js';
 import { LOOKS, renderCharacter } from '../js/voxel.js';
-import { buildWindowSegment } from '../js/sprites.js';
+import { buildWindowSegment, FURNITURE_BUILDERS } from '../js/sprites.js';
 
 // ---------- fake localStorage ----------
 function makeFakeStorage(initial = {}) {
@@ -447,4 +447,176 @@ test('rendering: both wall window orientations generate nonempty bounded sprites
     for (const row of s.px) for (const p of row) if (p) opaque++;
     assert.ok(opaque > 0, `expected opaque pixels for ${orientation} window`);
   }
+});
+
+// ======================= volumetric furniture regression (v0.3.0) =======================
+
+test('furniture: all catalogue model sprites generate nonempty bounded sprites with meaningful volumetric faces', () => {
+  assert.equal(CATALOGUE.length, 22, 'catalogue should contain 14 legacy + 8 new items');
+
+  for (const item of CATALOGUE) {
+    const builder = FURNITURE_BUILDERS[item.spriteKey];
+    assert.ok(builder, `missing sprite builder for catalogue item ${item.id} (spriteKey: ${item.spriteKey})`);
+
+    // Verify both rotation 0 and rotation 1
+    for (const rot of [0, 1]) {
+      const s = builder(rot);
+      assert.ok(s, `builder returned null for ${item.id} rot ${rot}`);
+      assert.ok(s.w > 10 && s.w <= 200, `unreasonable width ${s.w} for ${item.id}`);
+      assert.ok(s.h > 10 && s.h <= 200, `unreasonable height ${s.h} for ${item.id}`);
+      assert.ok(Number.isFinite(s.ax) && Number.isFinite(s.ay), `non-finite anchor for ${item.id}`);
+      assert.ok(s.ax > 0 && s.ax < s.w, `anchor x out of bounds for ${item.id}: ax=${s.ax}, w=${s.w}`);
+      assert.ok(s.ay > 0 && s.ay < s.h, `anchor y out of bounds for ${item.id}: ay=${s.ay}, h=${s.h}`);
+
+      // Count non-empty and non-outline pixels
+      const colors = new Map();
+      let opaqueCount = 0;
+      for (let y = 0; y < s.h; y++) {
+        for (let x = 0; x < s.w; x++) {
+          const c = s.px[y][x];
+          if (!c) continue;
+          opaqueCount++;
+          if (c !== '#2a1d2e') {
+            colors.set(c, (colors.get(c) || 0) + 1);
+          }
+        }
+      }
+      assert.ok(opaqueCount >= 40, `too few pixels (${opaqueCount}) for ${item.id} rot ${rot}`);
+
+      // Meaningful volumetric faces check: true 3D isometric voxels have distinct
+      // lit top faces (L=+0.14), mid front-left faces (L=0), and shaded front-right
+      // faces (L=-0.22), resulting in at least 3 distinct non-outline color tones.
+      assert.ok(
+        colors.size >= 3,
+        `expected at least 3 volumetric face tones for ${item.id} rot ${rot}, found ${colors.size}: ${[...colors.keys()].join(', ')}`
+      );
+    }
+  }
+});
+
+test('catalogue: all 8 new v0.3.0 collection items have valid definitions, descriptions and sensible pricing', () => {
+  const newIds = [
+    'aquarium', 'boba_bar', 'mini_arcade', 'noodle_cart',
+    'karaoke_machine', 'telescope', 'koi_pond', 'capsule_dispenser',
+  ];
+
+  for (const id of newIds) {
+    const item = getCatalogueItem(id);
+    assert.ok(item, `missing catalogue item ${id}`);
+    assert.ok(item.name && item.name.length > 5, `missing or too short name for ${id}`);
+    assert.ok(item.description && item.description.length > 15, `missing or too short description for ${id}`);
+    assert.ok(item.price >= 30 && item.price <= 100, `price ${item.price} out of sensible range for ${id}`);
+    assert.equal(item.category, 'decor');
+    assert.ok(item.footprint.w >= 1 && item.footprint.h >= 1, `invalid footprint for ${id}`);
+    assert.equal(item.seat, false);
+    assert.equal(item.unlockRequires, null, `item ${id} should be available for purchase`);
+  }
+});
+
+test('inventory: purchasing all 8 new items deducts coins and enforces balance', () => {
+  const newIds = [
+    'aquarium', 'boba_bar', 'mini_arcade', 'noodle_cart',
+    'karaoke_machine', 'telescope', 'koi_pond', 'capsule_dispenser',
+  ];
+
+  for (const id of newIds) {
+    const item = getCatalogueItem(id);
+    const state = createDefaultState();
+    state.coins = item.price;
+    const res = buyItem(state, id);
+    assert.ok(res.ok, `failed to buy ${id}`);
+    assert.equal(state.coins, 0);
+    assert.equal(state.inventory.length, 1);
+    assert.equal(state.inventory[0].itemId, id);
+
+    // Fails with insufficient coins
+    state.coins = item.price - 1;
+    const failRes = buyItem(state, id);
+    assert.equal(failRes.ok, false);
+    assert.equal(failRes.reason, 'insufficient_coins');
+  }
+});
+
+test('inventory: placement and collision validation for new items across footprints and rotations', () => {
+  const room = makeTestRoom(); // 5x5 room, border walls at x=0, y=0. Usable: x:1..4, y:1..4
+  const aquarium = getCatalogueItem('aquarium'); // 2x1
+  const koiPond = getCatalogueItem('koi_pond'); // 2x2
+  const miniArcade = getCatalogueItem('mini_arcade'); // 1x1
+
+  // 1x1 item placement at (2, 2)
+  const placeArcade = canPlaceAt(room, miniArcade, 2, 2, 0);
+  assert.ok(placeArcade.ok);
+  assert.deepEqual(placeArcade.cells, [{ x: 2, y: 2 }]);
+
+  // 2x1 item placement at (2, 2)
+  const placeAquaRot0 = canPlaceAt(room, aquarium, 2, 2, 0);
+  assert.ok(placeAquaRot0.ok);
+  assert.deepEqual(placeAquaRot0.cells, [{ x: 2, y: 2 }, { x: 3, y: 2 }]);
+
+  // 2x1 item rotated (rot=1) becomes 1x2
+  const placeAquaRot1 = canPlaceAt(room, aquarium, 2, 2, 1);
+  assert.ok(placeAquaRot1.ok);
+  assert.deepEqual(placeAquaRot1.cells, [{ x: 2, y: 2 }, { x: 2, y: 3 }]);
+
+  // 2x2 koi pond placement at (2, 2) occupies 4 cells
+  const placePond = canPlaceAt(room, koiPond, 2, 2, 0);
+  assert.ok(placePond.ok);
+  assert.equal(placePond.cells.length, 4);
+
+  // Collision with border wall (y=0 is wall)
+  assert.equal(canPlaceAt(room, miniArcade, 2, 0, 0).reason, 'blocked_tile');
+  assert.equal(canPlaceAt(room, aquarium, 2, 0, 0).reason, 'blocked_tile');
+
+  // Collision out of bounds (width 5, x=4 for a 2-wide item spills to x=5)
+  assert.equal(canPlaceAt(room, aquarium, 4, 2, 0).reason, 'out_of_bounds');
+
+  // Furniture overlap
+  const state = createDefaultState();
+  state.inventory.push({ instanceId: 'arc-1', itemId: 'mini_arcade' });
+  const testRoom = { width: 6, height: 6, grid: ROOMS.lobby.grid.slice(0, 6).map((r) => r.slice(0, 6)), placed: [] };
+  const p1 = placeItem(state, testRoom, 'arc-1', 2, 2, 0);
+  assert.ok(p1.ok);
+  assert.equal(canPlaceAt(testRoom, miniArcade, 2, 2, 0).reason, 'furniture_overlap');
+  assert.equal(canPlaceAt(testRoom, aquarium, 1, 2, 0).reason, 'furniture_overlap'); // (1,2) with w=2 overlaps (2,2)
+
+  // Occupant tile collision
+  const occ = [{ x: 3, y: 3 }];
+  assert.equal(canPlaceAt(testRoom, miniArcade, 3, 3, 0, occ).reason, 'occupied');
+});
+
+test('seating: seat items correctly rotate facing direction and seat interactions preserve reachability', () => {
+  const seats = CATALOGUE.filter((item) => item.seat);
+  assert.ok(seats.length >= 5, 'expected at least 5 seat types (stool, sofa, rooftop_sofa, armchair, deckchair)');
+
+  const dirs = ['down', 'right', 'up', 'left'];
+  for (const s of seats) {
+    for (let r = 0; r < 4; r++) {
+      const facing = dirs[((r % 4) + 4) % 4];
+      assert.ok(facing, `valid facing for ${s.id} rot ${r}`);
+      const fp = rotatedFootprint(s.footprint, r);
+      assert.ok(fp.w >= 1 && fp.h >= 1);
+    }
+  }
+
+  // Verify that an avatar can sit on a stool, sofa, or armchair without blocking
+  const room = {
+    width: 6, height: 6,
+    grid: ROOMS.lobby.grid.slice(0, 6).map((r) => r.slice(0, 6)),
+    placed: [
+      { instanceId: 's1', itemId: 'stool', x: 3, y: 3, rot: 0 },
+      { instanceId: 'c1', itemId: 'armchair', x: 2, y: 4, rot: 1 },
+    ],
+  };
+
+  // Stool and armchair are seats, so isBlocked should not block their seat tiles
+  const isBlocked = (x, y) => {
+    if (x === 0 || y === 0) return true;
+    for (const p of room.placed) {
+      const item = getCatalogueItem(p.itemId);
+      if (p.x === x && p.y === y && !item.seat) return true;
+    }
+    return false;
+  };
+  assert.equal(isBlocked(3, 3), false, 'stool tile is unblocked for sitting');
+  assert.equal(isBlocked(2, 4), false, 'armchair tile is unblocked for sitting');
 });

@@ -66,6 +66,7 @@ export const CATALOGUE = [
     seat: true,
     spriteKey: 'stool',
     unlockRequires: null,
+    description: 'A sturdy four-legged wooden stool with tufted leather cushion.',
   },
   {
     id: 'sofa',
@@ -76,6 +77,7 @@ export const CATALOGUE = [
     seat: true,
     spriteKey: 'sofa',
     unlockRequires: null,
+    description: 'A cosy two-seater lounge sofa upholstered in plush berry fabric.',
   },
   {
     id: 'rooftop_sofa',
@@ -86,6 +88,7 @@ export const CATALOGUE = [
     seat: true,
     spriteKey: 'rooftopSofa',
     unlockRequires: null,
+    description: 'An outdoor poolside two-seater sofa in vibrant azure canvas.',
   },
   {
     id: 'lamp',
@@ -96,6 +99,7 @@ export const CATALOGUE = [
     seat: false,
     spriteKey: 'lamp',
     unlockRequires: null,
+    description: 'A retro brushed-chrome lava lamp with glowing thermal wax.',
   },
   {
     id: 'plant',
@@ -106,6 +110,7 @@ export const CATALOGUE = [
     seat: false,
     spriteKey: 'plant',
     unlockRequires: null,
+    description: 'A potted tropical fern in a terracotta planter with lush fronds.',
   },
   {
     id: 'rug',
@@ -117,6 +122,7 @@ export const CATALOGUE = [
     spriteKey: 'rug',
     flat: true, // floor decor: walkable, drawn under avatars, may sit under other items
     unlockRequires: 'quest_greet',
+    description: 'A woven geometric starburst floor rug with crimson and gold accents.',
   },
   {
     id: 'neon_sign',
@@ -127,6 +133,7 @@ export const CATALOGUE = [
     seat: false,
     spriteKey: 'neonSign',
     unlockRequires: 'quest_place',
+    description: 'A glowing art-deco electric neon sign mounted on an iron frame.',
   },
   {
     id: 'jukebox',
@@ -137,13 +144,23 @@ export const CATALOGUE = [
     seat: false,
     spriteKey: 'jukebox',
     unlockRequires: 'quest_sit',
+    description: 'A vintage bubble-tube jukebox loaded with classic hotel tunes.',
   },
-  { id: 'armchair', name: 'Plush Armchair', price: 30, category: 'seat', footprint: { w: 1, h: 1 }, seat: true, spriteKey: 'armchair', unlockRequires: null },
-  { id: 'deckchair', name: 'Striped Deckchair', price: 35, category: 'seat', footprint: { w: 1, h: 1 }, seat: true, spriteKey: 'deckchair', unlockRequires: null },
-  { id: 'reception_desk', name: 'Reception Desk', price: 70, category: 'decor', footprint: { w: 3, h: 1 }, seat: false, spriteKey: 'receptionDesk', unlockRequires: null },
-  { id: 'bookshelf', name: 'Tall Bookshelf', price: 55, category: 'decor', footprint: { w: 2, h: 1 }, seat: false, spriteKey: 'bookshelf', unlockRequires: null },
-  { id: 'bar_counter', name: 'Rooftop Bar', price: 75, category: 'decor', footprint: { w: 3, h: 1 }, seat: false, spriteKey: 'barCounter', unlockRequires: null },
-  { id: 'string_lights', name: 'String Light Post', price: 25, category: 'decor', footprint: { w: 1, h: 1 }, seat: false, spriteKey: 'stringLights', unlockRequires: null },
+  { id: 'armchair', name: 'Plush Armchair', price: 30, category: 'seat', footprint: { w: 1, h: 1 }, seat: true, spriteKey: 'armchair', unlockRequires: null, description: 'A deep-seated plush wingback armchair in warm amber velvet.' },
+  { id: 'deckchair', name: 'Striped Deckchair', price: 35, category: 'seat', footprint: { w: 1, h: 1 }, seat: true, spriteKey: 'deckchair', unlockRequires: null, description: 'A folding beechwood sun lounger with cheerful striped canvas.' },
+  { id: 'reception_desk', name: 'Reception Desk', price: 70, category: 'decor', footprint: { w: 3, h: 1 }, seat: false, spriteKey: 'receptionDesk', unlockRequires: null, description: 'A polished mahogany reception counter with brass service bell.' },
+  { id: 'bookshelf', name: 'Tall Bookshelf', price: 55, category: 'decor', footprint: { w: 2, h: 1 }, seat: false, spriteKey: 'bookshelf', unlockRequires: null, description: 'A tall timber bookcase packed with travelogues and hotel ledgers.' },
+  { id: 'bar_counter', name: 'Rooftop Bar', price: 75, category: 'decor', footprint: { w: 3, h: 1 }, seat: false, spriteKey: 'barCounter', unlockRequires: null, description: 'A teak cocktail bar counter stocked with glassware and spirits.' },
+  { id: 'string_lights', name: 'String Light Post', price: 25, category: 'decor', footprint: { w: 1, h: 1 }, seat: false, spriteKey: 'stringLights', unlockRequires: null, description: 'A wrought-iron lantern post draped with glowing festive bulbs.' },
+  // Original v0.3.0 collection
+  { id: 'aquarium', name: 'Luminous Reef Tank', price: 70, category: 'decor', footprint: { w: 2, h: 1 }, seat: false, spriteKey: 'aquarium', unlockRequires: null, description: 'Deep oceanic aquarium with luminous corals and darting neon clownfish.' },
+  { id: 'boba_bar', name: 'Tea-Pearl Boba Bar', price: 65, category: 'decor', footprint: { w: 2, h: 1 }, seat: false, spriteKey: 'bobaBar', unlockRequires: null, description: 'Specialty counter brewing brown-sugar tapioca milk teas with shaker machine.' },
+  { id: 'mini_arcade', name: 'Retro Pixel Arcade', price: 85, category: 'decor', footprint: { w: 1, h: 1 }, seat: false, spriteKey: 'miniArcade', unlockRequires: null, description: 'Upright coin-op arcade cabinet running the classic "Cosmic Bellhop" game.' },
+  { id: 'noodle_cart', name: 'Midnight Noodle Cart', price: 90, category: 'decor', footprint: { w: 2, h: 1 }, seat: false, spriteKey: 'noodleCart', unlockRequires: null, description: 'Traditional street vendor cart with steaming broth vat, ladles and red lantern.' },
+  { id: 'karaoke_machine', name: 'Star Stage Karaoke', price: 75, category: 'decor', footprint: { w: 1, h: 1 }, seat: false, spriteKey: 'karaokeMachine', unlockRequires: null, description: 'Digital karaoke kiosk with twin microphones, equalizer display and disco floor.' },
+  { id: 'telescope', name: 'Stargazer Telescope', price: 50, category: 'decor', footprint: { w: 1, h: 1 }, seat: false, spriteKey: 'telescope', unlockRequires: null, description: 'Heavy brass astronomical refractor on an equatorial wooden tripod mount.' },
+  { id: 'koi_pond', name: 'Zen Koi Stone Pond', price: 80, category: 'decor', footprint: { w: 2, h: 2 }, seat: false, spriteKey: 'koiPond', unlockRequires: null, description: 'Carved slate floor water garden with floating lily pads and swimming calico koi.' },
+  { id: 'capsule_dispenser', name: 'Gachapon Capsule Toy', price: 40, category: 'decor', footprint: { w: 1, h: 1 }, seat: false, spriteKey: 'capsuleDispenser', unlockRequires: null, description: 'Retro Japanese twin-globe prize capsule dispenser with coin turn keys.' },
 ];
 
 export function getCatalogueItem(id) {

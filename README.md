@@ -16,7 +16,11 @@ in code (see **Assets & Attribution** below).
 No build step and no dependencies are needed to play. From this folder:
 
 ```sh
+# Linux / macOS
 python3 -m http.server 8080
+
+# Windows
+python -m http.server 8080
 ```
 
 Then open **http://localhost:8080** in a modern desktop or mobile browser.
@@ -57,11 +61,27 @@ Then open **http://localhost:8080** in a modern desktop or mobile browser.
   one-liners.
 - Chat box with stacked speech bubbles above the avatar and a scrolling chat
   log.
-- A small furniture catalogue (stools, sofas, lamps, plants, rugs, a neon
-  sign, a jukebox) with buy / place / move / rotate / pick-up, full overlap
-  and occupancy validation, and a ghost preview while placing.
-- Multiple seat types; clicking a seat walks you there and sits you facing
-  it. NPCs occasionally sit down too.
+- Volumetric 3D isometric furniture & decor models: every furniture piece
+  (chairs, stools, sofas, lamps, plants, thin cuboid rugs, neon signs, jukeboxes,
+  reception desks, bookshelves, bars, string lights, and the new collection) is
+  modelled with genuine top, front-left, and front-right surfaces, coherent
+  elliptical floor contact shadows, calibrated seating contact planes, and lighting
+  matching room and character voxels.
+- Original v0.3.0 collection (8 distinctive new furniture/decor items with original
+  names, descriptions, and geometry; not copies of Habbo):
+  - **Luminous Reef Tank** (`aquarium`): deep oceanic aquarium with living coral reef and darting clownfish.
+  - **Tea-Pearl Boba Bar** (`boba_bar`): specialty counter brewing tapioca milk tea with tea urns and shaker machine.
+  - **Retro Pixel Arcade** (`mini_arcade`): coin-op upright arcade cabinet running "Cosmic Bellhop".
+  - **Midnight Noodle Cart** (`noodle_cart`): street vendor cart with steaming broth cauldron and red paper lantern.
+  - **Star Stage Karaoke** (`karaoke_machine`): digital kiosk with LED spectrum VU meters, disco dome, and chrome mic.
+  - **Stargazer Telescope** (`telescope`): mahogany tripod with equatorial mount and angled brass refractor tube.
+  - **Zen Koi Stone Pond** (`koi_pond`): carved slate basin with water, stepping stones, lily pads, and swimming koi.
+  - **Gachapon Capsule Toy** (`capsule_dispenser`): retro prize dispenser with coin turn crank and toy capsules.
+- Furniture catalogue with buy / place / move / 4-way rotate / pick-up, full overlap
+  and occupancy validation, and a ghost preview while placing. Rugs are physically thin
+  cuboid surfaces that remain walkable floor decor.
+- Multiple seat types; clicking a seat walks you there and sits you facing it with
+  clean seat contact. NPCs occasionally sit down too.
 - Coins, a quest list (greet guests, place furniture, sit on the rooftop
   sofa, visit both rooms) with coin rewards and catalogue unlocks.
 - A slow day/night lighting cycle that tints the room and glows the windows,
