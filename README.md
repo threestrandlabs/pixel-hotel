@@ -43,11 +43,18 @@ Then open **http://localhost:8080** in a modern desktop or mobile browser.
 - Isometric tile-based rooms (Grand Lobby + Rooftop Lounge) rendered on
   `<canvas>` with depth-sorted floor/wall/furniture/avatar pixel art and crisp
   (non-smoothed) pixel scaling.
+- Procedural 3D voxel characters: player avatar and four original NPC guests
+  (Mochi the bellhop, grumpy Gus, Dr. Pix the eccentric scientist, and Lola the
+  lounge singer) built from volumetric axis-aligned box models with true 4-way
+  rotation (no 2D mirroring), animated walk strides, sitting poses, custom
+  outfits and accessories, and soft floor contact shadows.
+- Perspective-integrated wall windows cut into north and west wall planes with
+  recessed side reveals, inner sills, dynamic daylight sky gradients, sash bars,
+  glare highlights, and projecting stone sills and lintels.
 - Click-to-walk avatar with A* pathfinding around walls, furniture and guests,
   4-direction facing, walk-cycle animation, and a hover tile highlight.
-- Four original NPC guests (Mochi the bellhop, grumpy Gus, Dr. Pix the
-  eccentric scientist, and Lola the lounge singer) with idle wandering, chat
-  bubbles, keyword-triggered responses, and ambient one-liners.
+- Idle NPC wandering, chat bubbles, keyword-triggered responses, and ambient
+  one-liners.
 - Chat box with stacked speech bubbles above the avatar and a scrolling chat
   log.
 - A small furniture catalogue (stools, sofas, lamps, plants, rugs, a neon
@@ -76,15 +83,16 @@ js/inventory.js       buy/place/move/pickup validation (pure)
 js/quests.js          quest progress, rewards, unlocks (pure)
 js/save.js            versioned localStorage save/load (pure)
 js/npc.js             NPC wandering/dialogue logic (pure)
-js/sprites.js         procedural pixel-art generation (canvas)
+js/voxel.js           procedural 3D voxel character models & projection (pure)
+js/sprites.js         procedural pixel-art generation & wall/window geometry
 js/render.js           isometric rendering, depth sort, lighting (canvas)
 js/audio.js            procedural WebAudio chiptune + SFX
 js/main.js             game loop, input, UI wiring, debug hooks
 ```
 
-The `js/data.js`, `pathfinding.js`, `inventory.js`, `quests.js`, `save.js` and
-`npc.js` modules have no DOM dependency, so they run and test directly under
-Node.
+The `js/data.js`, `pathfinding.js`, `inventory.js`, `quests.js`, `save.js`,
+`npc.js` and `voxel.js` modules have no DOM dependency, so they run and test
+directly under Node.
 
 For debugging/tests, the running page exposes `window.__pixelHotel` with
 `getState()`, `walkTo(x,y)`, `sendChat(text)`, `buy(itemId)`,
@@ -93,7 +101,7 @@ For debugging/tests, the running page exposes `window.__pixelHotel` with
 ## Tests
 
 ```sh
-npm test         # Node built-in test runner: pathfinding, inventory, quests, save/load
+npm test         # Node built-in test runner: pathfinding, inventory, quests, save/load, voxel/window rendering
 npm run test:smoke   # Playwright end-to-end smoke test (needs: npm i -D playwright && npx playwright install chromium)
 ```
 
@@ -106,8 +114,9 @@ along the way.
 ## Assets & Attribution
 
 Every visual and audio asset in this project is **generated procedurally in
-code** — pixel-art sprites (avatars, NPCs, furniture, tiles, walls) are built
-from small drawing primitives in `js/sprites.js`, and the background music/SFX
+code** — volumetric 3D voxel character figures are modelled and projected in
+`js/voxel.js`, architectural tiles, furniture, and perspective wall windows
+are generated mathematically in `js/sprites.js`, and the background music/SFX
 are synthesized at runtime with the Web Audio API in `js/audio.js`. There are
 no downloaded images, fonts, sound files, or other external assets anywhere in
 this repository, and the game makes no network requests.

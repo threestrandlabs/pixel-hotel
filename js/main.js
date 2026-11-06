@@ -386,14 +386,14 @@ function seatDepth(instanceId) {
 function buildEntities() {
   const list = [];
   list.push({
-    x: player.renderX, y: player.renderY, dir: player.dir, frame: player.frame,
+    x: player.renderX, y: player.renderY, dir: player.dir, frame: player.frame, walking: player.walking,
     sitting: !!player.sitting, depth: seatDepth(player.sitting), spriteKey: 'player', kind: 'player',
     bubbleText: player.bubbleUntil && player.bubbleUntil > performance.now() ? player.bubbleText : null,
   });
   for (const n of npcRuntimes) {
     if (n.room !== state.player.room) continue;
     list.push({
-      x: n.renderX, y: n.renderY, dir: n.dir, frame: n.frame, sitting: !!n.sitting, depth: seatDepth(n.sitting),
+      x: n.renderX, y: n.renderY, dir: n.dir, frame: n.frame, walking: n.walking, sitting: !!n.sitting, depth: seatDepth(n.sitting),
       spriteKey: n.id, kind: 'npc', color: n.def.color,
       bubbleText: n.bubble ? n.bubble.text : null,
     });

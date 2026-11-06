@@ -12,6 +12,8 @@ import {
 import { createDefaultState, loadState, saveState, resetState, SAVE_KEY } from '../js/save.js';
 import { getCatalogueItem, TILE, SAVE_VERSION, ROOMS, NPCS } from '../js/data.js';
 import { respondToMessage } from '../js/npc.js';
+import { LOOKS, renderCharacter } from '../js/voxel.js';
+import { buildWindowSegment } from '../js/sprites.js';
 
 // ---------- fake localStorage ----------
 function makeFakeStorage(initial = {}) {
@@ -406,4 +408,43 @@ test('save/load: a pre-0.1.1 save with empty rooms loads unchanged (not re-seede
   assert.equal(loaded.coins, 7);
   assert.equal(loaded.rooms.lobby.placed.length, 0);
   assert.equal(loaded.player.room, 'lobby');
+});
+
+// ======================= rendering regression (v0.2.0) =======================
+
+test('rendering: all four facing, walk, and sitting frames for player and 4 NPCs generate nonempty bounded sprites', () => {
+  const mockCanvas = (w, h) => ({
+    width: w,
+    height: h,
+    getContext: () => new Proxy({}, { get: () => () => {}, set: () => true }),
+  });
+  const characters = ['player', 'mochi', 'gus', 'drpix', 'lola'];
+  const dirs = ['down', 'up', 'left', 'right'];
+  const poses = [{ stride: 0 }, { stride: 1 }, { stride: -1 }, { sit: true }];
+
+  for (const id of characters) {
+    const look = LOOKS[id];
+    assert.ok(look, `expected look definition for ${id}`);
+    for (const dir of dirs) {
+      for (const pose of poses) {
+        const { canvas, ox, oy } = renderCharacter(look, dir, pose, mockCanvas);
+        assert.ok(canvas.width > 0 && canvas.height > 0, `empty canvas for ${id} ${dir} ${JSON.stringify(pose)}`);
+        assert.ok(ox > 0 && oy > 0, `invalid anchor offset for ${id} ${dir}`);
+        assert.ok(canvas.width < 200 && canvas.height < 200, `unbounded canvas size for ${id}`);
+        assert.ok(Number.isFinite(ox) && Number.isFinite(oy), `non-finite offsets for ${id}`);
+      }
+    }
+  }
+});
+
+test('rendering: both wall window orientations generate nonempty bounded sprites', () => {
+  const sky = { top: '#8fd0ff', bottom: '#fff6c9' };
+  for (const orientation of ['north', 'west']) {
+    const s = buildWindowSegment('#e8d8c8', sky, orientation);
+    assert.ok(s.w > 0 && s.h > 0, `invalid dimensions for ${orientation} window`);
+    assert.ok(s.w <= 128 && s.h <= 128, `unbounded dimensions for ${orientation} window`);
+    let opaque = 0;
+    for (const row of s.px) for (const p of row) if (p) opaque++;
+    assert.ok(opaque > 0, `expected opaque pixels for ${orientation} window`);
+  }
 });

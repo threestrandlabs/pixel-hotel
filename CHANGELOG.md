@@ -4,6 +4,31 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.2.0] - 2026-11-07
+
+### Added
+
+- Volumetric 3D voxel character models (`js/voxel.js`) for the player and all 4
+  NPC guests (Mochi, Gus, Dr. Pix, Lola), built from axis-aligned 3D boxes and
+  projected isometrically with true 4-way rotation (no 2D mirroring).
+- Character poses: distinct walk-cycle strides and seated poses, unique outfits,
+  and customized accessories (glasses, mustache, bellhop hat, goggles, flower).
+- Soft elliptical floor contact shadows under characters matching room lighting.
+- Perspective-integrated wall windows cut into the north and west wall planes,
+  featuring recessed reveals, inner sills, dynamic daylight sky gradients,
+  sash bars, glare highlights, and projecting stone sills and lintels.
+- Quantised daylight steps for efficient caching of daylight-dependent window
+  sprites.
+- Unit regression tests verifying bounded sprite generation across all 4 facings,
+  walk strides, and sitting frames for all characters, plus both window
+  orientations.
+
+### Changed
+
+- Replaced 2D flat character sprite sheet generation with procedural voxel
+  model projection.
+- Character stride state wired into entity rendering for walk animation.
+
 ## [0.1.1] - 2026-11-07
 
 ### Changed

@@ -68,16 +68,6 @@ function fillDiamond(sprite, cx, cy, halfW, halfH, color) {
   }
 }
 
-function mirrorH(sprite) {
-  const out = makeGrid(sprite.w, sprite.h);
-  for (let y = 0; y < sprite.h; y++) {
-    for (let x = 0; x < sprite.w; x++) {
-      out.px[y][sprite.w - 1 - x] = sprite.px[y][x];
-    }
-  }
-  return out;
-}
-
 function outline(sprite, color) {
   // Adds a 1px outline around any opaque pixel that borders transparency.
   const out = makeGrid(sprite.w, sprite.h);
@@ -100,133 +90,6 @@ function outline(sprite, color) {
     }
   }
   return out;
-}
-
-// ---------- Character (avatar / NPC) ----------
-
-// Logical sprite is 16x22: a 14x20 body padded by 1px so a dark outline fits.
-// Feet always end on row CHAR_FEET_Y (exclusive), which the renderer pins to
-// the tile centre, so walking and sitting poses share one ground line.
-const CHAR_W = 16;
-const CHAR_H = 22;
-export const CHAR_FEET_Y = 20;
-const OUTLINE = '#2a1d2e';
-
-function drawBody(s, direction, legOffset, armSwing, scheme, sitting) {
-  const { skin, hair, shirt, shirtShade, pants, pantsShade, shoe, eye } = scheme;
-  const blush = shade(skin, -0.08);
-  const hairShade = shade(hair, 0.25);
-
-  if (sitting) {
-    fillRect(s, 3, 15, 4, 3, pants);
-    fillRect(s, 7, 15, 4, 3, pantsShade);
-    fillRect(s, 3, 17, 4, 1, shoe);
-    fillRect(s, 7, 17, 4, 1, shoe);
-  } else {
-    // legs (drawn first so the torso overlaps the tops)
-    fillRect(s, 3, 13 + (legOffset ? 1 : 0), 3, 5 - (legOffset ? 1 : 0), pants);
-    fillRect(s, 8, 13 + (legOffset ? 0 : 1), 3, 5 - (legOffset ? 0 : 1), pantsShade);
-    fillRect(s, 3, 17, 3, 2, shoe);
-    fillRect(s, 8, 17, 3, 2, shoe);
-  }
-
-  // torso, collar and arms with skin-coloured hands
-  const torsoH = sitting ? 7 : 6;
-  fillRect(s, 2, 8, 10, torsoH, shirt);
-  fillRect(s, 2, 8, 10, 2, shirtShade);
-  fillRect(s, 2, 8 + torsoH - 1, 10, 1, shirtShade);
-  const armL = sitting ? 1 : (armSwing === 'left' ? 1 : 0);
-  const armR = sitting ? 1 : (armSwing === 'right' ? 1 : 0);
-  fillRect(s, 0, 8 + armL, 2, 4, shirt);
-  fillRect(s, 12, 8 + armR, 2, 4, shirt);
-  fillRect(s, 0, 12 + armL, 2, 1, skin);
-  fillRect(s, 12, 12 + armR, 2, 1, skin);
-  if (direction !== 'up') setPixel(s, 6, 8, skin), setPixel(s, 7, 8, skin);
-
-  // head with rounded corners
-  fillRect(s, 3, 1, 8, 7, skin);
-  for (const [x, y] of [[3, 1], [10, 1], [3, 7], [10, 7]]) setPixel(s, x, y, null);
-  // hair cap
-  fillRect(s, 3, 0, 8, 2, hair);
-  setPixel(s, 3, 0, null);
-  setPixel(s, 10, 0, null);
-  setPixel(s, 5, 0, hairShade);
-  setPixel(s, 6, 0, hairShade);
-
-  if (direction === 'down') {
-    setPixel(s, 3, 2, hair); setPixel(s, 10, 2, hair);
-    for (const x of [4, 9]) { setPixel(s, x, 4, '#ffffff'); setPixel(s, x, 5, eye); }
-    for (const x of [5, 8]) { setPixel(s, x, 4, eye); setPixel(s, x, 5, eye); }
-    setPixel(s, 4, 6, blush); setPixel(s, 9, 6, blush);
-    setPixel(s, 6, 6, '#a8505a'); setPixel(s, 7, 6, '#a8505a');
-  } else if (direction === 'up') {
-    fillRect(s, 3, 1, 8, 6, hair); // back of the head, no face
-    setPixel(s, 3, 1, null); setPixel(s, 10, 1, null);
-    fillRect(s, 5, 2, 4, 1, hairShade);
-  } else {
-    // facing right (left is mirrored): hair sweeps over the back of the head
-    fillRect(s, 3, 1, 3, 5, hair);
-    setPixel(s, 3, 1, null);
-    setPixel(s, 8, 4, '#ffffff'); setPixel(s, 9, 4, eye); setPixel(s, 9, 5, eye);
-    setPixel(s, 8, 6, blush); setPixel(s, 10, 5, skin); setPixel(s, 10, 6, '#a8505a');
-  }
-}
-
-// Pads the body into the final sprite, then adds the outline and a lower-lip
-// shadow shade so figures read against both bright and dark floors.
-function finishCharacter(body, dy) {
-  const s = makeGrid(CHAR_W, CHAR_H);
-  for (let y = 0; y < body.h; y++) {
-    for (let x = 0; x < body.w; x++) {
-      if (body.px[y][x]) setPixel(s, x + 1, y + 1 + dy, body.px[y][x]);
-    }
-  }
-  return outline(s, OUTLINE);
-}
-
-function buildCharacterFrame(direction, legOffset, armSwing, scheme) {
-  const body = makeGrid(14, 20);
-  drawBody(body, direction, legOffset, armSwing, scheme, false);
-  return finishCharacter(body, 0);
-}
-
-function buildSitFrame(direction, scheme) {
-  const body = makeGrid(14, 20);
-  drawBody(body, direction, false, null, scheme, true);
-  return finishCharacter(body, 1);
-}
-
-export function buildCharacterSheet(scheme) {
-  const right0 = buildCharacterFrame('right', false, 'left', scheme);
-  const right1 = buildCharacterFrame('right', true, 'right', scheme);
-  const down0 = buildCharacterFrame('down', false, 'left', scheme);
-  const down1 = buildCharacterFrame('down', true, 'right', scheme);
-  const up0 = buildCharacterFrame('up', false, 'left', scheme);
-  const up1 = buildCharacterFrame('up', true, 'right', scheme);
-  return {
-    down: [down0, down1],
-    up: [up0, up1],
-    right: [right0, right1],
-    left: [mirrorH(right0), mirrorH(right1)],
-    sit: {
-      down: buildSitFrame('down', scheme),
-      up: buildSitFrame('up', scheme),
-      left: buildSitFrame('left', scheme),
-      right: buildSitFrame('right', scheme),
-    },
-  };
-}
-
-export const PLAYER_SCHEME = {
-  skin: '#ffd9a8', hair: '#5a3826', shirt: '#4da3ff', shirtShade: '#2f7fd6',
-  pants: '#2c3e63', pantsShade: '#223152', shoe: '#2a2a2a', eye: '#222222',
-};
-
-export function npcScheme(accentColor) {
-  return {
-    skin: '#ffe0b8', hair: '#3a2a22', shirt: accentColor, shirtShade: shade(accentColor, -0.22),
-    pants: '#515a73', pantsShade: '#3f4760', shoe: '#2a2a2a', eye: '#222222',
-  };
 }
 
 function shade(hex, amt) {
@@ -298,10 +161,11 @@ export function buildWallSegment(baseColor, kind = 'north') {
   const sideUp = [side[0], side[1] - ISO.WALL_H];
 
   fillPolygon(s, [northUp, sideUp, side, north], bodyColor);
-  // horizontal plank shading lines, clipped to the wall silhouette
-  for (let y = 0; y < h; y += 7) {
+  // plank shading lines run parallel to the wall's slanted base, not the screen
+  const baseY = (x) => Math.round(ISO.WALL_H + (kind === 'north' ? (x - w / 2) / 2 : (w / 2 - x) / 2));
+  for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
-      if (s.px[y][x]) s.px[y][x] = shade(bodyColor, -0.14);
+      if (s.px[y][x] && (baseY(x) - y) % 7 === 6) s.px[y][x] = shade(bodyColor, -0.14);
     }
   }
   // a thin highlight along the top (ceiling) edge of the wall
@@ -321,23 +185,80 @@ export function buildWallSegment(baseColor, kind = 'north') {
 
 export const WALL_ANCHOR_Y = ISO.WALL_H + ISO.TILE_H / 2;
 
-export function buildWindowSegment(baseColor, glowColor, kind = 'north') {
+// Wall-plane mapping for one wall tile: (u along the wall 0..1, t up the wall
+// 0..1) <-> sprite pixels. Everything drawn through it follows the wall's
+// slant, so window parts converge with the wall instead of floating on it.
+function wallPlane(kind) {
+  const sgn = kind === 'north' ? 1 : -1;
+  const W2 = ISO.TILE_W / 2;
+  return {
+    P: (u, t) => [W2 + sgn * W2 * u, ISO.WALL_H + (ISO.TILE_H / 2) * u - ISO.WALL_H * t],
+    inv: (x, y) => {
+      const u = sgn * (x - W2) / W2;
+      return [u, (ISO.WALL_H + (ISO.TILE_H / 2) * u - y) / ISO.WALL_H];
+    },
+  };
+}
+
+// A recessed window cut into the wall plane: architrave, a left reveal and
+// inner sill visible through the opening, sky-gradient panes with sash bars and
+// glare, a projecting stone sill and lintel (top + front + end faces).
+// `sky` = { top, bottom } hex colours.
+export function buildWindowSegment(baseColor, sky, kind = 'north') {
   const s = buildWallSegment(baseColor, kind);
-  const w = ISO.TILE_W;
-  // Wall tiles only paint their local half-width nearest their "side" point
-  // (see buildWallSegment) — the window must sit inside that slanted region,
-  // centered at t=0.5 along the edge so it stays clear of both borders.
-  const cx = kind === 'north' ? w * 0.75 : w * 0.25;
-  const t = 0.5;
-  const topY = t * (ISO.TILE_H / 2);
-  const winW = 16, winH = 30, margin = 6;
-  const left = Math.round(cx - winW / 2);
-  const top = Math.round(topY + margin);
-  fillRect(s, left - 2, top - 2, winW + 4, winH + 4, '#1b1f2e');
-  fillRect(s, left, top, winW, winH, glowColor);
-  fillRect(s, left + winW / 2 - 1, top, 2, winH, '#1b1f2e');
-  fillRect(s, left, top + winH / 2 - 1, winW, 2, '#1b1f2e');
+  const body = kind === 'north' ? baseColor : shade(baseColor, -0.1);
+  const { P, inv } = wallPlane(kind);
+  const poly = (ua, ub, ta, tb, o = [0, 0]) => [[ua, ta], [ub, ta], [ub, tb], [ua, tb]]
+    .map(([u, t]) => { const [x, y] = P(u, t); return [x + o[0], y + o[1]]; });
+  const U0 = 0.16, U1 = 0.84, T0 = 0.32, T1 = 0.82;
+  const frame = '#f1e6d2';
+  const sgn = kind === 'north' ? 1 : -1;
+
+  // architrave (flush with the wall): lit left jamb/head, shaded right jamb
+  fillPolygon(s, poly(U0 - 0.07, U1 + 0.07, T0 - 0.06, T1 + 0.06), shade(frame, -0.05));
+  fillPolygon(s, poly(U1, U1 + 0.07, T0 - 0.06, T1 + 0.06), shade(frame, -0.2));
+  // opening: depth goes into the wall, which shifts the pane up the wall's depth axis
+  const sx = sgn * 3.4, sy = -1.7;
+  const lo = (a, b, c) => Math.max(a, Math.min(b, c));
+  for (let y = 0; y < s.h; y++) {
+    for (let x = 0; x < s.w; x++) {
+      if (!s.px[y][x]) continue;
+      const [u, t] = inv(x + 0.5, y + 0.5);
+      if (u < U0 || u > U1 || t < T0 || t > T1) continue;
+      const [pu, pt] = inv(x + 0.5 - sx, y + 0.5 - sy);
+      if (pu < U0) { s.px[y][x] = shade(body, -0.38); continue; } // side reveal
+      if (pt < T0) { s.px[y][x] = shade(frame, -0.1); continue; } // inner sill, lit from above
+      const nu = lo(0, 1, (pu - U0) / (U1 - U0)), nt = lo(0, 1, (pt - T0) / (T1 - T0));
+      if (nu < 0.07 || nu > 0.93 || nt < 0.06 || nt > 0.94 || Math.abs(nu - 0.5) < 0.05 || Math.abs(nt - 0.5) < 0.045) {
+        s.px[y][x] = (nu < 0.5 || nt > 0.5) ? shade(frame, -0.08) : shade(frame, -0.28); // lit top/left, shaded bottom/right
+        continue;
+      }
+      let c = mixHex(sky.bottom, sky.top, nt);
+      const g = nu * 0.8 + nt * 0.5;
+      if (g > 0.9 && g < 1.05) c = shade(c, 0.22);
+      else if (g > 1.12 && g < 1.2) c = shade(c, 0.12);
+      if (nt > 0.88) c = shade(c, -0.14); // shadow under the lintel
+      s.px[y][x] = c;
+    }
+  }
+  // projecting slab: top face, front face and the end cap that faces the viewer
+  const slab = (ua, ub, ta, tb, pr, color) => {
+    const out = [-sgn * ISO.TILE_W / 2 * pr, ISO.TILE_H / 2 * pr]; // outward = toward the viewer
+    const sh = (p) => [p[0] + out[0], p[1] + out[1]];
+    fillPolygon(s, [P(ua, tb), P(ub, tb), sh(P(ub, tb)), sh(P(ua, tb))], shade(color, 0.12));
+    fillPolygon(s, [P(ub, tb), P(ub, ta), sh(P(ub, ta)), sh(P(ub, tb))], shade(color, -0.3));
+    fillPolygon(s, poly(ua, ub, ta, tb, out), color);
+  };
+  fillPolygon(s, poly(0.07, 0.95, T0 - 0.2, T0 - 0.15), shade(body, -0.22)); // wall shadow under the sill
+  slab(0.07, 0.93, T0 - 0.15, T0 - 0.05, 0.16, shade(frame, -0.12));
+  slab(U0 - 0.1, U1 + 0.1, T1 + 0.06, T1 + 0.13, 0.12, shade(frame, -0.12));
   return s;
+}
+
+function mixHex(a, b, t) {
+  const pa = parseInt(a.slice(1), 16), pb = parseInt(b.slice(1), 16);
+  const ch = (sh) => Math.round(((pa >> sh) & 255) * (1 - t) + ((pb >> sh) & 255) * t);
+  return `#${((1 << 24) + (ch(16) << 16) + (ch(8) << 8) + ch(0)).toString(16).slice(1)}`;
 }
 
 // A wall segment with a framed doorway cut into it. Wall bases run along the

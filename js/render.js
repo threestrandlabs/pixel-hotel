@@ -4,13 +4,12 @@
 
 import { TILE, getCatalogueItem } from './data.js';
 import {
-  ISO, WALL_ANCHOR_Y, CHAR_FEET_Y, buildFloorTile, buildWallSegment, buildWindowSegment,
-  buildDoorSegment, buildDoorTile, FURNITURE_BUILDERS, buildCharacterSheet, PLAYER_SCHEME, npcScheme,
-  shadeColor,
+  ISO, WALL_ANCHOR_Y, buildFloorTile, buildWallSegment, buildWindowSegment,
+  buildDoorSegment, buildDoorTile, FURNITURE_BUILDERS, shadeColor,
 } from './sprites.js';
+import { LOOKS, getCharacterCanvas } from './voxel.js';
 
 export const { TILE_W, TILE_H, WALL_H } = ISO;
-export const CHAR_PIXEL = 3;
 export const TOP_PADDING = 28;
 
 const canvasCache = new Map();
@@ -74,9 +73,8 @@ function dayNightColors(phase) {
   const day = Math.min(1, k * 1.8);
   const skyTop = lerpColor('#1a2250', '#8fd0ff', day);
   const skyBottom = lerpColor('#3a3a72', '#ffe9b8', day);
-  const glow = lerpColor('#ffd27a', '#fff6c9', day);
   const tintAlpha = 0.42 * (1 - day);
-  return { skyTop, skyBottom, glow, tintAlpha };
+  return { skyTop, skyBottom, day, tintAlpha };
 }
 
 function lerpColor(a, b, t) {
@@ -85,7 +83,7 @@ function lerpColor(a, b, t) {
   const r = Math.round(pa.r + (pb.r - pa.r) * t);
   const g = Math.round(pa.g + (pb.g - pa.g) * t);
   const bl = Math.round(pa.b + (pb.b - pa.b) * t);
-  return `rgb(${r},${g},${bl})`;
+  return `#${((1 << 24) + (r << 16) + (g << 8) + bl).toString(16).slice(1)}`; // hex: sprites.js shades hex only
 }
 function hexToRgb(hex) {
   const n = parseInt(hex.replace('#', ''), 16);
@@ -101,27 +99,18 @@ export function drawBackground(ctx, width, height, phase) {
   ctx.fillRect(0, 0, width, height);
 }
 
-function getCharSheet(key, scheme) {
-  const cacheKey = `char:${key}`;
-  if (canvasCache.has(cacheKey)) return canvasCache.get(cacheKey);
-  const sheet = buildCharacterSheet(scheme);
-  canvasCache.set(cacheKey, sheet);
-  return sheet;
-}
-
-function drawCharacter(ctx, key, scheme, dir, frameIdx, sitting, screenX, screenY) {
-  const sheet = getCharSheet(key, scheme);
-  let sprite;
-  if (sitting) sprite = sheet.sit[dir] || sheet.sit.down;
-  else sprite = (sheet[dir] || sheet.down)[frameIdx % 2];
-  const bakeKey = `${key}:${sitting ? 'sit' : 'walk'}:${dir}:${sitting ? 0 : frameIdx % 2}`;
-  const canvas = bakeSprite(bakeKey, sprite, CHAR_PIXEL);
-  const dx = Math.round(screenX - canvas.width / 2);
-  const dy = Math.round(screenY + 4 - CHAR_FEET_Y * CHAR_PIXEL); // feet land just below the tile centre
-  ctx.fillStyle = 'rgba(30,15,40,0.28)';
-  for (const [w, o] of [[14, 1], [24, 3], [14, 5]]) ctx.fillRect(Math.round(screenX - w / 2), Math.round(screenY + o), w, 2);
+function drawCharacter(ctx, e, screenX, screenY) {
+  const look = LOOKS[e.spriteKey] || { ...LOOKS.player, shirt: e.color || LOOKS.player.shirt };
+  const stride = e.walking ? (e.frame % 2 ? 1 : -1) : 0;
+  const { canvas, ox, oy } = getCharacterCanvas(`${e.spriteKey}:${e.color}`, look, e.dir, { stride, sit: e.sitting });
+  // soft contact shadow on the floor, offset away from the room's upper-left light
+  ctx.fillStyle = 'rgba(30,15,40,0.22)';
+  for (const [rx, ry] of [[19, 9.5], [14, 7]]) {
+    ctx.beginPath(); ctx.ellipse(screenX + 2, screenY + 1, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
+  }
+  const dx = Math.round(screenX - ox), dy = Math.round(screenY - oy); // ground centre sits on the tile centre
   ctx.drawImage(canvas, dx, dy);
-  return { x: dx, y: dy, w: canvas.width, h: canvas.height };
+  return { x: screenX, y: dy, w: 0, h: canvas.height };
 }
 
 function furnitureCanvas(itemId, rot) {
@@ -189,7 +178,9 @@ export function renderRoom(ctx, opts) {
   const { originX, originY } = computeOrigin(room, width, height);
   const floorColor = floorBaseColor(room.id);
   const wallColor = wallBaseColor(room.id);
-  const { glow } = dayNightColors(phase);
+  const { day } = dayNightColors(phase);
+  const wb = Math.round(day * 8) / 8; // quantised so window sprites are cached per daylight step
+  const sky = { top: lerpColor('#1a2250', '#8fd0ff', wb), bottom: lerpColor('#ffd27a', '#fff6c9', wb) };
 
   // Pass 1: floor. A darker grout polygon underneath hides hairline gaps
   // between tiles and doubles as the slab's top edge.
@@ -249,7 +240,7 @@ export function renderRoom(ctx, opts) {
       const { sx, sy } = tileToScreen(kind === 'north' ? x : 1, kind === 'north' ? 1 : y, originX, originY);
       let sprite;
       let key;
-      if (cell === TILE.WINDOW) { key = `window:${room.id}:${x}:${y}`; sprite = () => buildWindowSegment(wallColor, glow, kind); }
+      if (cell === TILE.WINDOW) { key = `window:${room.id}:${kind}:${wb}`; sprite = () => buildWindowSegment(wallColor, sky, kind); }
       else if (cell === TILE.DOOR) { key = `door:${room.id}:${kind}`; sprite = () => buildDoorSegment(wallColor, kind); }
       else { key = `wall:${room.id}:${kind}`; sprite = () => buildWallSegment(wallColor, kind); }
       ctx.drawImage(bakeSprite(key, sprite(), 1), Math.round(sx - TILE_W / 2), Math.round(sy - WALL_ANCHOR_Y));
@@ -276,8 +267,7 @@ export function renderRoom(ctx, opts) {
     } else {
       const e = d.data;
       const { sx, sy } = tileToScreen(e.x, e.y, originX, originY);
-      const scheme = e.kind === 'player' ? PLAYER_SCHEME : npcScheme(e.color);
-      const bbox = drawCharacter(ctx, e.spriteKey, scheme, e.dir, e.frame, e.sitting, sx, sy);
+      const bbox = drawCharacter(ctx, e, sx, sy);
       if (e.bubbleText) bubbleTargets.push({ x: bbox.x + bbox.w / 2, y: bbox.y, text: e.bubbleText });
     }
   }
