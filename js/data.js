@@ -115,6 +115,7 @@ export const CATALOGUE = [
     footprint: { w: 2, h: 2 },
     seat: false,
     spriteKey: 'rug',
+    flat: true, // floor decor: walkable, drawn under avatars, may sit under other items
     unlockRequires: 'quest_greet',
   },
   {
@@ -137,11 +138,53 @@ export const CATALOGUE = [
     spriteKey: 'jukebox',
     unlockRequires: 'quest_sit',
   },
+  { id: 'armchair', name: 'Plush Armchair', price: 30, category: 'seat', footprint: { w: 1, h: 1 }, seat: true, spriteKey: 'armchair', unlockRequires: null },
+  { id: 'deckchair', name: 'Striped Deckchair', price: 35, category: 'seat', footprint: { w: 1, h: 1 }, seat: true, spriteKey: 'deckchair', unlockRequires: null },
+  { id: 'reception_desk', name: 'Reception Desk', price: 70, category: 'decor', footprint: { w: 3, h: 1 }, seat: false, spriteKey: 'receptionDesk', unlockRequires: null },
+  { id: 'bookshelf', name: 'Tall Bookshelf', price: 55, category: 'decor', footprint: { w: 2, h: 1 }, seat: false, spriteKey: 'bookshelf', unlockRequires: null },
+  { id: 'bar_counter', name: 'Rooftop Bar', price: 75, category: 'decor', footprint: { w: 3, h: 1 }, seat: false, spriteKey: 'barCounter', unlockRequires: null },
+  { id: 'string_lights', name: 'String Light Post', price: 25, category: 'decor', footprint: { w: 1, h: 1 }, seat: false, spriteKey: 'stringLights', unlockRequires: null },
 ];
 
 export function getCatalogueItem(id) {
   return CATALOGUE.find((c) => c.id === id) || null;
 }
+
+// Furnishings a brand-new game starts with (old saves keep their own rooms).
+// Keep the door-approach tiles, spawn points and NPC homes free; tests verify it.
+// rot: 0 faces down, 1 right, 2 up, 3 left (seats); 2-wide items turn 1x2 on odd rot.
+export const SEED_FURNITURE = {
+  lobby: [
+    { itemId: 'reception_desk', x: 8, y: 2, rot: 0 },
+    { itemId: 'stool', x: 9, y: 3, rot: 0 },
+    { itemId: 'bookshelf', x: 1, y: 4, rot: 1 },
+    { itemId: 'rug', x: 3, y: 4, rot: 0 },
+    { itemId: 'sofa', x: 3, y: 3, rot: 0 },
+    { itemId: 'armchair', x: 2, y: 5, rot: 1 },
+    { itemId: 'armchair', x: 5, y: 5, rot: 3 },
+    { itemId: 'lamp', x: 5, y: 3, rot: 0 },
+    { itemId: 'lamp', x: 1, y: 7, rot: 0 },
+    { itemId: 'plant', x: 5, y: 1, rot: 0 },
+    { itemId: 'plant', x: 7, y: 1, rot: 0 },
+    { itemId: 'plant', x: 1, y: 1, rot: 0 },
+    { itemId: 'plant', x: 11, y: 8, rot: 0 },
+  ],
+  rooftop: [
+    { itemId: 'bar_counter', x: 7, y: 1, rot: 0 },
+    { itemId: 'stool', x: 7, y: 2, rot: 0 },
+    { itemId: 'stool', x: 8, y: 2, rot: 0 },
+    { itemId: 'rug', x: 2, y: 4, rot: 0 },
+    { itemId: 'rooftop_sofa', x: 2, y: 3, rot: 0 },
+    { itemId: 'deckchair', x: 5, y: 4, rot: 3 },
+    { itemId: 'deckchair', x: 5, y: 5, rot: 3 },
+    { itemId: 'string_lights', x: 1, y: 1, rot: 0 },
+    { itemId: 'string_lights', x: 5, y: 1, rot: 0 },
+    { itemId: 'string_lights', x: 9, y: 7, rot: 0 },
+    { itemId: 'plant', x: 1, y: 7, rot: 0 },
+    { itemId: 'plant', x: 9, y: 4, rot: 0 },
+    { itemId: 'lamp', x: 6, y: 6, rot: 0 },
+  ],
+};
 
 // NPCs: original cosy-hotel cast with personalities, idle ambient lines and
 // keyword-triggered responses.

@@ -51,6 +51,7 @@ export function canPlaceAt(room, item, x, y, rot, occupantTiles = [], excludeIns
     for (const p of room.placed) {
       if (p.instanceId === excludeInstanceId) continue;
       const other = getCatalogueItem(p.itemId);
+      if (!!other.flat !== !!item.flat) continue; // rugs lie under furniture
       const otherCells = footprintCells(p.x, p.y, other.footprint, p.rot);
       if (otherCells.some((oc) => oc.x === c.x && oc.y === c.y)) {
         return { ok: false, reason: 'furniture_overlap' };

@@ -1,14 +1,16 @@
 // Versioned save/load for Pixel Hotel. Pure functions that take a storage-like
 // object ({getItem,setItem,removeItem}) so tests can pass a fake localStorage.
 
-import { SAVE_VERSION, STARTING_COINS, ROOMS } from './data.js';
+import { SAVE_VERSION, STARTING_COINS, ROOMS, SEED_FURNITURE } from './data.js';
 import { initQuestState } from './quests.js';
 
 export const SAVE_KEY = 'pixelHotel.save.v1';
 
 export function createDefaultState() {
   const rooms = {};
-  for (const id of Object.keys(ROOMS)) rooms[id] = { placed: [] };
+  for (const id of Object.keys(ROOMS)) rooms[id] = {
+    placed: (SEED_FURNITURE[id] || []).map((f, i) => ({ instanceId: `seed-${id}-${i}`, ...f })),
+  };
   return {
     version: SAVE_VERSION,
     coins: STARTING_COINS,

@@ -104,80 +104,96 @@ function outline(sprite, color) {
 
 // ---------- Character (avatar / NPC) ----------
 
-const CHAR_W = 14;
-const CHAR_H = 20;
+// Logical sprite is 16x22: a 14x20 body padded by 1px so a dark outline fits.
+// Feet always end on row CHAR_FEET_Y (exclusive), which the renderer pins to
+// the tile centre, so walking and sitting poses share one ground line.
+const CHAR_W = 16;
+const CHAR_H = 22;
+export const CHAR_FEET_Y = 20;
+const OUTLINE = '#2a1d2e';
 
-function buildCharacterFrame(direction, legOffset, armSwing, scheme) {
-  const s = makeGrid(CHAR_W, CHAR_H);
+function drawBody(s, direction, legOffset, armSwing, scheme, sitting) {
   const { skin, hair, shirt, shirtShade, pants, pantsShade, shoe, eye } = scheme;
+  const blush = shade(skin, -0.08);
+  const hairShade = shade(hair, 0.25);
 
-  // legs (drawn first so torso overlaps the tops)
-  fillRect(s, 3, 13 + (legOffset ? 1 : 0), 3, 5 - (legOffset ? 1 : 0), pants);
-  fillRect(s, 8, 13 + (legOffset ? 0 : 1), 3, 5 - (legOffset ? 0 : 1), pantsShade);
-  fillRect(s, 3, 17, 3, 2, shoe);
-  fillRect(s, 8, 17, 3, 2, shoe);
+  if (sitting) {
+    fillRect(s, 3, 15, 4, 3, pants);
+    fillRect(s, 7, 15, 4, 3, pantsShade);
+    fillRect(s, 3, 17, 4, 1, shoe);
+    fillRect(s, 7, 17, 4, 1, shoe);
+  } else {
+    // legs (drawn first so the torso overlaps the tops)
+    fillRect(s, 3, 13 + (legOffset ? 1 : 0), 3, 5 - (legOffset ? 1 : 0), pants);
+    fillRect(s, 8, 13 + (legOffset ? 0 : 1), 3, 5 - (legOffset ? 0 : 1), pantsShade);
+    fillRect(s, 3, 17, 3, 2, shoe);
+    fillRect(s, 8, 17, 3, 2, shoe);
+  }
 
-  // torso
-  fillRect(s, 2, 8, 10, 6, shirt);
+  // torso, collar and arms with skin-coloured hands
+  const torsoH = sitting ? 7 : 6;
+  fillRect(s, 2, 8, 10, torsoH, shirt);
   fillRect(s, 2, 8, 10, 2, shirtShade);
-  // arms (shift down 1px on the swinging side)
-  fillRect(s, 0, 8 + (armSwing === 'left' ? 1 : 0), 2, 5, shirt);
-  fillRect(s, 12, 8 + (armSwing === 'right' ? 1 : 0), 2, 5, shirt);
+  fillRect(s, 2, 8 + torsoH - 1, 10, 1, shirtShade);
+  const armL = sitting ? 1 : (armSwing === 'left' ? 1 : 0);
+  const armR = sitting ? 1 : (armSwing === 'right' ? 1 : 0);
+  fillRect(s, 0, 8 + armL, 2, 4, shirt);
+  fillRect(s, 12, 8 + armR, 2, 4, shirt);
+  fillRect(s, 0, 12 + armL, 2, 1, skin);
+  fillRect(s, 12, 12 + armR, 2, 1, skin);
+  if (direction !== 'up') setPixel(s, 6, 8, skin), setPixel(s, 7, 8, skin);
 
-  // head
+  // head with rounded corners
   fillRect(s, 3, 1, 8, 7, skin);
-  setPixel(s, 3, 1, null);
-  setPixel(s, 10, 1, null);
-  setPixel(s, 3, 7, null);
-  setPixel(s, 10, 7, null);
-  // hair
+  for (const [x, y] of [[3, 1], [10, 1], [3, 7], [10, 7]]) setPixel(s, x, y, null);
+  // hair cap
   fillRect(s, 3, 0, 8, 2, hair);
   setPixel(s, 3, 0, null);
   setPixel(s, 10, 0, null);
+  setPixel(s, 5, 0, hairShade);
+  setPixel(s, 6, 0, hairShade);
 
   if (direction === 'down') {
-    setPixel(s, 5, 4, eye);
-    setPixel(s, 8, 4, eye);
+    setPixel(s, 3, 2, hair); setPixel(s, 10, 2, hair);
+    for (const x of [4, 9]) { setPixel(s, x, 4, '#ffffff'); setPixel(s, x, 5, eye); }
+    for (const x of [5, 8]) { setPixel(s, x, 4, eye); setPixel(s, x, 5, eye); }
+    setPixel(s, 4, 6, blush); setPixel(s, 9, 6, blush);
+    setPixel(s, 6, 6, '#a8505a'); setPixel(s, 7, 6, '#a8505a');
   } else if (direction === 'up') {
-    fillRect(s, 3, 1, 8, 3, hair); // back of head, no face
-  } else if (direction === 'right') {
-    setPixel(s, 9, 4, eye);
-  } else if (direction === 'left') {
-    setPixel(s, 4, 4, eye);
+    fillRect(s, 3, 1, 8, 6, hair); // back of the head, no face
+    setPixel(s, 3, 1, null); setPixel(s, 10, 1, null);
+    fillRect(s, 5, 2, 4, 1, hairShade);
+  } else {
+    // facing right (left is mirrored): hair sweeps over the back of the head
+    fillRect(s, 3, 1, 3, 5, hair);
+    setPixel(s, 3, 1, null);
+    setPixel(s, 8, 4, '#ffffff'); setPixel(s, 9, 4, eye); setPixel(s, 9, 5, eye);
+    setPixel(s, 8, 6, blush); setPixel(s, 10, 5, skin); setPixel(s, 10, 6, '#a8505a');
   }
+}
 
-  return s;
+// Pads the body into the final sprite, then adds the outline and a lower-lip
+// shadow shade so figures read against both bright and dark floors.
+function finishCharacter(body, dy) {
+  const s = makeGrid(CHAR_W, CHAR_H);
+  for (let y = 0; y < body.h; y++) {
+    for (let x = 0; x < body.w; x++) {
+      if (body.px[y][x]) setPixel(s, x + 1, y + 1 + dy, body.px[y][x]);
+    }
+  }
+  return outline(s, OUTLINE);
+}
+
+function buildCharacterFrame(direction, legOffset, armSwing, scheme) {
+  const body = makeGrid(14, 20);
+  drawBody(body, direction, legOffset, armSwing, scheme, false);
+  return finishCharacter(body, 0);
 }
 
 function buildSitFrame(direction, scheme) {
-  const s = makeGrid(CHAR_W, CHAR_H);
-  const { skin, hair, shirt, shirtShade, pants, shoe, eye } = scheme;
-  // folded legs (short, sitting on a seat)
-  fillRect(s, 3, 15, 4, 3, pants);
-  fillRect(s, 7, 15, 4, 3, pants);
-  fillRect(s, 3, 17, 4, 1, shoe);
-  fillRect(s, 7, 17, 4, 1, shoe);
-  // torso
-  fillRect(s, 2, 8, 10, 7, shirt);
-  fillRect(s, 2, 8, 10, 2, shirtShade);
-  fillRect(s, 0, 9, 2, 5, shirt);
-  fillRect(s, 12, 9, 2, 5, shirt);
-  // head
-  fillRect(s, 3, 1, 8, 7, skin);
-  setPixel(s, 3, 1, null);
-  setPixel(s, 10, 1, null);
-  setPixel(s, 3, 7, null);
-  setPixel(s, 10, 7, null);
-  fillRect(s, 3, 0, 8, 2, hair);
-  setPixel(s, 3, 0, null);
-  setPixel(s, 10, 0, null);
-  if (direction === 'left') setPixel(s, 4, 4, eye);
-  else if (direction === 'right') setPixel(s, 9, 4, eye);
-  else {
-    setPixel(s, 5, 4, eye);
-    setPixel(s, 8, 4, eye);
-  }
-  return s;
+  const body = makeGrid(14, 20);
+  drawBody(body, direction, false, null, scheme, true);
+  return finishCharacter(body, 1);
 }
 
 export function buildCharacterSheet(scheme) {
@@ -194,7 +210,7 @@ export function buildCharacterSheet(scheme) {
     left: [mirrorH(right0), mirrorH(right1)],
     sit: {
       down: buildSitFrame('down', scheme),
-      up: buildSitFrame('down', scheme),
+      up: buildSitFrame('up', scheme),
       left: buildSitFrame('left', scheme),
       right: buildSitFrame('right', scheme),
     },
@@ -232,7 +248,7 @@ export function buildFloorTile(baseColor, variant = 0) {
   const w = ISO.TILE_W;
   const h = ISO.TILE_H;
   const s = makeGrid(w, h);
-  fillDiamond(s, w / 2, h / 2, w / 2 - 1, h / 2 - 1, baseColor);
+  fillDiamond(s, w / 2, h / 2 - 0.5, w / 2 - 0.5, h / 2 - 0.5, baseColor);
   const light = shade(baseColor, 0.18);
   const dark = shade(baseColor, -0.16);
   // subtle facets: lighten top-left half, darken bottom-right half
@@ -254,9 +270,9 @@ export function buildFloorTile(baseColor, variant = 0) {
 export function buildDoorTile(baseColor) {
   const s = buildFloorTile(baseColor, 1);
   const w = ISO.TILE_W, h = ISO.TILE_H;
-  const mat = '#caa05a';
-  fillDiamond(s, w / 2, h / 2, w / 2 - 6, h / 2 - 6, mat);
-  fillDiamond(s, w / 2, h / 2, w / 2 - 12, h / 2 - 12, shade(mat, -0.1));
+  const mat = '#9c4a3c';
+  fillDiamond(s, w / 2, h / 2, w / 2 - 8, h / 2 - 5, mat);
+  fillDiamond(s, w / 2, h / 2, w / 2 - 12, h / 2 - 7, shade(mat, 0.15));
   return s;
 }
 
@@ -294,6 +310,12 @@ export function buildWallSegment(baseColor, kind = 'north') {
       if (s.px[y][x]) { s.px[y][x] = trim; break; }
     }
   }
+  // dark baseboard where the wall meets the floor
+  for (let x = 0; x < w; x++) {
+    let last = -1;
+    for (let y = 0; y < h; y++) if (s.px[y][x]) last = y;
+    for (let y = last - 3; y <= last; y++) if (y >= 0 && s.px[y][x]) s.px[y][x] = shade(bodyColor, -0.32);
+  }
   return s;
 }
 
@@ -318,6 +340,27 @@ export function buildWindowSegment(baseColor, glowColor, kind = 'north') {
   return s;
 }
 
+// A wall segment with a framed doorway cut into it. Wall bases run along the
+// same slanted line as buildWallSegment, so the frame sits flush on the floor edge.
+export function buildDoorSegment(baseColor, kind = 'north') {
+  const s = buildWallSegment(baseColor, kind);
+  const frame = '#6a3f22';
+  const frameLight = '#f0c27a';
+  const xl = kind === 'north' ? 35 : 3;
+  const xr = xl + 26;
+  const doorH = 46;
+  for (let x = xl; x < xr; x++) {
+    const base = Math.round(ISO.WALL_H + (kind === 'north' ? (x - 32) / 2 : (32 - x) / 2)) - 1;
+    for (let y = base - doorH; y <= base; y++) {
+      const post = x < xl + 4 || x >= xr - 4 || y < base - doorH + 4;
+      let c = post ? (x === xl || y === base - doorH ? frameLight : frame) : '#2b1d2e';
+      if (!post && y > base - 5) c = '#d9a65a'; // warm light spilling under the door
+      setPixel(s, x, y, c);
+    }
+  }
+  return s;
+}
+
 // ---------- Furniture ----------
 
 function basicBox(w, h, topH, topColor, sideColorL, sideColorR) {
@@ -335,19 +378,6 @@ export function buildStoolSprite() {
   fillRect(s, 6, 13, 4, 12, '#8a6a3a');
   fillRect(s, 18, 13, 4, 12, '#6e5327');
   fillRect(s, 10, 13, 4, 14, '#7a5d31');
-  return s;
-}
-
-export function buildSofaSprite(color = '#e2607a') {
-  const s = makeGrid(56, 34);
-  fillRect(s, 2, 4, 52, 10, shade(color, 0.12));
-  fillRect(s, 2, 12, 52, 16, color);
-  fillRect(s, 2, 12, 6, 16, shade(color, -0.15));
-  fillRect(s, 44, 12, 10, 16, shade(color, -0.2));
-  fillRect(s, 4, 26, 6, 6, '#3a2a22');
-  fillRect(s, 46, 26, 6, 6, '#3a2a22');
-  fillRect(s, 10, 16, 14, 10, shade(color, 0.08));
-  fillRect(s, 26, 16, 14, 10, shade(color, 0.04));
   return s;
 }
 
@@ -377,6 +407,8 @@ export function buildRugSprite() {
   fillDiamond(s, s.w / 2, s.h / 2, s.w / 2 - 14, s.h / 2 - 14, '#e2748f');
   fillDiamond(s, s.w / 2, s.h / 2, s.w / 2 - 26, s.h / 2 - 26, '#c7496b');
   fillDiamond(s, s.w / 2, s.h / 2, 10, 6, '#f6c667');
+  s.ax = s.w / 2;
+  s.ay = s.h / 2;
   return s;
 }
 
@@ -402,15 +434,148 @@ export function buildJukeboxSprite() {
   return s;
 }
 
+// Small isometric prism toolkit: (u,v) are tile units along the x/y grid axes,
+// z is pixels of height. Sprites made this way carry ax/ay, the pixel that
+// must land on the footprint centre (the renderer honours them).
+function isoSprite(tw, th, height, draw) {
+  const s = makeGrid((tw + th) * 32 + 2, (tw + th) * 16 + height + 2);
+  const px0 = th * 32 + 1;
+  const py0 = height + 1;
+  const P = (u, v, z) => [px0 + (u - v) * 32, py0 + (u + v) * 16 - z];
+  const box = (u0, v0, u1, v1, z0, z1, top, left, right) => {
+    fillPolygon(s, [P(u0, v1, z1), P(u1, v1, z1), P(u1, v1, z0), P(u0, v1, z0)], left);
+    fillPolygon(s, [P(u1, v0, z1), P(u1, v1, z1), P(u1, v1, z0), P(u1, v0, z0)], right);
+    fillPolygon(s, [P(u0, v0, z1), P(u1, v0, z1), P(u1, v1, z1), P(u0, v1, z1)], top);
+  };
+  draw(box, P, s);
+  const out = outline(s, '#2a1d2e');
+  const c = P(tw / 2, th / 2, 0);
+  out.ax = c[0];
+  out.ay = c[1];
+  return out;
+}
+
+// Sofa: backrest on the far (low u/v) edge, so the sitter faces the viewer.
+export function buildSofaSprite(color = '#e2607a', rot = 0) {
+  const [tw, th] = rot % 2 ? [1, 2] : [2, 1];
+  const c = [color, shade(color, -0.15), shade(color, -0.3)];
+  const lt = [shade(color, 0.25), color, shade(color, -0.15)];
+  return isoSprite(tw, th, 36, (box) => {
+    const along = rot % 2 ? th : tw; // length along the sofa
+    // [u,v] helpers: a = position along the sofa, d = depth across it
+    const b2 = (a0, a1, d0, d1, z0, z1, col) => (rot % 2
+      ? box(d0, a0, d1, a1, z0, z1, ...col)
+      : box(a0, d0, a1, d1, z0, z1, ...col));
+    const dep = 1;
+    b2(0.03, along - 0.03, 0.05, dep - 0.05, 0, 12, lt.map((x) => shade(x, -0.1)));
+    b2(0.03, along - 0.03, 0.05, 0.3, 12, 36, c);
+    b2(0.03, 0.2, 0.3, dep - 0.05, 12, 26, c);
+    for (let i = 0; i < along; i++) b2(0.22 + i, i + 0.98 - 0.0, 0.3, dep - 0.08, 12, 19, lt);
+    b2(along - 0.2, along - 0.03, 0.3, dep - 0.05, 12, 26, c);
+  });
+}
+
+const WOOD = ['#c98f55', '#a8703d', '#8a5a30']; // top, left, right
+
+export function buildReceptionDesk(rot = 0) {
+  const [tw, th] = rot % 2 ? [1, 3] : [3, 1];
+  return isoSprite(tw, th, 34, (box) => {
+    box(0.05, 0.1, tw - 0.05, th - 0.1, 0, 22, ...WOOD);
+    box(0.05, 0.1, tw - 0.05, th - 0.1, 22, 25, '#f2d9a6', '#d9b87a', '#bf9d62');
+    // bell + little lamp on top
+    box(tw / 2 - 0.1, th / 2 - 0.1, tw / 2 + 0.1, th / 2 + 0.1, 25, 30, '#ffe27a', '#e0b23a', '#b88a2a');
+  });
+}
+
+export function buildBookshelf(rot = 0) {
+  const [tw, th] = rot % 2 ? [1, 2] : [2, 1];
+  const book = ['#d2506b', '#4f8fd6', '#e8c04a', '#5cb06a', '#9a6ad0'];
+  return isoSprite(tw, th, 74, (box, P, s) => {
+    box(0.05, 0.1, tw - 0.05, th - 0.1, 0, 74, '#b27a45', '#8f5f33', '#704a28');
+    // book rows painted on the visible faces (left face = v max, right face = u max)
+    for (let row = 0; row < 4; row++) {
+      const z = 8 + row * 16;
+      const n = (rot % 2 ? th : tw) * 5;
+      for (let i = 0; i < n; i++) {
+        const c = book[(i + row * 2) % book.length];
+        const t0 = 0.08 + (i / n) * (rot % 2 ? th : tw) * 0.9;
+        const t1 = t0 + (rot % 2 ? th : tw) * 0.9 / n * 0.8;
+        if (rot % 2) box(tw - 0.06, t0, tw - 0.02, t1, z, z + 11, c, shade(c, -0.2), shade(c, -0.35));
+        else box(t0, th - 0.1, t1, th - 0.06, z, z + 11, c, shade(c, -0.2), shade(c, -0.35));
+      }
+    }
+  });
+}
+
+export function buildBarCounter(rot = 0) {
+  const [tw, th] = rot % 2 ? [1, 3] : [3, 1];
+  return isoSprite(tw, th, 40, (box) => {
+    box(0.05, 0.1, tw - 0.05, th - 0.1, 0, 30, '#3a5a8a', '#2f4a73', '#253b5c');
+    box(0, 0.05, tw, th - 0.05, 30, 34, '#e8d6b0', '#c8b48a', '#a89468');
+    // bottles
+    box(tw * 0.2, th * 0.4, tw * 0.2 + 0.1, th * 0.4 + 0.1, 34, 42, '#5cc08a', '#3c9a68', '#2c7a50');
+    box(tw * 0.5, th * 0.4, tw * 0.5 + 0.1, th * 0.4 + 0.1, 34, 40, '#e0734a', '#b85a38', '#904630');
+  });
+}
+
+export function buildArmchairSprite() {
+  const c = '#d28a3c';
+  const s = makeGrid(32, 36);
+  fillRect(s, 5, 4, 22, 14, shade(c, 0.1)); // backrest
+  fillRect(s, 2, 14, 6, 14, shade(c, -0.15)); // arms
+  fillRect(s, 24, 14, 6, 14, shade(c, -0.25));
+  fillRect(s, 7, 17, 18, 11, c); // seat cushion
+  fillRect(s, 7, 17, 18, 2, shade(c, 0.2));
+  fillRect(s, 4, 28, 4, 5, '#4a3020');
+  fillRect(s, 24, 28, 4, 5, '#4a3020');
+  const o = outline(s, '#2a1d2e');
+  o.ax = 16; o.ay = 36 - 16 + 2;
+  return o;
+}
+
+export function buildDeckchairSprite() {
+  const s = makeGrid(32, 36);
+  fillPolygon(s, [[8, 3], [24, 3], [26, 20], [6, 20]], '#f4f0e0'); // reclined back
+  for (let i = 0; i < 4; i++) fillRect(s, 6, 5 + i * 4, 20, 2, i % 2 ? '#e2607a' : '#5aa0e2');
+  fillPolygon(s, [[6, 20], [26, 20], [28, 28], [4, 28]], '#e8dcc0');
+  fillRect(s, 4, 28, 3, 6, '#8a5a30');
+  fillRect(s, 25, 28, 3, 6, '#6e4627');
+  const o = outline(s, '#2a1d2e');
+  o.ax = 16; o.ay = 36 - 16 + 2;
+  return o;
+}
+
+export function buildStringLightsSprite() {
+  const s = makeGrid(30, 64);
+  fillRect(s, 13, 8, 3, 54, '#5a4a3a');
+  fillRect(s, 9, 60, 11, 3, '#3a3a3a');
+  fillRect(s, 4, 8, 22, 2, '#3a3a3a'); // cross arm
+  const bulbs = ['#ffe27a', '#ff8fb0', '#8fe0ff', '#b6ff9f'];
+  for (let i = 0; i < 5; i++) {
+    const x = 4 + i * 5;
+    setPixel(s, x, 10, '#3a3a3a');
+    fillRect(s, x - 1, 11, 3, 3, bulbs[i % bulbs.length]);
+  }
+  const o = outline(s, '#2a1d2e');
+  o.ax = 15; o.ay = 64 - 16 + 2;
+  return o;
+}
+
 export const FURNITURE_BUILDERS = {
   stool: () => buildStoolSprite(),
-  sofa: () => buildSofaSprite('#e2607a'),
-  rooftopSofa: () => buildSofaSprite('#5aa0e2'),
+  sofa: (rot) => buildSofaSprite('#e2607a', rot),
+  rooftopSofa: (rot) => buildSofaSprite('#5aa0e2', rot),
   lamp: () => buildLampSprite(),
   plant: () => buildPlantSprite(),
   rug: () => buildRugSprite(),
   neonSign: () => buildNeonSignSprite(),
   jukebox: () => buildJukeboxSprite(),
+  armchair: () => buildArmchairSprite(),
+  deckchair: () => buildDeckchairSprite(),
+  receptionDesk: (rot) => buildReceptionDesk(rot),
+  bookshelf: (rot) => buildBookshelf(rot),
+  barCounter: (rot) => buildBarCounter(rot),
+  stringLights: () => buildStringLightsSprite(),
 };
 
 export function shadeColor(hex, amt) {

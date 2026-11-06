@@ -10,7 +10,7 @@ import {
   initQuestState, advanceQuestsByType, setQuestProgress, claimReward, listQuests,
 } from '../js/quests.js';
 import { createDefaultState, loadState, saveState, resetState, SAVE_KEY } from '../js/save.js';
-import { getCatalogueItem, TILE, SAVE_VERSION, ROOMS } from '../js/data.js';
+import { getCatalogueItem, TILE, SAVE_VERSION, ROOMS, NPCS } from '../js/data.js';
 import { respondToMessage } from '../js/npc.js';
 
 // ---------- fake localStorage ----------
@@ -347,4 +347,63 @@ test('data: both rooms have a reachable floor path from spawn to their door', ()
     const path = findPath(room.width, room.height, isBlocked, room.spawn, { x: door.x, y: door.y });
     assert.ok(path, `expected a path from spawn to door in ${room.id}`);
   }
+});
+
+// ======================= seeded rooms (v0.1.1) =======================
+
+function blockedFor(roomId, placed) {
+  const def = ROOMS[roomId];
+  return (x, y) => {
+    const c = def.grid[y][x];
+    if (c === TILE.WALL || c === TILE.WINDOW) return true;
+    return placed.some((p) => {
+      const item = getCatalogueItem(p.itemId);
+      return !item.seat && !item.flat && footprintCells(p.x, p.y, item.footprint, p.rot).some((f) => f.x === x && f.y === y);
+    });
+  };
+}
+
+test('seed: furnished rooms have no overlaps and keep every door, spawn, NPC and seat reachable', () => {
+  const state = createDefaultState();
+  for (const [roomId, def] of Object.entries(ROOMS)) {
+    const placed = state.rooms[roomId].placed;
+    assert.ok(placed.length > 5, `${roomId} should be furnished`);
+    // each seeded piece must be placeable on top of the others (bounds, walls, overlap)
+    placed.forEach((p) => {
+      const others = { width: def.width, height: def.height, grid: def.grid, placed };
+      assert.ok(canPlaceAt(others, getCatalogueItem(p.itemId), p.x, p.y, p.rot, [], p.instanceId).ok, `${roomId} ${p.itemId}@${p.x},${p.y}`);
+    });
+    const blocked = blockedFor(roomId, placed);
+    const goals = [
+      def.spawn,
+      ...def.doors.map((d) => ({ x: d.x, y: d.y })),
+      ...Object.values(ROOMS).flatMap((r) => r.doors.filter((d) => d.to === roomId).map((d) => d.toTile)),
+      ...placed.filter((p) => getCatalogueItem(p.itemId).seat),
+      ...NPCS.filter((n) => n.room === roomId).map((n) => n.home),
+    ];
+    for (const g of goals) {
+      assert.ok(!blocked(g.x, g.y), `${roomId} tile ${g.x},${g.y} is blocked`);
+      assert.ok(findPath(def.width, def.height, blocked, def.spawn, g), `${roomId} tile ${g.x},${g.y} unreachable`);
+    }
+  }
+});
+
+test('seed: the quest rooftop sofa exists and rugs are walkable and sit under furniture', () => {
+  const state = createDefaultState();
+  assert.ok(state.rooms.rooftop.placed.some((p) => p.itemId === 'rooftop_sofa'));
+  const rug = getCatalogueItem('rug');
+  const room = { width: 6, height: 6, grid: ROOMS.lobby.grid.slice(0, 6).map((r) => r.slice(0, 6)), placed: [{ instanceId: 'r', itemId: 'rug', x: 2, y: 2, rot: 0 }] };
+  assert.ok(canPlaceAt(room, getCatalogueItem('stool'), 2, 2, 0).ok, 'stool on a rug');
+  assert.equal(canPlaceAt(room, rug, 3, 3, 0).ok, false, 'rug on a rug');
+});
+
+test('save/load: a pre-0.1.1 save with empty rooms loads unchanged (not re-seeded)', () => {
+  const old = createDefaultState();
+  old.rooms = { lobby: { placed: [] }, rooftop: { placed: [] } };
+  old.coins = 7;
+  const storage = makeFakeStorage({ [SAVE_KEY]: JSON.stringify(old) });
+  const loaded = loadState(storage);
+  assert.equal(loaded.coins, 7);
+  assert.equal(loaded.rooms.lobby.placed.length, 0);
+  assert.equal(loaded.player.room, 'lobby');
 });

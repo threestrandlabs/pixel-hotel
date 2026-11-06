@@ -62,9 +62,16 @@ async function main() {
     await page.waitForFunction(() => window.__pixelHotel, null, { timeout: 8000 });
     await page.waitForTimeout(400); // let first animation frame(s) render
 
-    // Dismiss first-run help overlay if present
-    const helpVisible = await page.locator('#helpOverlay:not(.hidden)').count();
-    if (helpVisible) await page.click('#btnHelpClose');
+    // First-run help overlay: must close on Escape and on a click outside the box
+    const helpOpen = () => page.locator('#helpOverlay:not(.hidden)').count();
+    check('help overlay is shown on first run', (await helpOpen()) === 1);
+    await page.keyboard.press('Escape');
+    check('Escape closes the help overlay', (await helpOpen()) === 0);
+    await page.click('#btnHelp');
+    await page.mouse.click(4, 4);
+    check('clicking outside closes the help overlay', (await helpOpen()) === 0);
+    const seeded = await page.evaluate(() => window.__pixelHotel.getState().rooms);
+    check('lobby and rooftop start furnished', seeded.lobby.placed.length > 5 && seeded.rooftop.placed.length > 5);
 
     await page.screenshot({ path: path.join(SCREENSHOT_DIR, '01-lobby.png') });
 
@@ -111,11 +118,11 @@ async function main() {
     const coinsBefore = await page.evaluate(() => window.__pixelHotel.getState().coins);
     const buyRes = await page.evaluate(() => window.__pixelHotel.buy('plant'));
     check('buying a plant succeeds', buyRes.ok === true);
-    const placeRes = await page.evaluate((instanceId) => window.__pixelHotel.placeAt(instanceId, 3, 3, 0), buyRes.instanceId);
+    const placeRes = await page.evaluate((instanceId) => window.__pixelHotel.placeAt(instanceId, 10, 7, 0), buyRes.instanceId);
     check('placing the plant succeeds', placeRes.ok === true);
     const stateAfterPlace = await page.evaluate(() => window.__pixelHotel.getState());
     check('coins decreased after buying', stateAfterPlace.coins < coinsBefore);
-    check('room contains the placed plant', stateAfterPlace.rooms.lobby.placed.some((p) => p.itemId === 'plant' && p.x === 3 && p.y === 3));
+    check('room contains the placed plant', stateAfterPlace.rooms.lobby.placed.some((p) => p.itemId === 'plant' && p.x === 10 && p.y === 7));
 
     // open inventory panel via UI too, for a real-UI screenshot
     await page.click('#btnInventory');

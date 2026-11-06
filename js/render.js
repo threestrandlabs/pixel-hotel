@@ -2,10 +2,11 @@
 // hover/ghost overlays, day-night lighting, and speech bubbles.
 // Browser-only (uses document/canvas) — not exercised by the Node unit tests.
 
-import { TILE } from './data.js';
+import { TILE, getCatalogueItem } from './data.js';
 import {
-  ISO, WALL_ANCHOR_Y, buildFloorTile, buildWallSegment, buildWindowSegment,
-  buildDoorTile, FURNITURE_BUILDERS, buildCharacterSheet, PLAYER_SCHEME, npcScheme,
+  ISO, WALL_ANCHOR_Y, CHAR_FEET_Y, buildFloorTile, buildWallSegment, buildWindowSegment,
+  buildDoorSegment, buildDoorTile, FURNITURE_BUILDERS, buildCharacterSheet, PLAYER_SCHEME, npcScheme,
+  shadeColor,
 } from './sprites.js';
 
 export const { TILE_W, TILE_H, WALL_H } = ISO;
@@ -34,10 +35,10 @@ function bakeSprite(key, sprite, pixelSize) {
 }
 
 function floorBaseColor(roomId) {
-  return roomId === 'rooftop' ? '#4d7fae' : '#caa3d8';
+  return roomId === 'rooftop' ? '#d8b98c' : '#e9c48f';
 }
 function wallBaseColor(roomId) {
-  return roomId === 'rooftop' ? '#345a82' : '#8a5fa0';
+  return roomId === 'rooftop' ? '#6f9ec4' : '#e3a27a';
 }
 
 export function tileToScreen(x, y, originX, originY) {
@@ -67,12 +68,14 @@ export function roomPixelHeight(room) {
 }
 
 function dayNightColors(phase) {
-  // phase 0 = noon, 0.5 = night, 1 = noon again (wraps)
-  const t = 0.5 - Math.abs(0.5 - phase); // 0 at midnight-ish edges, 0.5 at noon
-  const skyTop = lerpColor('#0e1030', '#8fd0ff', t * 2);
-  const skyBottom = lerpColor('#2a2a55', '#ffe3a0', t * 2);
-  const glow = lerpColor('#ffd27a', '#fff6c9', t * 2);
-  const tintAlpha = 0.55 - t * 0.55;
+  // phase 0.5 = noon, 0 / 1 = midnight. Day holds a bright plateau; night is
+  // dimmed with a blue multiply tint that stays light enough to read.
+  const k = (0.5 - Math.abs(0.5 - phase)) * 2; // 0 midnight .. 1 noon
+  const day = Math.min(1, k * 1.8);
+  const skyTop = lerpColor('#1a2250', '#8fd0ff', day);
+  const skyBottom = lerpColor('#3a3a72', '#ffe9b8', day);
+  const glow = lerpColor('#ffd27a', '#fff6c9', day);
+  const tintAlpha = 0.42 * (1 - day);
   return { skyTop, skyBottom, glow, tintAlpha };
 }
 
@@ -114,7 +117,9 @@ function drawCharacter(ctx, key, scheme, dir, frameIdx, sitting, screenX, screen
   const bakeKey = `${key}:${sitting ? 'sit' : 'walk'}:${dir}:${sitting ? 0 : frameIdx % 2}`;
   const canvas = bakeSprite(bakeKey, sprite, CHAR_PIXEL);
   const dx = Math.round(screenX - canvas.width / 2);
-  const dy = Math.round(screenY - canvas.height + TILE_H / 2);
+  const dy = Math.round(screenY + 4 - CHAR_FEET_Y * CHAR_PIXEL); // feet land just below the tile centre
+  ctx.fillStyle = 'rgba(30,15,40,0.28)';
+  for (const [w, o] of [[14, 1], [24, 3], [14, 5]]) ctx.fillRect(Math.round(screenX - w / 2), Math.round(screenY + o), w, 2);
   ctx.drawImage(canvas, dx, dy);
   return { x: dx, y: dy, w: canvas.width, h: canvas.height };
 }
@@ -123,14 +128,36 @@ function furnitureCanvas(itemId, rot) {
   const key = `furn:${itemId}:${rot % 2}`;
   if (canvasCache.has(key)) return canvasCache.get(key);
   const builder = FURNITURE_BUILDERS[toSpriteKey(itemId)];
-  const sprite = builder ? builder() : FURNITURE_BUILDERS.stool();
+  const sprite = builder ? builder(rot % 2) : FURNITURE_BUILDERS.stool();
   const canvas = bakeSprite(key, sprite, 1);
+  // ax/ay: pixel of the footprint centre; default is flat sprites' bottom-centre
+  canvas.ax = sprite.ax ?? sprite.w / 2;
+  canvas.ay = sprite.ay ?? sprite.h - TILE_H / 2;
   return canvas;
 }
 
 function toSpriteKey(itemId) {
-  const map = { stool: 'stool', sofa: 'sofa', rooftop_sofa: 'rooftopSofa', lamp: 'lamp', plant: 'plant', rug: 'rug', neon_sign: 'neonSign', jukebox: 'jukebox' };
-  return map[itemId] || itemId;
+  return getCatalogueItem(itemId)?.spriteKey || itemId;
+}
+
+function fillPoly(ctx, pts, color) {
+  ctx.fillStyle = color;
+  ctx.strokeStyle = color; // stroke closes antialiasing seams on the diagonals
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+}
+
+function drawFurniture(ctx, f, originX, originY) {
+  // f.footprint is already rotated by the caller
+  const anchorX = f.x + f.footprint.w / 2 - 0.5;
+  const anchorY = f.y + f.footprint.h / 2 - 0.5;
+  const { sx, sy } = tileToScreen(anchorX, anchorY, originX, originY);
+  const canvas = furnitureCanvas(f.itemId, f.rot);
+  ctx.drawImage(canvas, Math.round(sx - canvas.ax), Math.round(sy - canvas.ay));
 }
 
 export function drawDiamondOverlay(ctx, sx, sy, color, alpha) {
@@ -164,19 +191,38 @@ export function renderRoom(ctx, opts) {
   const wallColor = wallBaseColor(room.id);
   const { glow } = dayNightColors(phase);
 
-  // Pass 1: floor tiles
+  // Pass 1: floor. A darker grout polygon underneath hides hairline gaps
+  // between tiles and doubles as the slab's top edge.
+  const last = { x: room.width - 1, y: room.height - 1 };
+  const P = (x, y, dx, dy) => { const t = tileToScreen(x, y, originX, originY); return [t.sx + dx, t.sy + dy]; };
+  const corners = [P(1, 1, 0, -TILE_H / 2), P(last.x, 1, TILE_W / 2, 0), P(last.x, last.y, 0, TILE_H / 2), P(1, last.y, -TILE_W / 2, 0)];
+  fillPoly(ctx, corners, shadeColor(floorColor, -0.25));
+  // Front slab thickness: south-west and south-east faces of the floor
+  const T = 10;
+  const [, eastPt, southPt, westPt] = corners;
+  fillPoly(ctx, [westPt, southPt, [southPt[0], southPt[1] + T], [westPt[0], westPt[1] + T]], shadeColor(floorColor, -0.38));
+  fillPoly(ctx, [southPt, eastPt, [eastPt[0], eastPt[1] + T], [southPt[0], southPt[1] + T]], shadeColor(floorColor, -0.55));
+
+  const doorMats = new Set(room.doors.map((d) => (d.y === 0 ? `${d.x},1` : `${1},${d.y}`)));
   for (let y = 0; y < room.height; y++) {
     for (let x = 0; x < room.width; x++) {
       const cell = room.grid[y][x];
-      if (cell === TILE.WALL || cell === TILE.WINDOW) continue;
+      if (cell === TILE.WALL || cell === TILE.WINDOW || cell === TILE.DOOR) continue;
       const { sx, sy } = tileToScreen(x, y, originX, originY);
       const variant = (x + y) % 2;
-      const tileKey = cell === TILE.DOOR ? `doortile:${room.id}` : `floor:${room.id}:${variant}`;
-      const canvas = cell === TILE.DOOR
+      const mat = doorMats.has(`${x},${y}`);
+      const tileKey = mat ? `doortile:${room.id}` : `floor:${room.id}:${variant}`;
+      const canvas = mat
         ? bakeSprite(tileKey, buildDoorTile(floorColor), 1)
         : bakeSprite(tileKey, buildFloorTile(floorColor, variant), 1);
       ctx.drawImage(canvas, Math.round(sx - TILE_W / 2), Math.round(sy - TILE_H / 2));
     }
+  }
+
+  // Flat decor (rugs) lies on the floor, under everything else
+  for (const f of placedFurniture) {
+    if (!getCatalogueItem(f.itemId)?.flat) continue;
+    drawFurniture(ctx, f, originX, originY);
   }
 
   // Hover highlight (under furniture/avatars, over floor)
@@ -191,44 +237,42 @@ export function renderRoom(ctx, opts) {
     }
   }
 
-  // Pass 2: walls
+  // Pass 2: walls. Grid row 0 / column 0 are wall *cells*, but the wall face
+  // stands on the back edge of the first floor row/column, so it is drawn
+  // against floor tile (x,1) / (1,y) — adjacent faces then join seamlessly.
   for (let y = 0; y < room.height; y++) {
     for (let x = 0; x < room.width; x++) {
       const cell = room.grid[y][x];
-      if (cell !== TILE.WALL && cell !== TILE.WINDOW) continue;
-      const { sx, sy } = tileToScreen(x, y, originX, originY);
+      if (cell !== TILE.WALL && cell !== TILE.WINDOW && cell !== TILE.DOOR) continue;
+      if (x === 0 && y === 0) continue;
       const kind = y === 0 ? 'north' : 'west';
-      const key = cell === TILE.WINDOW ? `window:${room.id}:${x}:${y}` : `wall:${room.id}:${kind}`;
-      const canvas = cell === TILE.WINDOW
-        ? bakeSprite(key, buildWindowSegment(wallColor, glow, kind), 1)
-        : bakeSprite(key, buildWallSegment(wallColor, kind), 1);
-      ctx.drawImage(canvas, Math.round(sx - TILE_W / 2), Math.round(sy - WALL_ANCHOR_Y));
+      const { sx, sy } = tileToScreen(kind === 'north' ? x : 1, kind === 'north' ? 1 : y, originX, originY);
+      let sprite;
+      let key;
+      if (cell === TILE.WINDOW) { key = `window:${room.id}:${x}:${y}`; sprite = () => buildWindowSegment(wallColor, glow, kind); }
+      else if (cell === TILE.DOOR) { key = `door:${room.id}:${kind}`; sprite = () => buildDoorSegment(wallColor, kind); }
+      else { key = `wall:${room.id}:${kind}`; sprite = () => buildWallSegment(wallColor, kind); }
+      ctx.drawImage(bakeSprite(key, sprite(), 1), Math.round(sx - TILE_W / 2), Math.round(sy - WALL_ANCHOR_Y));
     }
   }
 
   // Pass 3: depth-sorted furniture + entities
   const drawables = [];
   for (const f of placedFurniture) {
+    if (getCatalogueItem(f.itemId)?.flat) continue;
     const frontX = f.x + (f.footprint.w - 1);
     const frontY = f.y + (f.footprint.h - 1);
     drawables.push({ depth: frontX + frontY, type: 'furniture', data: f });
   }
   for (const e of entities) {
-    drawables.push({ depth: e.x + e.y + 0.5, type: 'entity', data: e });
+    drawables.push({ depth: e.depth ?? e.x + e.y + 0.5, type: 'entity', data: e });
   }
   drawables.sort((a, b) => a.depth - b.depth);
 
   const bubbleTargets = [];
   for (const d of drawables) {
     if (d.type === 'furniture') {
-      const f = d.data;
-      const anchorX = f.x + (f.rot % 2 === 1 ? f.footprint.h : f.footprint.w) / 2 - 0.5;
-      const anchorY = f.y + (f.rot % 2 === 1 ? f.footprint.w : f.footprint.h) / 2 - 0.5;
-      const { sx, sy } = tileToScreen(anchorX, anchorY, originX, originY);
-      const canvas = furnitureCanvas(f.itemId, f.rot);
-      const dx = Math.round(sx - canvas.width / 2);
-      const dy = Math.round(sy + TILE_H / 2 - canvas.height);
-      ctx.drawImage(canvas, dx, dy);
+      drawFurniture(ctx, d.data, originX, originY);
     } else {
       const e = d.data;
       const { sx, sy } = tileToScreen(e.x, e.y, originX, originY);
@@ -243,7 +287,7 @@ export function renderRoom(ctx, opts) {
   if (tintAlpha > 0.02) {
     ctx.save();
     ctx.globalAlpha = tintAlpha;
-    ctx.fillStyle = '#0c1033';
+    ctx.fillStyle = '#5b6bb0';
     ctx.globalCompositeOperation = 'multiply';
     ctx.fillRect(0, 0, width, height);
     ctx.restore();

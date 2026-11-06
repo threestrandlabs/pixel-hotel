@@ -55,7 +55,7 @@ let chatLog = [];
 const ui = {
   placing: null, // { instanceId, itemId, rot, fromInventory:bool, moveFromRoom:bool }
   hoverTile: null,
-  phase: Math.random(),
+  phase: 0.5, // start at noon
   startTime: performance.now(),
 };
 
@@ -74,6 +74,7 @@ function roomForInventory(roomId = state.player.room) {
 function furnitureAt(room, roomRuntime, x, y) {
   for (const p of roomRuntime.placed) {
     const item = getCatalogueItem(p.itemId);
+    if (item.flat) continue; // rugs never block or capture clicks
     const cells = footprintCells(p.x, p.y, item.footprint, p.rot);
     if (cells.some((c) => c.x === x && c.y === y)) return p;
   }
@@ -374,17 +375,25 @@ function tickNpcs(now) {
 
 // ---------- rendering frame ----------
 
+// A seated avatar must draw in front of its seat, even on a multi-tile sofa.
+function seatDepth(instanceId) {
+  const p = instanceId && currentRoomRuntime().placed.find((f) => f.instanceId === instanceId);
+  if (!p) return undefined;
+  const fp = rotatedFootprint(getCatalogueItem(p.itemId).footprint, p.rot);
+  return p.x + fp.w - 1 + p.y + fp.h - 1 + 0.5;
+}
+
 function buildEntities() {
   const list = [];
   list.push({
     x: player.renderX, y: player.renderY, dir: player.dir, frame: player.frame,
-    sitting: !!player.sitting, spriteKey: 'player', kind: 'player',
+    sitting: !!player.sitting, depth: seatDepth(player.sitting), spriteKey: 'player', kind: 'player',
     bubbleText: player.bubbleUntil && player.bubbleUntil > performance.now() ? player.bubbleText : null,
   });
   for (const n of npcRuntimes) {
     if (n.room !== state.player.room) continue;
     list.push({
-      x: n.renderX, y: n.renderY, dir: n.dir, frame: n.frame, sitting: !!n.sitting,
+      x: n.renderX, y: n.renderY, dir: n.dir, frame: n.frame, sitting: !!n.sitting, depth: seatDepth(n.sitting),
       spriteKey: n.id, kind: 'npc', color: n.def.color,
       bubbleText: n.bubble ? n.bubble.text : null,
     });
@@ -402,7 +411,7 @@ function frame(now) {
 
   const room = currentRoomDef();
   const roomRuntime = currentRoomRuntime();
-  ui.phase = ((now - ui.startTime) / DAY_CYCLE_MS) % 1;
+  ui.phase = (0.5 + (now - ui.startTime) / DAY_CYCLE_MS) % 1;
 
   let ghost = null;
   if (ui.placing && ui.hoverTile) {
@@ -525,7 +534,10 @@ document.getElementById('btnRotate').addEventListener('click', rotatePlacing);
 document.getElementById('btnCancelPlace').addEventListener('click', cancelPlacing);
 
 window.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') cancelPlacing();
+  if (e.key === 'Escape') {
+    if (!document.getElementById('helpOverlay').classList.contains('hidden')) hideHelp();
+    else cancelPlacing();
+  }
   else if (e.key.toLowerCase() === 'r' && ui.placing) rotatePlacing();
   else if (e.key.toLowerCase() === 'i' && !isTypingTarget(e)) togglePanel('inventoryPanel');
   else if (e.key.toLowerCase() === 'q' && !isTypingTarget(e)) togglePanel('questPanel');
@@ -690,6 +702,9 @@ function hideHelp() {
 }
 document.getElementById('btnHelp').addEventListener('click', showHelp);
 document.getElementById('btnHelpClose').addEventListener('click', hideHelp);
+document.getElementById('helpOverlay').addEventListener('click', (e) => {
+  if (e.target.id === 'helpOverlay') hideHelp(); // click outside the box
+});
 document.getElementById('btnMute').addEventListener('click', toggleMute);
 
 function manualSave() {
@@ -737,6 +752,7 @@ window.__pixelHotel = {
     quests: listQuests(state),
     unlocked: state.unlocked,
   }),
+  setDayPhase: (p) => { ui.startTime = performance.now() - (p - 0.5) * DAY_CYCLE_MS; }, // 0.5 noon, 0 midnight
   getSaveVersion: () => SAVE_VERSION,
   walkTo: (x, y) => tryWalkPlayer(x, y),
   sendChat: (text) => handleChatSubmit(text),
