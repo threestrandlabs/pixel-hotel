@@ -2,7 +2,7 @@ import { ROOMS, NPCS, QUESTS, getCatalogueItem, TILE, SAVE_VERSION } from './dat
 import { findPath } from './pathfinding.js';
 import {
   buyItem, placeItem, pickupItem, moveItem, canPlaceAt, footprintCells,
-  availableCatalogue, rotatedFootprint,
+  availableCatalogue, rotatedFootprint, findApproachTile, seatDirFromRot,
 } from './inventory.js';
 import { advanceQuestsByType, setQuestProgress, claimReward, listQuests } from './quests.js';
 import { loadState, saveState, resetState } from './save.js';
@@ -32,6 +32,9 @@ const npcRuntimes = NPCS.map((def) => ({
   walking: false,
   pathIdx: 0,
   stepStart: 0,
+  lying: false,
+  activity: null,
+  pendingInteract: null,
 }));
 
 const player = {
@@ -46,6 +49,9 @@ const player = {
   pathIdx: 0,
   stepStart: 0,
   sitting: state.player.sitting || null,
+  lying: false,
+  activity: state.player.activity || null,
+  pendingInteract: null,
 };
 
 const visitedRooms = new Set(state.stats.visitedRooms || ['lobby']);
@@ -103,6 +109,22 @@ function furnitureAt(room, roomRuntime, x, y) {
   return null;
 }
 
+function interactiveFurnitureAt(room, roomRuntime, x, y) {
+  const solid = furnitureAt(room, roomRuntime, x, y);
+  if (solid) {
+    const item = getCatalogueItem(solid.itemId);
+    if (item && (item.seat || item.interaction)) return solid;
+    return null;
+  }
+  for (const p of roomRuntime.placed) {
+    const item = getCatalogueItem(p.itemId);
+    if (!item || !item.flat || !item.interaction) continue;
+    const cells = footprintCells(p.x, p.y, item.footprint, p.rot);
+    if (cells.some((c) => c.x === x && c.y === y)) return p;
+  }
+  return null;
+}
+
 function occupantTilesExcluding(excludeKind, excludeId) {
   const tiles = [];
   if (!(excludeKind === 'player')) tiles.push({ x: player.x, y: player.y });
@@ -114,23 +136,31 @@ function occupantTilesExcluding(excludeKind, excludeId) {
   return tiles;
 }
 
+function reservedTilesExcluding(excludeKind, excludeId) {
+  const tiles = [];
+  if (excludeKind !== 'player' && player.pendingInteract?.targetTile) {
+    tiles.push(player.pendingInteract.targetTile);
+  }
+  for (const n of npcRuntimes) {
+    if (n.room !== state.player.room) continue;
+    if (excludeKind === 'npc' && n.id === excludeId) continue;
+    if (n.pendingInteract?.targetTile) tiles.push(n.pendingInteract.targetTile);
+  }
+  return tiles;
+}
+
 function isBlockedFactory(room, roomRuntime, occupantTiles) {
   return (x, y) => {
     const cell = room.grid[y][x];
-    if (cell === TILE.WALL || cell === TILE.WINDOW) return true;
+    if (cell === TILE.WALL || cell === TILE.WINDOW || cell === TILE.VOID) return true;
     const furn = furnitureAt(room, roomRuntime, x, y);
     if (furn) {
       const item = getCatalogueItem(furn.itemId);
-      if (!item.seat) return true;
+      if (!item.seat && item.interaction !== 'treadmill') return true;
     }
     if (occupantTiles.some((o) => o.x === x && o.y === y)) return true;
     return false;
   };
-}
-
-function seatDirFromRot(rot) {
-  const dirs = ['down', 'right', 'up', 'left'];
-  return dirs[((rot % 4) + 4) % 4];
 }
 
 // ---------- mover step engine (shared by player + NPCs) ----------
@@ -155,6 +185,9 @@ function startPath(mover, path, now) {
   mover.path = path;
   mover.pathIdx = 0;
   mover.sitting = null;
+  mover.lying = false;
+  mover.activity = null;
+  mover.pendingInteract = null;
   beginStep(mover, now);
 }
 
@@ -184,6 +217,39 @@ function updateMover(mover, now, onArrive) {
 
 // ---------- player actions & elevator navigation ----------
 
+function applyInteractionArrival(mover, pending, isPlayer = false) {
+  const roomRuntime = state.rooms[isPlayer ? state.player.room : mover.room];
+  const placed = roomRuntime.placed.find((p) => p.instanceId === pending.instanceId);
+  if (!placed) return;
+  mover.dir = pending.dir;
+  const kind = pending.kind;
+  const isSeatPose = kind === 'sit' || kind === 'eat';
+  const isLiePose = kind === 'lie';
+  mover.sitting = (isSeatPose || isLiePose) ? placed.instanceId : null;
+  mover.lying = isLiePose;
+  mover.activity = {
+    instanceId: placed.instanceId,
+    itemId: placed.itemId,
+    kind,
+    phase: 'loop',
+    startedAt: performance.now(),
+  };
+  if (isPlayer) {
+    state.player.sitting = mover.sitting;
+    state.player.dir = mover.dir;
+    state.player.activity = mover.activity;
+    if (!Array.isArray(state.stats.activitiesUsed)) state.stats.activitiesUsed = [];
+    if (!state.stats.activitiesUsed.includes(kind)) state.stats.activitiesUsed.push(kind);
+    if (placed.itemId === 'rooftop_sofa') {
+      onQuestProgress(advanceQuestsByType(state, 'sit', 1));
+    }
+    if (state.player.room === 'restaurant' && (kind === 'sit' || kind === 'eat')) {
+      onQuestProgress(advanceQuestsByType(state, 'sit_restaurant', 1));
+    }
+    persistPlayerPos();
+  }
+}
+
 function tryWalkPlayer(tx, ty) {
   const room = currentRoomDef();
   const occ = occupantTilesExcluding('player', null);
@@ -191,43 +257,69 @@ function tryWalkPlayer(tx, ty) {
   const path = findPath(room.width, room.height, blocked, { x: player.x, y: player.y }, { x: tx, y: ty });
   if (!path) return false;
   player.sitting = null;
+  player.lying = false;
+  player.activity = null;
   state.player.sitting = null;
+  state.player.activity = null;
   startPath(player, path, performance.now());
   return true;
 }
 
-function trySitPlayer(placedItem) {
+function tryInteractPlayer(placedItem, immediate = false) {
   const room = currentRoomDef();
+  const roomRuntime = currentRoomRuntime();
   const occ = occupantTilesExcluding('player', null);
-  const blocked = isBlockedFactory(room, currentRoomRuntime(), occ);
-  const path = findPath(room.width, room.height, blocked, { x: player.x, y: player.y }, { x: placedItem.x, y: placedItem.y });
-  if (!path) return false;
-  startPath(player, path, performance.now());
-  player.pendingSit = placedItem.instanceId;
+  const res = reservedTilesExcluding('player', null);
+  const blocked = isBlockedFactory(room, roomRuntime, occ);
+  const approach = findApproachTile(roomForInventory(), placedItem, blocked, { x: player.x, y: player.y }, occ, res);
+  if (!approach) return false;
+  const pending = {
+    instanceId: placedItem.instanceId,
+    itemId: placedItem.itemId,
+    targetTile: approach.tile,
+    dir: approach.dir,
+    kind: approach.kind,
+  };
+  if (immediate || approach.path.length <= 1) {
+    player.x = approach.tile.x;
+    player.y = approach.tile.y;
+    player.renderX = approach.tile.x;
+    player.renderY = approach.tile.y;
+    player.walking = false;
+    player.path = null;
+    player.pendingInteract = null;
+    applyInteractionArrival(player, pending, true);
+    return true;
+  }
+  startPath(player, approach.path, performance.now());
+  player.pendingInteract = pending;
   return true;
 }
 
 function onPlayerArrive() {
   const room = currentRoomDef();
   const cell = room.grid[player.y][player.x];
-  if (player.pendingSit) {
-    const roomRuntime = currentRoomRuntime();
-    const placed = roomRuntime.placed.find((p) => p.instanceId === player.pendingSit);
-    player.pendingSit = null;
-    if (placed) {
-      player.sitting = placed.instanceId;
-      player.dir = seatDirFromRot(placed.rot);
-      state.player.sitting = placed.instanceId;
-      state.player.dir = player.dir;
-      if (placed.itemId === 'rooftop_sofa') {
-        onQuestProgress(advanceQuestsByType(state, 'sit', 1));
-      }
-      if (state.player.room === 'restaurant') {
-        onQuestProgress(advanceQuestsByType(state, 'sit_restaurant', 1));
-      }
-    }
-    persistPlayerPos();
+  if (player.pendingInteract) {
+    const pending = player.pendingInteract;
+    player.pendingInteract = null;
+    applyInteractionArrival(player, pending, true);
     return;
+  }
+  const roomRuntime = currentRoomRuntime();
+  const flatPool = roomRuntime.placed.find((p) => {
+    if (p.itemId !== 'pool_water') return false;
+    const item = getCatalogueItem(p.itemId);
+    return footprintCells(p.x, p.y, item.footprint, p.rot).some((c) => c.x === player.x && c.y === player.y);
+  });
+  if (flatPool) {
+    player.activity = {
+      instanceId: flatPool.instanceId,
+      itemId: 'pool_water',
+      kind: 'swim',
+      phase: 'loop',
+      startedAt: performance.now(),
+    };
+    state.player.activity = player.activity;
   }
   if (cell === TILE.DOOR) {
     const doorDef = room.doors.find((d) => d.x === player.x && d.y === player.y);
@@ -248,6 +340,7 @@ function persistPlayerPos() {
   state.player.y = player.y;
   state.player.dir = player.dir;
   state.player.sitting = player.sitting;
+  state.player.activity = player.activity;
 }
 
 function switchRoom(roomId, toTile) {
@@ -262,9 +355,13 @@ function switchRoom(roomId, toTile) {
   player.walking = false;
   player.path = null;
   player.sitting = null;
+  player.lying = false;
+  player.activity = null;
+  player.pendingInteract = null;
   player.bubbleText = null;
   player.bubbleUntil = 0;
   state.player.sitting = null;
+  state.player.activity = null;
   persistPlayerPos();
   visitedRooms.add(roomId);
   state.stats.visitedRooms = Array.from(visitedRooms);
@@ -396,35 +493,46 @@ function tickNpcs(now) {
     const room = ROOMS[n.room];
     const roomRuntime = state.rooms[n.room];
     updateMover(n, now, () => {
-      if (n.pendingSitTarget) {
-        const placed = roomRuntime.placed.find((p) => p.instanceId === n.pendingSitTarget);
-        n.pendingSitTarget = null;
-        if (placed) {
-          n.sitting = placed.instanceId;
-          n.dir = seatDirFromRot(placed.rot);
-        }
+      if (n.pendingInteract) {
+        const pending = n.pendingInteract;
+        n.pendingInteract = null;
+        applyInteractionArrival(n, pending, false);
       }
     });
     tickNpc(n, now, {
       tryWander: (npc) => {
-        if (Math.random() < 0.2) {
-          const freeSeat = roomRuntime.placed.find((p) => {
+        if ((npc.sitting || npc.activity) && Math.random() < 0.72) return null;
+        if (Math.random() < 0.32) {
+          const occ = occupantTilesExcluding('npc', npc.id);
+          const res = reservedTilesExcluding('npc', npc.id);
+          const blocked = isBlockedFactory(room, roomRuntime, occ);
+          const candidates = roomRuntime.placed.filter((p) => {
             const item = getCatalogueItem(p.itemId);
-            if (!item || !item.seat) return false;
-            if (player.sitting === p.instanceId) return false;
-            return !npcRuntimes.some((o) => o !== npc && o.sitting === p.instanceId);
+            if (!item) return false;
+            if (npc.sitting === p.instanceId || npc.activity?.instanceId === p.instanceId) return false;
+            return item.seat || item.interaction === 'treadmill' || item.interaction === 'swim' || item.interaction === 'use';
           });
-          if (freeSeat && npc.sitting !== freeSeat.instanceId) {
-            const blocked = npcIsBlocked(room, roomRuntime, npc.id);
-            const path = findPath(room.width, room.height, blocked, { x: npc.x, y: npc.y }, { x: freeSeat.x, y: freeSeat.y });
-            if (path && path.length > 1) {
+          const targetFurn = pickRandom(candidates);
+          if (targetFurn) {
+            const approach = findApproachTile(roomForInventory(npc.room), targetFurn, blocked, { x: npc.x, y: npc.y }, occ, res);
+            if (approach && approach.path.length > 1) {
               npc.sitting = null;
-              npc.pendingSitTarget = freeSeat.instanceId;
-              return { path };
+              npc.lying = false;
+              npc.activity = null;
+              npc.pendingInteract = {
+                instanceId: targetFurn.instanceId,
+                itemId: targetFurn.itemId,
+                targetTile: approach.tile,
+                dir: approach.dir,
+                kind: approach.kind,
+              };
+              return { path: approach.path };
             }
           }
         }
-        if (npc.sitting) return null;
+        npc.sitting = null;
+        npc.lying = false;
+        npc.activity = null;
         const blocked = npcIsBlocked(room, roomRuntime, npc.id);
         return findWanderTarget(npc, room.width, room.height, blocked);
       },
@@ -435,24 +543,59 @@ function tickNpcs(now) {
 
 // ---------- rendering frame ----------
 
-function seatDepth(instanceId) {
-  const p = instanceId && currentRoomRuntime().placed.find((f) => f.instanceId === instanceId);
+function entityDepth(mover) {
+  const instanceId = mover.sitting || (mover.activity && mover.activity.kind === 'treadmill' ? mover.activity.instanceId : null);
+  if (!instanceId) return undefined;
+  const p = currentRoomRuntime().placed.find((f) => f.instanceId === instanceId);
   if (!p) return undefined;
-  const fp = rotatedFootprint(getCatalogueItem(p.itemId).footprint, p.rot);
+  const item = getCatalogueItem(p.itemId);
+  if (!item || item.flat) return undefined;
+  const fp = rotatedFootprint(item.footprint, p.rot);
   return p.x + fp.w - 1 + p.y + fp.h - 1 + 0.5;
 }
 
-function buildEntities() {
+function entityPhaseOffset(id) {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 33 + id.charCodeAt(i)) >>> 0;
+  return h % 5000;
+}
+
+function computeActionFrame(action, now, offset = 0) {
+  if (!action) return 0;
+  const t = now + offset;
+  if (action === 'treadmill') return Math.floor(t / 135) % 4;
+  if (action === 'swim') return Math.floor(t / 240) % 4;
+  if (action === 'eat') return Math.floor(t / 380) % 4;
+  if (action === 'use') return Math.floor(t / 280) % 4;
+  return 0;
+}
+
+function buildEntities(now = performance.now()) {
   const list = [];
+  const pOff = entityPhaseOffset('player');
+  const pAction = !player.walking && player.activity ? player.activity.kind : null;
   list.push({
     x: player.renderX, y: player.renderY, dir: player.dir, frame: player.frame, walking: player.walking,
-    sitting: !!player.sitting, depth: seatDepth(player.sitting), spriteKey: 'player', kind: 'player',
-    bubbleText: player.bubbleUntil && player.bubbleUntil > performance.now() ? player.bubbleText : null,
+    sitting: !!player.sitting, lying: !!player.lying,
+    blink: ((now + pOff * 1.3) % 3800) < 150,
+    breathe: player.walking ? 0 : Math.floor((now + pOff) / 1400) % 2,
+    action: pAction,
+    actionFrame: computeActionFrame(pAction, now, pOff),
+    depth: entityDepth(player), spriteKey: 'player', kind: 'player',
+    bubbleText: player.bubbleUntil && player.bubbleUntil > now ? player.bubbleText : null,
   });
   for (const n of npcRuntimes) {
     if (n.room !== state.player.room) continue;
+    const nOff = entityPhaseOffset(n.id);
+    const nAction = !n.walking && n.activity ? n.activity.kind : null;
     list.push({
-      x: n.renderX, y: n.renderY, dir: n.dir, frame: n.frame, walking: n.walking, sitting: !!n.sitting, depth: seatDepth(n.sitting),
+      x: n.renderX, y: n.renderY, dir: n.dir, frame: n.frame, walking: n.walking,
+      sitting: !!n.sitting, lying: !!n.lying,
+      blink: ((now + nOff * 1.3) % 3800) < 150,
+      breathe: n.walking ? 0 : Math.floor((now + nOff) / 1400) % 2,
+      action: nAction,
+      actionFrame: computeActionFrame(nAction, now, nOff),
+      depth: entityDepth(n),
       spriteKey: n.id, kind: 'npc', color: n.def.color, nameTag: n.def.name,
       bubbleText: n.bubble ? n.bubble.text : null,
     });
@@ -490,7 +633,7 @@ function frame(now) {
   renderRoom(ctx, {
     room,
     placedFurniture: placedFurnitureWithFootprint(roomRuntime),
-    entities: buildEntities(),
+    entities: buildEntities(now),
     hoverTile: ui.placing ? null : ui.hoverTile,
     ghost,
     phase: ui.phase,
@@ -536,13 +679,9 @@ canvas.addEventListener('click', (evt) => {
   }
   const room = currentRoomDef();
   const roomRuntime = currentRoomRuntime();
-  const furn = furnitureAt(room, roomRuntime, tile.x, tile.y);
-  if (furn) {
-    const item = getCatalogueItem(furn.itemId);
-    if (item.seat) {
-      trySitPlayer(furn);
-      return;
-    }
+  const furn = interactiveFurnitureAt(room, roomRuntime, tile.x, tile.y);
+  if (furn && tryInteractPlayer(furn)) {
+    return;
   }
   tryWalkPlayer(tile.x, tile.y);
 });
@@ -672,14 +811,21 @@ function refreshElevatorPanel() {
   const el = document.getElementById('elevatorList');
   if (!el) return;
   const floors = Object.values(ROOMS).sort((a, b) => (b.floor || 0) - (a.floor || 0));
+  let lastWing = null;
   el.innerHTML = floors.map((r) => {
     const isCurrent = r.id === state.player.room;
-    return `
+    const wingHeader = r.wing && r.wing !== lastWing
+      ? `<div class="elevator-group-title">${r.wing}</div>`
+      : '';
+    lastWing = r.wing || lastWing;
+    const guestCount = npcRuntimes.filter((n) => n.room === r.id).length;
+    const guestLabel = guestCount > 0 ? ` • 👤 ${guestCount}` : '';
+    return `${wingHeader}
       <div class="elevator-item ${isCurrent ? 'active-floor' : ''}">
         <div class="floor-pill">F${r.floor}</div>
         <div class="item-info">
           <div class="item-name">${r.icon || '🏢'} ${r.name}</div>
-          <div class="item-desc">${r.privateSuite ? 'Your private personal suite' : `Tower Level ${r.floor}`}</div>
+          <div class="item-desc">${r.privateSuite ? 'Your private personal suite' : `Tower Level ${r.floor}${guestLabel}`}</div>
         </div>
         <div class="item-actions">
           <button class="pixel-btn elevator-floor-btn" data-floor-room="${r.id}" ${isCurrent ? 'disabled' : ''}>
@@ -872,7 +1018,14 @@ window.__pixelHotel = {
     coins: state.coins,
     room: state.player.room,
     floor: currentRoomDef().floor,
-    player: { x: player.x, y: player.y, dir: player.dir, sitting: player.sitting },
+    player: {
+      x: player.x,
+      y: player.y,
+      dir: player.dir,
+      sitting: player.sitting,
+      lying: !!player.lying,
+      activity: player.activity,
+    },
     inventory: state.inventory,
     rooms: state.rooms,
     quests: listQuests(state),
@@ -881,6 +1034,48 @@ window.__pixelHotel = {
   setDayPhase: (p) => { ui.startTime = performance.now() - (p - 0.5) * DAY_CYCLE_MS; }, // 0.5 noon, 0 midnight
   getSaveVersion: () => SAVE_VERSION,
   walkTo: (x, y) => tryWalkPlayer(x, y),
+  interactWith: (itemIdOrInstanceId, immediate = false) => {
+    const roomRuntime = currentRoomRuntime();
+    const matches = roomRuntime.placed.filter(
+      (p) => p.instanceId === itemIdOrInstanceId || p.itemId === itemIdOrInstanceId,
+    );
+    for (const placed of matches) {
+      if (tryInteractPlayer(placed, immediate)) return true;
+    }
+    return false;
+  },
+  setNpcActivity: (npcId, itemIdOrInstanceId) => {
+    const npc = npcRuntimes.find((n) => n.id === npcId || n.id.endsWith(`_${npcId}`));
+    if (!npc) return false;
+    const room = ROOMS[npc.room];
+    const roomRuntime = state.rooms[npc.room];
+    const matches = roomRuntime.placed.filter(
+      (p) => p.instanceId === itemIdOrInstanceId || p.itemId === itemIdOrInstanceId,
+    );
+    const occ = occupantTilesExcluding('npc', npc.id);
+    const res = reservedTilesExcluding('npc', npc.id);
+    const blocked = isBlockedFactory(room, roomRuntime, occ);
+    for (const placed of matches) {
+      const approach = findApproachTile(roomForInventory(npc.room), placed, blocked, { x: npc.x, y: npc.y }, occ, res);
+      if (!approach) continue;
+      npc.x = approach.tile.x;
+      npc.y = approach.tile.y;
+      npc.renderX = approach.tile.x;
+      npc.renderY = approach.tile.y;
+      npc.walking = false;
+      npc.path = null;
+      npc.pendingInteract = null;
+      applyInteractionArrival(npc, {
+        instanceId: placed.instanceId,
+        itemId: placed.itemId,
+        targetTile: approach.tile,
+        dir: approach.dir,
+        kind: approach.kind,
+      }, false);
+      return true;
+    }
+    return false;
+  },
   takeElevator: (roomId) => travelByElevator(roomId),
   sendChat: (text) => handleChatSubmit(text),
   buy: (itemId) => {

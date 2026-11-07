@@ -356,19 +356,37 @@ function renderSkylineToCanvas(g, width, height, phase, floor) {
       const topY = Math.round(L.baseY - bh);
       const sideW = Math.max(6, Math.round(bw * 0.24));
 
-      // Main front face + shaded 3D side face
+      // Main front face + shaded 3D side face + 2:1 isometric roof cap
+      const roofBevel = Math.max(4, Math.round(sideW * 0.5));
+      g.fillStyle = shadeColor(L.bodyCol, 0.14);
+      g.beginPath();
+      g.moveTo(bx, topY);
+      g.lineTo(bx + bw - sideW, topY);
+      g.lineTo(bx + bw, topY + roofBevel);
+      g.lineTo(bx + sideW, topY + roofBevel);
+      g.closePath();
+      g.fill();
+
       g.fillStyle = L.bodyCol;
       g.fillRect(bx, topY, bw - sideW, bh + 180);
       g.fillStyle = L.sideCol;
-      g.fillRect(bx + bw - sideW, topY + 3, sideW, bh + 180);
+      g.beginPath();
+      g.moveTo(bx + bw - sideW, topY);
+      g.lineTo(bx + bw, topY + roofBevel);
+      g.lineTo(bx + bw, topY + bh + 180);
+      g.lineTo(bx + bw - sideW, topY + bh + 180);
+      g.closePath();
+      g.fill();
 
-      // Stepped roof crown or spire
+      // Stepped roof crown or spire with 2:1 isometric parapet
       const crownStyle = Math.floor(rand() * 3);
       if (crownStyle === 0) {
         const cw = Math.round((bw - sideW) * 0.6);
         const cx0 = bx + Math.round((bw - sideW - cw) / 2);
+        g.fillStyle = shadeColor(L.bodyCol, 0.16);
+        g.fillRect(cx0, topY - 11, cw, 2);
         g.fillStyle = L.bodyCol;
-        g.fillRect(cx0, topY - 10, cw, 10);
+        g.fillRect(cx0, topY - 9, cw, 9);
         if (L.spires && bh > 155) {
           const sx = cx0 + Math.round(cw / 2);
           g.fillStyle = L.sideCol;
@@ -376,8 +394,8 @@ function renderSkylineToCanvas(g, width, height, phase, floor) {
           beacons.push({ x: sx, y: topY - 29 });
         }
       } else if (crownStyle === 1) {
-        g.fillStyle = shadeColor(L.bodyCol, 0.12);
-        g.fillRect(bx, topY, bw - sideW, 3);
+        g.fillStyle = shadeColor(L.bodyCol, 0.14);
+        g.fillRect(bx, topY - 2, bw - sideW, 3);
       }
 
       // Deterministic building windows
@@ -401,6 +419,19 @@ function renderSkylineToCanvas(g, width, height, phase, floor) {
       }
     }
   }
+
+  // High-altitude atmospheric cloud ribbons on upper tower floors (Floors 7-10)
+  if (floor >= 7) {
+    const cloudAlpha = day > 0.5 ? 0.18 : 0.08;
+    g.fillStyle = `rgba(236, 244, 255, ${cloudAlpha})`;
+    for (let i = 0; i < 5; i++) {
+      const cx0 = ((i * 210 + floor * 37) % (width - 80));
+      const cy0 = 38 + (i % 3) * 32;
+      g.beginPath();
+      g.ellipse(cx0 + 50, cy0, 56, 9, 0, 0, Math.PI * 2);
+      g.fill();
+    }
+  }
   return beacons;
 }
 
@@ -409,7 +440,7 @@ function drawStreetPlaza(ctx, westPt, southPt, eastPt, northPt, groundDy, height
   const w = cw / (ctx.getTransform().a || 1);
   const gy = (pt) => pt[1] + groundDy;
   const top = Math.round(Math.max(gy(westPt), gy(eastPt)) - 4);
-  // Kerb-side sidewalk strip with street trees, then the road below it
+  // Kerb-side sidewalk strip with street trees and streetlamps, then the road below it
   ctx.fillStyle = lerpColor('#2e2c38', '#a49e94', day);
   ctx.fillRect(0, top, w, 12);
   ctx.fillStyle = lerpColor('#1c1a28', '#5d6470', day);
@@ -418,6 +449,18 @@ function drawStreetPlaza(ctx, westPt, southPt, eastPt, northPt, groundDy, height
     ctx.fillStyle = lerpColor('#1d3a26', '#3f8f4a', day);
     ctx.beginPath(); ctx.arc(x, top - 4, 9, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = '#5a3e2a'; ctx.fillRect(x - 1, top + 2, 3, 7);
+    // Streetlamp every other interval
+    if ((x / 64) % 2 === 0 || x < 90) {
+      const lx = x + 28;
+      ctx.fillStyle = '#383446';
+      ctx.fillRect(lx, top - 16, 2, 22);
+      ctx.fillStyle = day < 0.7 ? '#ffe28a' : '#d8dce8';
+      ctx.beginPath(); ctx.arc(lx + 1, top - 17, 3, 0, Math.PI * 2); ctx.fill();
+      if (day < 0.7) {
+        ctx.fillStyle = 'rgba(255, 214, 120, 0.22)';
+        ctx.beginPath(); ctx.ellipse(lx + 1, top + 6, 18, 7, 0, 0, Math.PI * 2); ctx.fill();
+      }
+    }
   }
   // Lane dashes
   ctx.fillStyle = lerpColor('#8a7a40', '#f2e3a0', day);
@@ -442,14 +485,22 @@ function drawStreetPlaza(ctx, westPt, southPt, eastPt, northPt, groundDy, height
 function drawTowerCutawayUnder(ctx, room, originX, originY, height, phase) {
   const { day } = dayNightColors(phase);
   const last = { x: room.width - 1, y: room.height - 1 };
+  const isFloorTile = (tx, ty) => (
+    tx >= 1 && ty >= 1 && tx < room.width && ty < room.height && room.grid[ty][tx] !== TILE.VOID
+  );
+  let maxWestY = last.y;
+  while (maxWestY > 1 && !isFloorTile(1, maxWestY)) maxWestY--;
+  let maxEastX = last.x;
+  while (maxEastX > 1 && !isFloorTile(maxEastX, 1)) maxEastX--;
+
   const P = (x, y, dx = 0, dy = 0) => {
     const t = tileToScreen(x, y, originX, originY);
     return [t.sx + dx, t.sy + dy];
   };
   const northPt = P(1, 1, 0, -TILE_H / 2);
-  const eastPt = P(last.x, 1, TILE_W / 2, 0);
+  const eastPt = P(maxEastX, 1, TILE_W / 2, 0);
   const southPt = P(last.x, last.y, 0, TILE_H / 2);
-  const westPt = P(1, last.y, -TILE_W / 2, 0);
+  const westPt = P(1, maxWestY, -TILE_W / 2, 0);
 
   const facadeLeft = lerpColor('#2d2942', '#7c748e', day);
   const facadeRight = lerpColor('#1f1c30', '#585268', day);
@@ -458,100 +509,32 @@ function drawTowerCutawayUnder(ctx, room, originX, originY, height, phase) {
   const SLAB_H = 16;
   const storyH = 54;
   const floorNo = room.floor || 1;
-  // Ground level sits (floor-1) storeys below this floor's slab. When it is on
-  // screen (low floors) the tower stands on a street plaza instead of running
-  // off the bottom edge.
   const groundDy = SLAB_H + 6 + (floorNo - 1) * storyH;
   const grounded = southPt[1] + groundDy < height;
   const bottomY = height + 20;
   const gL = (pt) => (grounded ? pt[1] + groundDy : bottomY);
   if (grounded) drawStreetPlaza(ctx, westPt, southPt, eastPt, northPt, groundDy, height, day, ctx.canvas.width);
 
-  // 1. Exterior tower shaft extending down from the current floor to the bottom of the screen
+  // Outer left & right structural corner columns
   fillPoly(ctx, [
-    [westPt[0] - 8, westPt[1]],
-    [southPt[0], southPt[1]],
-    [southPt[0], gL(southPt)],
-    [westPt[0] - 8, gL(westPt)],
-  ], facadeLeft);
-
-  fillPoly(ctx, [
-    [southPt[0], southPt[1]],
-    [eastPt[0] + 8, eastPt[1]],
-    [eastPt[0] + 8, gL(eastPt)],
-    [southPt[0], gL(southPt)],
-  ], facadeRight);
-
-  // Exterior corner structural columns extending down the tower
-  fillPoly(ctx, [
-    [westPt[0] - 10, westPt[1] - WALL_H],
+    [westPt[0] - 8, westPt[1] - WALL_H],
     [westPt[0], westPt[1] - WALL_H],
     [westPt[0], gL(westPt)],
-    [westPt[0] - 10, gL(westPt)],
+    [westPt[0] - 8, gL(westPt)],
   ], colLeft);
   fillPoly(ctx, [
     [eastPt[0], eastPt[1] - WALL_H],
-    [eastPt[0] + 10, eastPt[1] - WALL_H],
-    [eastPt[0] + 10, gL(eastPt)],
+    [eastPt[0] + 8, eastPt[1] - WALL_H],
+    [eastPt[0] + 8, gL(eastPt)],
     [eastPt[0], gL(eastPt)],
   ], colRight);
-  fillPoly(ctx, [
-    [southPt[0] - 5, southPt[1] + SLAB_H],
-    [southPt[0] + 5, southPt[1] + SLAB_H],
-    [southPt[0] + 5, gL(southPt)],
-    [southPt[0] - 5, gL(southPt)],
-  ], shadeColor(facadeLeft, -0.08));
 
-  // Neighbouring lower floors: horizontal floor spandrel bands + recessed lit windows/silhouettes
-  for (let story = 0; story < Math.min(6, floorNo - 1); story++) {
-    const dy0 = SLAB_H + 8 + story * storyH;
-    // Left facade windows (parallel to westPt -> southPt slope)
-    const stepsL = Math.max(2, room.height - 2);
-    for (let i = 0; i < stepsL; i++) {
-      const t0 = (i + 0.22) / stepsL;
-      const t1 = (i + 0.78) / stepsL;
-      const x0 = westPt[0] + (southPt[0] - westPt[0]) * t0;
-      const y0 = westPt[1] + (southPt[1] - westPt[1]) * t0 + dy0;
-      const x1 = westPt[0] + (southPt[0] - westPt[0]) * t1;
-      const y1 = westPt[1] + (southPt[1] - westPt[1]) * t1 + dy0;
-      if (y0 > height) continue;
-      const isLit = ((i * 7 + story * 13 + (room.floor || 1)) % 5) !== 0;
-      const winCol = day > 0.65
-        ? (isLit ? '#9ad0f4' : '#4a6484')
-        : (isLit ? '#ffd884' : '#242238');
-      fillPoly(ctx, [[x0, y0], [x1, y1], [x1, y1 + 26], [x0, y0 + 26]], winCol);
-      // Silhouette hint inside lit neighbouring floor window
-      if (isLit && (i + story) % 2 === 0) {
-        const mx = (x0 + x1) / 2;
-        const my = (y0 + y1) / 2 + 12;
-        fillPoly(ctx, [[mx - 4, my], [mx + 4, my + 2], [mx + 4, my + 12], [mx - 4, my + 10]], 'rgba(35,24,48,0.45)');
-      }
-    }
-    // Right facade windows (parallel to southPt -> eastPt slope)
-    const stepsR = Math.max(2, room.width - 2);
-    for (let i = 0; i < stepsR; i++) {
-      const t0 = (i + 0.22) / stepsR;
-      const t1 = (i + 0.78) / stepsR;
-      const x0 = southPt[0] + (eastPt[0] - southPt[0]) * t0;
-      const y0 = southPt[1] + (eastPt[1] - southPt[1]) * t0 + dy0;
-      const x1 = southPt[0] + (eastPt[0] - southPt[0]) * t1;
-      const y1 = southPt[1] + (eastPt[1] - southPt[1]) * t1 + dy0;
-      if (y0 > height) continue;
-      const isLit = ((i * 11 + story * 5 + (room.floor || 1)) % 4) !== 0;
-      const winCol = day > 0.65
-        ? (isLit ? '#78b0d8' : '#384e68')
-        : (isLit ? '#f0be68' : '#1b182c');
-      fillPoly(ctx, [[x0, y0], [x1, y1], [x1, y1 + 26], [x0, y0 + 26]], winCol);
-    }
-  }
-
-  // 2. Cut-away Upper Story hint above the back walls (only for non-rooftop floors)
+  // Cut-away Upper Story hint above the back walls (only for non-rooftop floors)
   if (!room.isRooftop) {
     const UPPER_H = 44;
     const nwUp = [northPt[0], northPt[1] - WALL_H];
     const wUp = [westPt[0], westPt[1] - WALL_H];
     const eUp = [eastPt[0], eastPt[1] - WALL_H];
-    // Dimmer cut-away interior of the floor directly above
     fillPoly(ctx, [
       [wUp[0] - 8, wUp[1] - 12],
       [nwUp[0], nwUp[1] - 12],
@@ -565,7 +548,6 @@ function drawTowerCutawayUnder(ctx, room, originX, originY, height, phase) {
       [nwUp[0], nwUp[1] - 12 - UPPER_H],
     ], lerpColor('#1c182c', '#3c3654', day));
 
-    // Upper floor lit windows / silhouettes along the cut-away above
     for (let i = 0; i < 3; i++) {
       const t0 = 0.18 + i * 0.28;
       const t1 = t0 + 0.18;
@@ -583,40 +565,77 @@ function drawTowerCutawayUnder(ctx, room, originX, originY, height, phase) {
     }
   }
 
-  // 3. Reinforced concrete floor slab directly under the current room
-  const corners = [northPt, eastPt, southPt, westPt];
-  fillPoly(ctx, corners, shadeColor(floorBaseColor(room), -0.25));
-  fillPoly(ctx, [westPt, southPt, [southPt[0], southPt[1] + SLAB_H], [westPt[0], westPt[1] + SLAB_H]], '#787486');
-  fillPoly(ctx, [southPt, eastPt, [eastPt[0], eastPt[1] + SLAB_H], [southPt[0], southPt[1] + SLAB_H]], '#565264');
+  // Silhouette-accurate lower tower shaft, neighbouring floor windows, and concrete slab per non-VOID boundary tile
+  const underSlabCol = shadeColor(floorBaseColor(room), -0.25);
+  const storiesBelow = Math.min(6, floorNo - 1);
+  for (let y = 1; y < room.height; y++) {
+    for (let x = 1; x < room.width; x++) {
+      if (!isFloorTile(x, y)) continue;
+      const { sx, sy } = tileToScreen(x, y, originX, originY);
+      const nPt = [sx, sy - TILE_H / 2];
+      const ePt = [sx + TILE_W / 2, sy];
+      const sPt = [sx, sy + TILE_H / 2];
+      const wPt = [sx - TILE_W / 2, sy];
+      fillPoly(ctx, [nPt, ePt, sPt, wPt], underSlabCol);
 
-  // Structural steel I-beam / rebar details along the cut concrete floor slab
-  const beamStepsL = room.height - 1;
-  for (let i = 1; i < beamStepsL; i++) {
-    const t = i / beamStepsL;
-    const bx = westPt[0] + (southPt[0] - westPt[0]) * t;
-    const by = westPt[1] + (southPt[1] - westPt[1]) * t + 4;
-    ctx.fillStyle = '#3a3646';
-    ctx.fillRect(Math.round(bx - 2), Math.round(by), 4, 8);
-  }
-  const beamStepsR = room.width - 1;
-  for (let i = 1; i < beamStepsR; i++) {
-    const t = i / beamStepsR;
-    const bx = southPt[0] + (eastPt[0] - southPt[0]) * t;
-    const by = southPt[1] + (eastPt[1] - southPt[1]) * t + 4;
-    ctx.fillStyle = '#2a2636';
-    ctx.fillRect(Math.round(bx - 2), Math.round(by), 4, 8);
+      // Left-facing exterior boundary (+y edge where y+1 is void or outside room)
+      if (!isFloorTile(x, y + 1)) {
+        fillPoly(ctx, [wPt, sPt, [sPt[0], gL(sPt)], [wPt[0], gL(wPt)]], facadeLeft);
+        for (let story = 0; story < storiesBelow; story++) {
+          const dy0 = SLAB_H + 10 + story * storyH;
+          if (wPt[1] + dy0 > height) continue;
+          const x0 = wPt[0] + (sPt[0] - wPt[0]) * 0.2;
+          const y0 = wPt[1] + (sPt[1] - wPt[1]) * 0.2 + dy0;
+          const x1 = wPt[0] + (sPt[0] - wPt[0]) * 0.8;
+          const y1 = wPt[1] + (sPt[1] - wPt[1]) * 0.8 + dy0;
+          const isLit = ((x * 7 + story * 13 + floorNo) % 5) !== 0;
+          const winCol = day > 0.65 ? (isLit ? '#9ad0f4' : '#4a6484') : (isLit ? '#ffd884' : '#242238');
+          fillPoly(ctx, [[x0, y0], [x1, y1], [x1, y1 + 24], [x0, y0 + 24]], winCol);
+        }
+        fillPoly(ctx, [wPt, sPt, [sPt[0], sPt[1] + SLAB_H], [wPt[0], wPt[1] + SLAB_H]], '#787486');
+        ctx.fillStyle = '#3a3646';
+        ctx.fillRect(Math.round((wPt[0] + sPt[0]) / 2 - 2), Math.round((wPt[1] + sPt[1]) / 2 + 4), 4, 8);
+      }
+
+      // Right-facing exterior boundary (+x edge where x+1 is void or outside room)
+      if (!isFloorTile(x + 1, y)) {
+        fillPoly(ctx, [sPt, ePt, [ePt[0], gL(ePt)], [sPt[0], gL(sPt)]], facadeRight);
+        for (let story = 0; story < storiesBelow; story++) {
+          const dy0 = SLAB_H + 10 + story * storyH;
+          if (sPt[1] + dy0 > height) continue;
+          const x0 = sPt[0] + (ePt[0] - sPt[0]) * 0.2;
+          const y0 = sPt[1] + (ePt[1] - sPt[1]) * 0.2 + dy0;
+          const x1 = sPt[0] + (ePt[0] - sPt[0]) * 0.8;
+          const y1 = sPt[1] + (ePt[1] - sPt[1]) * 0.8 + dy0;
+          const isLit = ((y * 11 + story * 5 + floorNo) % 4) !== 0;
+          const winCol = day > 0.65 ? (isLit ? '#78b0d8' : '#384e68') : (isLit ? '#f0be68' : '#1b182c');
+          fillPoly(ctx, [[x0, y0], [x1, y1], [x1, y1 + 24], [x0, y0 + 24]], winCol);
+        }
+        fillPoly(ctx, [sPt, ePt, [ePt[0], ePt[1] + SLAB_H], [sPt[0], sPt[1] + SLAB_H]], '#565264');
+        ctx.fillStyle = '#2a2636';
+        ctx.fillRect(Math.round((sPt[0] + ePt[0]) / 2 - 2), Math.round((sPt[1] + ePt[1]) / 2 + 4), 4, 8);
+      }
+    }
   }
 }
 
 function drawTowerCutawayOver(ctx, room, originX, originY) {
   const last = { x: room.width - 1, y: room.height - 1 };
+  const isFloorTile = (tx, ty) => (
+    tx >= 1 && ty >= 1 && tx < room.width && ty < room.height && room.grid[ty][tx] !== TILE.VOID
+  );
+  let maxWestY = last.y;
+  while (maxWestY > 1 && !isFloorTile(1, maxWestY)) maxWestY--;
+  let maxEastX = last.x;
+  while (maxEastX > 1 && !isFloorTile(maxEastX, 1)) maxEastX--;
+
   const P = (x, y, dx = 0, dy = 0) => {
     const t = tileToScreen(x, y, originX, originY);
     return [t.sx + dx, t.sy + dy];
   };
   const northPt = P(1, 1, 0, -TILE_H / 2);
-  const eastPt = P(last.x, 1, TILE_W / 2, 0);
-  const westPt = P(1, last.y, -TILE_W / 2, 0);
+  const eastPt = P(maxEastX, 1, TILE_W / 2, 0);
+  const westPt = P(1, maxWestY, -TILE_W / 2, 0);
 
   const nwUp = [northPt[0], northPt[1] - WALL_H];
   const wUp = [westPt[0], westPt[1] - WALL_H];
@@ -673,8 +692,33 @@ function drawTowerCutawayOver(ctx, room, originX, originY) {
 function drawCharacter(ctx, e, screenX, screenY, dpr = 1) {
   const look = LOOKS[e.spriteKey] || { ...LOOKS.player, shirt: e.color || LOOKS.player.shirt };
   const stride = e.walking ? (e.frame % 2 ? 1 : -1) : 0;
-  const { canvas, ox, oy, cssH } = getCharacterCanvas(`${e.spriteKey}:${e.color}`, look, e.dir, { stride, sit: e.sitting }, dpr);
-  if (!e.sitting) {
+  const pose = {
+    stride,
+    sit: !!e.sitting,
+    lie: !!e.lying || e.action === 'lie',
+    blink: !!e.blink,
+    breathe: e.breathe || 0,
+    action: e.action || null,
+    actionFrame: e.actionFrame || 0,
+  };
+  const { canvas, ox, oy, cssH } = getCharacterCanvas(`${e.spriteKey}:${e.color}`, look, e.dir, pose, dpr);
+
+  // Treadmill belt motion lines beneath runner's feet
+  if (e.action === 'treadmill') {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(88, 226, 255, 0.72)';
+    ctx.lineWidth = 2;
+    const shift = (e.actionFrame || 0) * 3;
+    for (let i = -1; i <= 1; i++) {
+      const bx = screenX + i * 7 - 4 + (shift % 6);
+      const by = screenY + 2 + i * 3;
+      ctx.beginPath();
+      ctx.moveTo(bx - 5, by - 2.5);
+      ctx.lineTo(bx + 5, by + 2.5);
+      ctx.stroke();
+    }
+    ctx.restore();
+  } else if (!e.sitting && !pose.lie && e.action !== 'swim') {
     ctx.fillStyle = 'rgba(24, 12, 36, 0.24)';
     for (const [rx, ry] of [[19, 9.5], [14, 7]]) {
       ctx.beginPath();
@@ -682,9 +726,68 @@ function drawCharacter(ctx, e, screenX, screenY, dpr = 1) {
       ctx.fill();
     }
   }
+
   const dx = screenX - ox;
   const dy = screenY - oy;
   blitDeviceAligned(ctx, canvas, dx, dy, dpr);
+
+  // 4-Layer Swimming Waterline Mask, Wake Ripples & Splash Droplets
+  if (e.action === 'swim') {
+    ctx.save();
+    // Layer 2: Translucent turquoise waterline collar masking submerged waist seam
+    ctx.fillStyle = 'rgba(42, 188, 212, 0.58)';
+    ctx.beginPath();
+    ctx.ellipse(screenX, screenY - 2, 20, 9.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Layer 3: Animated concentric white foam wake rings
+    const ringPhase = (e.actionFrame || 0) % 4;
+    ctx.strokeStyle = 'rgba(220, 252, 255, 0.88)';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.ellipse(screenX, screenY - 2, 14 + ringPhase * 2.5, 6.5 + ringPhase * 1.1, 0, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.strokeStyle = 'rgba(140, 238, 252, 0.55)';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.ellipse(screenX, screenY - 2, 21 + ((ringPhase + 2) % 4) * 2, 9.5 + ((ringPhase + 2) % 4) * 0.9, 0, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Layer 4: Splash droplets kicked up by alternating swim strokes
+    ctx.fillStyle = '#e8fcff';
+    const splashSide = (ringPhase % 2 === 0) ? -1 : 1;
+    for (const [sxOff, syOff, r] of [[splashSide * 15, -10, 2.2], [splashSide * 19, -6, 1.6], [-splashSide * 13, -7, 1.5]]) {
+      ctx.beginPath();
+      ctx.arc(screenX + sxOff, screenY + syOff, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  } else if (e.action === 'treadmill') {
+    // Athletic effort / sweat droplets near temple while running
+    ctx.save();
+    const dropShift = ((e.actionFrame || 0) % 2) * 3;
+    ctx.fillStyle = '#7ce8ff';
+    ctx.beginPath();
+    ctx.arc(screenX + 16, dy + 14 + dropShift, 2.2, 0, Math.PI * 2);
+    ctx.arc(screenX - 16, dy + 17 - dropShift, 1.8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  } else if (e.action === 'eat') {
+    // Rising warm culinary aroma / sip sparkle near character
+    ctx.save();
+    const wisp = ((e.actionFrame || 0) % 2) * 2.5;
+    ctx.strokeStyle = 'rgba(255, 236, 180, 0.82)';
+    ctx.lineWidth = 1.6;
+    for (const wx of [screenX - 11, screenX + 11]) {
+      ctx.beginPath();
+      ctx.moveTo(wx, dy + 22 - wisp);
+      ctx.quadraticCurveTo(wx + 3, dy + 17 - wisp, wx, dy + 12 - wisp);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   return { x: screenX, y: dy, footY: screenY + 11, w: 0, h: cssH || canvas.height / dpr };
 }
 
@@ -786,28 +889,40 @@ export function renderRoom(ctx, opts) {
   // Tower cut-away shaft, concrete floor slab, and neighbouring floors
   drawTowerCutawayUnder(ctx, room, originX, originY, height, phase);
 
-  // Pass 1: floor tiles
+  // Pass 1: floor tiles (skipping walls, windows, doors, and irregular VOID cutouts)
   const doorMap = new Map();
   for (const d of room.doors) {
     const matKey = d.y === 0 ? `${d.x},1` : `1,${d.y}`;
     doorMap.set(matKey, d);
   }
+  const zt = room.zoneTiles;
   for (let y = 0; y < room.height; y++) {
     for (let x = 0; x < room.width; x++) {
       const cell = room.grid[y][x];
-      if (cell === TILE.WALL || cell === TILE.WINDOW || cell === TILE.DOOR) continue;
+      if (cell === TILE.WALL || cell === TILE.WINDOW || cell === TILE.DOOR || cell === TILE.VOID) continue;
       const { sx, sy } = tileToScreen(x, y, originX, originY);
       const variant = (x + y) % 2;
       const doorDef = doorMap.get(`${x},${y}`);
+      const inZone = zt && x >= zt.x0 && x <= zt.x1 && y >= zt.y0 && y <= zt.y1;
+      const tileCol = inZone ? (zt.color || floorColor) : floorColor;
       let canvas;
       if (doorDef?.elevator) {
         canvas = bakeSprite(`elevtile:${room.id}`, buildElevatorTile(floorColor), dpr);
       } else if (doorDef) {
         canvas = bakeSprite(`doortile:${room.id}`, buildDoorTile(floorColor), dpr);
       } else {
-        canvas = bakeSprite(`floor:${room.id}:${variant}`, buildFloorTile(floorColor, variant), dpr);
+        canvas = bakeSprite(`floor:${room.id}:${inZone ? 'z' : 'b'}:${variant}`, buildFloorTile(tileCol, variant), dpr);
       }
       blitDeviceAligned(ctx, canvas, sx - TILE_W / 2, sy - TILE_H / 2, dpr);
+      if (inZone && zt.riser && (x === zt.x0 || y === zt.y0)) {
+        ctx.strokeStyle = 'rgba(255, 248, 224, 0.35)';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(sx - TILE_W / 2, sy);
+        ctx.lineTo(sx, sy - TILE_H / 2);
+        ctx.lineTo(sx + TILE_W / 2, sy);
+        ctx.stroke();
+      }
     }
   }
 
@@ -890,7 +1005,7 @@ export function renderRoom(ctx, opts) {
     }
   }
 
-  // Night lighting tint over the tower & room
+  // Night lighting tint over the tower & room + localized warm emissive light pools
   const { tintAlpha } = dayNightColors(phase);
   if (tintAlpha > 0.02) {
     ctx.save();
@@ -898,6 +1013,29 @@ export function renderRoom(ctx, opts) {
     ctx.fillStyle = '#5b6bb0';
     ctx.globalCompositeOperation = 'multiply';
     ctx.fillRect(0, 0, width, height);
+    ctx.restore();
+
+    const nightStrength = Math.min(1, tintAlpha / 0.32);
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+    for (const f of placedFurniture) {
+      const item = getCatalogueItem(f.itemId);
+      if (!item?.emissive) continue;
+      const ax = f.x + f.footprint.w / 2 - 0.5;
+      const ay = f.y + f.footprint.h / 2 - 0.5;
+      const { sx, sy } = tileToScreen(ax, ay, originX, originY);
+      const rad = item.emissive.radius || 56;
+      const rgb = hexToRgb(item.emissive.color || '#ffd27a');
+      const alpha = ((item.emissive.intensity || 0.36) * nightStrength).toFixed(3);
+      const glow = ctx.createRadialGradient(sx, sy - 10, 4, sx, sy - 4, rad);
+      glow.addColorStop(0, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`);
+      glow.addColorStop(0.55, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${(Number(alpha) * 0.38).toFixed(3)})`);
+      glow.addColorStop(1, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0)`);
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(sx, sy - 6, rad, 0, Math.PI * 2);
+      ctx.fill();
+    }
     ctx.restore();
   }
 

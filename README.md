@@ -30,7 +30,7 @@ Then open **http://localhost:8080** in a modern desktop or mobile browser.
 | Action | How |
 | --- | --- |
 | Walk | Click a floor tile — your avatar pathfinds there automatically |
-| Sit | Click a chair/sofa/stool — you'll walk over and sit facing it |
+| Sit / Lie / Use Amenities | Click a chair, sofa, bed, yoga mat, treadmill, lap pool, dining chair, or counter — you'll pathfind to a free slot or safe approach tile and perform a matching animation (`sit`, `lie`, `treadmill`, `swim`, `eat`, `use`) |
 | Chat | Type in the chat box and press Enter / Send; nearby guests reply |
 | Switch rooms | Walk onto a doorway tile, or open the **🛗 Elevator** (`E`) to travel to any of the 10 floors |
 | Visit My Room | Click **🔑 My Room** or select **Floor 8 — My Room** in the Elevator Directory |
@@ -60,7 +60,9 @@ Then open **http://localhost:8080** in a modern desktop or mobile browser.
   - **Floor 9 — Cloud Nine Sky Garden** (`garden`)
   - **Floor 10 — Rooftop Lounge** (`rooftop`)
   - Ride between any floor using the **🛗 Elevator** button (`E`), **🔑 My Room** shortcut, or the brushed-steel elevator doors in every room, with animated doors and floor counter.
-- **Procedural 3D Voxel Characters**: Player avatar and 11 original NPC guests/staff built from volumetric axis-aligned box models with true 4-way rotation, walk strides, sitting poses, custom outfits/accessories, name tags, and soft floor contact shadows.
+- **Varied / Irregular Room Footprints & Door Arrival Protection**: Every floor features an architectural cutout silhouette (`TILE.VOID` alcoves, L-terraces, split-level dining zones, and sky promenades) with silhouette-accurate concrete cutaway slabs, zoned floor accents, and guaranteed door-apron arrival clearance.
+- **Perspective-Consistent Parallax Skyline & Emissive Night Lighting**: Skyscrapers in the parallax city backdrop feature 2:1 isometric roof caps and side parapets matching the hotel's projection, high-altitude cloud ribbons on upper floors, streetlamps on the ground plaza, and warm radial emissive light pools over lamps, neon signs, dining tables, and pools at dusk and night.
+- **Expressive Voxel Characters & Activity Animations**: Player avatar and 11 original NPC guests/staff feature detailed voxel faces (upper-eyelid creases, iris/pupil/dual catchlights, personality brows, side-profile eyes, and dynamic mouths), asynchronous blinking, subtle breathing idles, multi-slot seating/bed/pool occupancy with pending slot reservation, safe adjacent approach tiles, and visibly distinct **treadmill running**, **pool swimming** (with waterline, wake, and splashes), **restaurant/cafe eating** (with cup/utensil lift and aroma wisps), and **bed/yoga-mat reclining** animations.
 - Perspective-integrated wall windows cut into north and west wall planes with
   recessed side reveals, inner sills, dynamic daylight sky gradients, sash bars,
   glare highlights, and projecting stone sills and lintels.

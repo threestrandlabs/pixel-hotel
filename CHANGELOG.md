@@ -4,6 +4,28 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.5.0] - 2026-11-07
+
+### Added
+
+- **v0.5.0 Research Synthesis (`docs/research-v0.5.md`)**:
+  - Combined Parts A and B of the v0.5 research notes into `docs/research-v0.5.md`, retaining all verified source URLs and concrete implementation mappings across room geometry, cutaway parallax skylines, hotel amenity zoning, expressive voxel characters, and furniture interaction/animation systems.
+- **Varied / Irregular Room Shapes & Door Arrival Clearance**:
+  - Added `TILE.VOID = 4` cutouts (`makeRoomGrid`) and `zoneTiles` (with optional split-level step risers) across all 10 hotel floors (`atrium-step`, `l-terrace`, `split-dining`, `workout-wing`, `spa-deck`, `arcade-alcove`, `reading-nook`, `suite-alcove`, `conservatory-terrace`, and `sky-promenade`).
+  - Added `hasDoorArrivalRoute` and 1-tile door landing apron protection (`'door_clearance'`) in `canPlaceAt` so doors and elevators remain unobstructed while flat rugs can still sit on door aprons.
+  - Added `SAVE_VERSION = 3` migration (`MIGRATIONS[2]`) upgrading v2 saves while filtering legacy furniture on `VOID` tiles and rescuing any player coordinates on `VOID` cells.
+- **Perspective-Consistent Isometric Cutaway Skyline & Emissive Night Lighting**:
+  - Upgraded parallax skyscraper layers in `renderSkylineToCanvas` with 2:1 isometric roof caps and angled side parapets matching the room's 2:1 projection, high-altitude cloud ribbons on upper floors (F7–F10), and illuminated streetlamps on the ground-floor plaza.
+  - Upgraded `drawTowerCutawayUnder` to follow per-tile non-`VOID` floor boundaries with stepped reinforced concrete slabs and I-beam markers.
+  - Added localized warm dusk/night radial emissive light pools (`screen` blend) for lamps, neon signs, string lights, arcade cabinets, karaoke machines, aquariums, dining tables, sauna cabins, and heated pools.
+- **Categorised Elevator Navigator & Functional Amenity Arrangements**:
+  - Grouped the 10-floor Elevator Directory into 3 themed wings (**Suite & Sky Decks**, **Recreation & Wellness**, **Ground & Dining**) with live NPC guest counts per floor.
+- **Expressive Voxel Faces, Asynchronous Blinking & Breathing Idle Variety**:
+  - Upgraded `headTex` and `buildParts` in `js/voxel.js` with upper-eyelid creases, iris/pupil/dual catchlights, personality-tuned eyebrows, side-profile eyes and brows on `'left'` and `'right'` head faces, dynamic mouths (`chew`, `pant`, `lips`, `open`, `frown`, `smile`), asynchronous per-entity blinking (`blink`), and subtle 2-phase breathing torso/head bob (`breathe`).
+- **Multi-Slot Occupancy, Safe Approach Tiles & Distinct Activity Animations**:
+  - Added `interactionSlots`, `findFreeInteractionSlot`, `findApproachTile`, and `isDiningSeat` in `js/inventory.js` plus pending slot reservations (`reservedTilesExcluding`) in `js/main.js`, allowing 2 occupants on 2-tile sofas/beds and 4 swimmers in lap pools while routing solid counter/machine interactions to unblocked adjacent tiles facing inward.
+  - Added visibly distinct multi-frame animations and canvas effects for **Treadmill Running** (`action: 'treadmill'` with high-knee stride, bent arm drive, moving belt chevrons, and sweat droplets), **Pool Swimming** (`action: 'swim'` with submerged lower body, alternating freestyle/breaststroke arms, animated waterline, V-wake, and splash droplets), **Dining / Eating** (`action: 'eat'` with right-arm cup/utensil lift, chewing mouth, and rising aroma wisps), and **Reclining / Lying** (`action: 'lie'` on suite beds and yoga mats).
+
 ## [0.4.0] - 2026-11-07
 
 ### Added

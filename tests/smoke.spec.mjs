@@ -136,9 +136,11 @@ async function main() {
     check('player chat message appears in chat log', chatText.includes('hello everyone'));
     await page.screenshot({ path: path.join(SCREENSHOT_DIR, '02-chat.png') });
 
-    // ---- elevator travel to Gym (Floor 4) ----
+    // ---- elevator travel to Gym (Floor 4) & treadmill interaction ----
     await page.click('#btnElevator');
     await page.waitForTimeout(150);
+    const wingHeaders = await page.locator('.elevator-group-title').count();
+    check('elevator navigator displays categorized wing headers', wingHeaders === 3);
     await page.screenshot({ path: path.join(SCREENSHOT_DIR, '03-elevator-directory.png') });
     await page.click('[data-floor-room="gym"]');
     await page.waitForTimeout(500);
@@ -146,7 +148,28 @@ async function main() {
     check('elevator travel to gym works', stateInGym.room === 'gym' && stateInGym.floor === 4);
     const roomLabelGym = await page.textContent('#roomName');
     check('floor indicator updates for Gym', roomLabelGym.includes('Floor 4') && roomLabelGym.includes('Gym'));
+    const tmInteract = await page.evaluate(() => window.__pixelHotel.interactWith('treadmill', true));
+    const gymAfterTm = await page.evaluate(() => window.__pixelHotel.getState().player);
+    check('treadmill interaction sets player activity to treadmill', tmInteract === true && gymAfterTm.activity?.kind === 'treadmill');
+    await page.waitForTimeout(250);
     await page.screenshot({ path: path.join(SCREENSHOT_DIR, '04-gym.png') });
+
+    // ---- Pool swimming & Restaurant dining interactions ----
+    await page.evaluate(() => {
+      window.__pixelHotel.takeElevator('pool');
+      window.__pixelHotel.interactWith('pool_water', true);
+    });
+    await page.waitForTimeout(250);
+    const poolPlayer = await page.evaluate(() => window.__pixelHotel.getState().player);
+    check('pool interaction sets player activity to swim', poolPlayer.activity?.kind === 'swim');
+
+    await page.evaluate(() => {
+      window.__pixelHotel.takeElevator('restaurant');
+      window.__pixelHotel.interactWith('dining_chair', true);
+    });
+    await page.waitForTimeout(250);
+    const restPlayer = await page.evaluate(() => window.__pixelHotel.getState().player);
+    check('restaurant dining chair interaction sets player activity to eat', restPlayer.activity?.kind === 'eat' && !!restPlayer.sitting);
 
     // ---- elevator travel to My Room (Floor 8) and furniture placement persistence ----
     await page.keyboard.press('e');
@@ -210,19 +233,42 @@ async function main() {
       metrics2x.dpr === 2 && metrics2x.width === metrics2x.expectedW && metrics2x.height === metrics2x.expectedH
     );
     await page2x.screenshot({ path: path.join(SCREENSHOT_DIR, '07-lobby-2x.png') });
+    await page2x.screenshot({ path: '/workspace/pixel-hotel-v050-lobby.png' });
 
+    // Facility screenshot: Azure Pool & Spa (Floor 5) with multi-lane swimming
     await page2x.evaluate(() => {
-      window.__pixelHotel.takeElevator('rooftop');
-      window.__pixelHotel.setDayPhase(0.08);
+      window.__pixelHotel.takeElevator('pool');
+      window.__pixelHotel.setDayPhase(0.52);
+      window.__pixelHotel.setNpcActivity('marina', 'pool_water');
+      window.__pixelHotel.interactWith('pool_water', true);
+    });
+    await page2x.waitForTimeout(550);
+    await page2x.screenshot({ path: '/workspace/pixel-hotel-v050-facility.png' });
+
+    // Interaction screenshot: Pulse Fitness Gym (Floor 4) with dual treadmill cardio
+    await page2x.evaluate(() => {
+      window.__pixelHotel.takeElevator('gym');
+      window.__pixelHotel.setDayPhase(0.5);
+      window.__pixelHotel.setNpcActivity('rex', 'treadmill');
+      window.__pixelHotel.interactWith('treadmill', true);
+    });
+    await page2x.waitForTimeout(550);
+    await page2x.screenshot({ path: '/workspace/pixel-hotel-v050-interaction.png' });
+
+    // Night screenshot: Skyline Restaurant (Floor 3) at night with eating animation & warm emissive light pools
+    await page2x.evaluate(() => {
+      window.__pixelHotel.takeElevator('restaurant');
+      window.__pixelHotel.setDayPhase(0.04);
+      window.__pixelHotel.interactWith('dining_chair', true);
     });
     await page2x.waitForTimeout(550);
     await page2x.screenshot({ path: path.join(SCREENSHOT_DIR, '08-rooftop-night-2x.png') });
+    await page2x.screenshot({ path: '/workspace/pixel-hotel-v050-night.png' });
 
     await page2x.evaluate(() => {
-      window.__pixelHotel.takeElevator('restaurant');
       window.__pixelHotel.setDayPhase(0.5);
     });
-    await page2x.waitForTimeout(550);
+    await page2x.waitForTimeout(350);
     await page2x.screenshot({ path: path.join(SCREENSHOT_DIR, '09-restaurant-2x.png') });
 
     await context1x.close();

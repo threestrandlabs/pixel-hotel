@@ -1,8 +1,9 @@
 // Versioned save/load for Pixel Hotel. Pure functions that take a storage-like
 // object ({getItem,setItem,removeItem}) so tests can pass a fake localStorage.
 
-import { SAVE_VERSION, STARTING_COINS, ROOMS, SEED_FURNITURE } from './data.js';
+import { SAVE_VERSION, STARTING_COINS, ROOMS, SEED_FURNITURE, TILE, getCatalogueItem } from './data.js';
 import { initQuestState } from './quests.js';
+import { footprintCells } from './inventory.js';
 
 export const SAVE_KEY = 'pixelHotel.save.v1';
 
@@ -18,8 +19,8 @@ export function createDefaultState() {
     inventory: [],
     rooms,
     quests: initQuestState(),
-    player: { room: 'lobby', x: ROOMS.lobby.spawn.x, y: ROOMS.lobby.spawn.y, dir: 'down', sitting: null },
-    stats: { greetedNpcs: [], visitedRooms: ['lobby'], placedCount: 0, myRoomPlacedCount: 0 },
+    player: { room: 'lobby', x: ROOMS.lobby.spawn.x, y: ROOMS.lobby.spawn.y, dir: 'down', sitting: null, activity: null },
+    stats: { greetedNpcs: [], visitedRooms: ['lobby'], placedCount: 0, myRoomPlacedCount: 0, activitiesUsed: [] },
     settings: { muted: true, helpShown: false },
   };
 }
@@ -53,6 +54,45 @@ const MIGRATIONS = {
       quests: mergedQuests,
       player: { ...def.player, ...(old.player || {}) },
       stats: { ...def.stats, ...(old.stats || {}) },
+      settings: { ...def.settings, ...(old.settings || {}) },
+    };
+  },
+  2: (old) => {
+    const def = createDefaultState();
+    const mergedRooms = { ...def.rooms };
+    if (old.rooms && typeof old.rooms === 'object') {
+      for (const [roomId, rState] of Object.entries(old.rooms)) {
+        const roomDef = ROOMS[roomId];
+        if (!roomDef || !rState || !Array.isArray(rState.placed)) continue;
+        // Relocate or drop any item whose footprint now falls on a v0.5 VOID cutout tile
+        const validPlaced = rState.placed.filter((p) => {
+          const item = getCatalogueItem(p.itemId);
+          if (!item) return false;
+          const cells = footprintCells(p.x, p.y, item.footprint, p.rot || 0);
+          return cells.every((c) => (
+            c.x >= 0 && c.y >= 0 && c.x < roomDef.width && c.y < roomDef.height &&
+            roomDef.grid[c.y][c.x] !== TILE.VOID
+          ));
+        });
+        mergedRooms[roomId] = { ...mergedRooms[roomId], ...rState, placed: validPlaced };
+      }
+    }
+    const playerRoom = old.player?.room && ROOMS[old.player.room] ? old.player.room : 'lobby';
+    const roomDef = ROOMS[playerRoom];
+    let px = typeof old.player?.x === 'number' ? old.player.x : roomDef.spawn.x;
+    let py = typeof old.player?.y === 'number' ? old.player.y : roomDef.spawn.y;
+    if (py < 0 || px < 0 || py >= roomDef.height || px >= roomDef.width || roomDef.grid[py][px] === TILE.VOID) {
+      px = roomDef.spawn.x;
+      py = roomDef.spawn.y;
+    }
+    return {
+      ...def,
+      ...old,
+      version: 3,
+      rooms: mergedRooms,
+      quests: { ...def.quests, ...(old.quests || {}) },
+      player: { ...def.player, ...(old.player || {}), room: playerRoom, x: px, y: py, activity: old.player?.activity || null },
+      stats: { ...def.stats, ...(old.stats || {}), activitiesUsed: old.stats?.activitiesUsed || [] },
       settings: { ...def.settings, ...(old.settings || {}) },
     };
   },

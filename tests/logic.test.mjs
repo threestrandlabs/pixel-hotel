@@ -4,7 +4,8 @@ import assert from 'node:assert/strict';
 import { findPath } from '../js/pathfinding.js';
 import {
   buyItem, placeItem, pickupItem, moveItem, canPlaceAt, footprintCells, rotatedFootprint,
-  availableCatalogue,
+  availableCatalogue, interactionSlots, findFreeInteractionSlot, findApproachTile,
+  hasDoorArrivalRoute, isDiningSeat,
 } from '../js/inventory.js';
 import {
   initQuestState, advanceQuestsByType, setQuestProgress, claimReward, listQuests,
@@ -12,7 +13,7 @@ import {
 import { createDefaultState, loadState, saveState, resetState, SAVE_KEY } from '../js/save.js';
 import { getCatalogueItem, TILE, SAVE_VERSION, ROOMS, NPCS, CATALOGUE } from '../js/data.js';
 import { respondToMessage } from '../js/npc.js';
-import { LOOKS, renderCharacter } from '../js/voxel.js';
+import { LOOKS, renderCharacter, buildParts } from '../js/voxel.js';
 import { buildWindowSegment, FURNITURE_BUILDERS } from '../js/sprites.js';
 
 // ---------- fake localStorage ----------
@@ -634,13 +635,16 @@ test('v0.4.0 rooms: all 10 floors (including facilities and My Room) have unique
   for (const room of Object.values(ROOMS)) {
     const elevDoor = room.doors.find((d) => d.elevator);
     assert.ok(elevDoor, `room ${room.id} should have an elevator door tile`);
-    const isBlocked = (x, y) => room.grid[y][x] === TILE.WALL || room.grid[y][x] === TILE.WINDOW;
+    const isBlocked = (x, y) => {
+      const c = room.grid[y][x];
+      return c === TILE.WALL || c === TILE.WINDOW || c === TILE.VOID;
+    };
     const path = findPath(room.width, room.height, isBlocked, room.spawn, { x: elevDoor.x, y: elevDoor.y });
     assert.ok(path && path.length > 1, `expected walkable path from spawn to elevator door in ${room.id}`);
   }
 });
 
-test('v0.4.0 migration: v1 save migrates to v2 keeping coins, inventory, lobby/rooftop items and adding new rooms & My Room', () => {
+test('v0.4.0 migration: v1 save migrates to latest version keeping coins, inventory, lobby/rooftop items and adding new rooms & My Room', () => {
   const v1Save = {
     version: 1,
     coins: 345,
@@ -657,7 +661,7 @@ test('v0.4.0 migration: v1 save migrates to v2 keeping coins, inventory, lobby/r
   };
   const storage = makeFakeStorage({ [SAVE_KEY]: JSON.stringify(v1Save) });
   const loaded = loadState(storage);
-  assert.equal(loaded.version, 2);
+  assert.equal(loaded.version, SAVE_VERSION);
   assert.equal(loaded.coins, 345);
   assert.deepEqual(loaded.unlocked, ['rug']);
   assert.equal(loaded.inventory.length, 1);
@@ -697,4 +701,215 @@ test('v0.4.0 DPR voxel rendering: renderCharacter scales backing canvas with DPR
   assert.equal(c2.canvas.height, c1.canvas.height * 2);
   assert.equal(c2.ox, c1.ox);
   assert.equal(c2.oy, c1.oy);
+});
+
+// ======================= v0.5.0 irregular rooms, cutaway, interactions & voxel expressions =======================
+
+test('v0.5.0 rooms: irregular VOID cutouts, zone tiles, door landing clearance, and usable door arrival routes across all 10 floors', () => {
+  const state = createDefaultState();
+  for (const room of Object.values(ROOMS)) {
+    assert.ok(room.wing, `room ${room.id} must have an elevator wing category`);
+    assert.ok(room.shape, `room ${room.id} must have a shape descriptor`);
+    assert.ok(Array.isArray(room.cutouts) && room.cutouts.length > 0, `room ${room.id} must define irregular cutouts`);
+    assert.ok(room.zoneTiles && typeof room.zoneTiles.color === 'string', `room ${room.id} must define zone accent tiles`);
+
+    let voidCount = 0;
+    for (let y = 0; y < room.height; y++) {
+      for (let x = 0; x < room.width; x++) {
+        if (room.grid[y][x] === TILE.VOID) voidCount++;
+      }
+    }
+    assert.ok(voidCount >= 2, `room ${room.id} should contain TILE.VOID cutout cells`);
+
+    // Verify no seeded furniture falls on a VOID tile and door arrival routes remain open
+    const placed = state.rooms[room.id].placed;
+    for (const p of placed) {
+      const item = getCatalogueItem(p.itemId);
+      const cells = footprintCells(p.x, p.y, item.footprint, p.rot);
+      for (const c of cells) {
+        assert.equal(room.grid[c.y][c.x], TILE.FLOOR, `seeded item ${p.instanceId} in ${room.id} must sit on FLOOR`);
+      }
+    }
+    assert.equal(
+      hasDoorArrivalRoute({ width: room.width, height: room.height, grid: room.grid, doors: room.doors, spawn: room.spawn, placed }),
+      true,
+      `room ${room.id} must preserve an unobstructed path between spawn and every door`,
+    );
+  }
+
+  // Verify placement rules: VOID tile rejected, door landing apron rejected for solid items but allowed for flat rugs
+  const lobbyRoom = {
+    width: ROOMS.lobby.width,
+    height: ROOMS.lobby.height,
+    grid: ROOMS.lobby.grid,
+    placed: [],
+  };
+  const stool = getCatalogueItem('stool');
+  const rug = getCatalogueItem('rug');
+  assert.equal(canPlaceAt(lobbyRoom, stool, 10, 7, 0).reason, 'blocked_tile', 'cannot place on TILE.VOID cutout');
+  // Lobby elevator door is at (4, 0), so (4, 1) is the door landing apron
+  assert.equal(canPlaceAt(lobbyRoom, stool, 4, 1, 0).reason, 'door_clearance', 'cannot place solid item on door apron');
+  assert.equal(canPlaceAt(lobbyRoom, rug, 4, 1, 0).ok, true, 'flat rug allowed on door apron');
+});
+
+test('v0.5.0 migration: v2 save migrates to v3, pruning items on VOID cutouts and rescuing player position if on VOID', () => {
+  assert.equal(SAVE_VERSION, 3);
+  const v2Save = {
+    version: 2,
+    coins: 500,
+    unlocked: ['rug'],
+    inventory: [],
+    rooms: {
+      lobby: {
+        placed: [
+          { instanceId: 'valid_stool', itemId: 'stool', x: 2, y: 2, rot: 0 },
+          { instanceId: 'void_stool', itemId: 'stool', x: 10, y: 7, rot: 0 }, // (10,7) is VOID in lobby
+        ],
+      },
+    },
+    quests: {},
+    player: { room: 'lobby', x: 10, y: 7, dir: 'down', sitting: null },
+  };
+  const storage = makeFakeStorage({ [SAVE_KEY]: JSON.stringify(v2Save) });
+  const loaded = loadState(storage);
+  assert.equal(loaded.version, 3);
+  assert.equal(loaded.rooms.lobby.placed.length, 1);
+  assert.equal(loaded.rooms.lobby.placed[0].instanceId, 'valid_stool');
+  assert.deepEqual({ x: loaded.player.x, y: loaded.player.y }, ROOMS.lobby.spawn);
+});
+
+test('v0.5.0 multi-slot occupancy & reservation: 2-tile sofas/beds and 4-slot pools track independent slots', () => {
+  const sofaPlaced = { instanceId: 'sofa_1', itemId: 'sofa', x: 3, y: 3, rot: 0 };
+  const slots = interactionSlots(sofaPlaced);
+  assert.equal(slots.length, 2);
+  assert.deepEqual({ x: slots[0].x, y: slots[0].y, dir: slots[0].dir }, { x: 3, y: 3, dir: 'down' });
+  assert.deepEqual({ x: slots[1].x, y: slots[1].y, dir: slots[1].dir }, { x: 4, y: 3, dir: 'down' });
+
+  // First occupant at (3,3) leaves (4,3) free
+  const free1 = findFreeInteractionSlot(sofaPlaced, [{ x: 3, y: 3 }], []);
+  assert.deepEqual({ x: free1.x, y: free1.y, dir: free1.dir }, { x: 4, y: 3, dir: 'down' });
+
+  // Reserving (4,3) makes the sofa completely full
+  const free2 = findFreeInteractionSlot(sofaPlaced, [{ x: 3, y: 3 }], [{ x: 4, y: 3 }]);
+  assert.equal(free2, null);
+
+  // Pool water has 4 swim lane slots
+  const poolPlaced = { instanceId: 'pool_1', itemId: 'pool_water', x: 3, y: 2, rot: 0 };
+  assert.equal(interactionSlots(poolPlaced).length, 4);
+});
+
+test('v0.5.0 safe approach tiles & activity resolution: treadmill, swim, lie, eat, and adjacent counter use', () => {
+  const state = createDefaultState();
+
+  // 1. Gym treadmill -> kind === 'treadmill' on belt tile
+  const gymDef = ROOMS.gym;
+  const gymRoom = { width: gymDef.width, height: gymDef.height, grid: gymDef.grid, placed: state.rooms.gym.placed };
+  const gymBlocked = (x, y) => {
+    const c = gymDef.grid[y][x];
+    if (c === TILE.WALL || c === TILE.WINDOW || c === TILE.VOID) return true;
+    for (const p of gymRoom.placed) {
+      const item = getCatalogueItem(p.itemId);
+      if (!item || item.flat || item.seat || item.interaction === 'treadmill') continue;
+      if (footprintCells(p.x, p.y, item.footprint, p.rot).some((cell) => cell.x === x && cell.y === y)) return true;
+    }
+    return false;
+  };
+  const tm = gymRoom.placed.find((p) => p.itemId === 'treadmill');
+  const tmApproach = findApproachTile(gymRoom, tm, gymBlocked, gymDef.spawn);
+  assert.ok(tmApproach);
+  assert.equal(tmApproach.kind, 'treadmill');
+  assert.deepEqual(tmApproach.tile, { x: tm.x, y: tm.y + 1 });
+
+  // 2. Pool water -> kind === 'swim'
+  const poolDef = ROOMS.pool;
+  const poolRoom = { width: poolDef.width, height: poolDef.height, grid: poolDef.grid, placed: state.rooms.pool.placed };
+  const poolBlocked = (x, y) => {
+    const c = poolDef.grid[y][x];
+    return c === TILE.WALL || c === TILE.WINDOW || c === TILE.VOID;
+  };
+  const pw = poolRoom.placed.find((p) => p.itemId === 'pool_water');
+  const pwApproach = findApproachTile(poolRoom, pw, poolBlocked, poolDef.spawn);
+  assert.ok(pwApproach);
+  assert.equal(pwApproach.kind, 'swim');
+
+  // 3. Restaurant dining chair adjacent to dining table -> kind === 'eat'
+  const restDef = ROOMS.restaurant;
+  const restRoom = { width: restDef.width, height: restDef.height, grid: restDef.grid, placed: state.rooms.restaurant.placed };
+  const restBlocked = (x, y) => {
+    const c = restDef.grid[y][x];
+    if (c === TILE.WALL || c === TILE.WINDOW || c === TILE.VOID) return true;
+    for (const p of restRoom.placed) {
+      const item = getCatalogueItem(p.itemId);
+      if (!item || item.flat || item.seat) continue;
+      if (footprintCells(p.x, p.y, item.footprint, p.rot).some((cell) => cell.x === x && cell.y === y)) return true;
+    }
+    return false;
+  };
+  const chair = restRoom.placed.find((p) => p.itemId === 'dining_chair');
+  assert.equal(isDiningSeat(restRoom, chair), true, 'dining chair next to dining table is detected as dining seat');
+  const chairApproach = findApproachTile(restRoom, chair, restBlocked, restDef.spawn);
+  assert.ok(chairApproach);
+  assert.equal(chairApproach.kind, 'eat');
+
+  // 4. Solid counter -> approaches adjacent floor tile facing the object
+  const buffet = restRoom.placed.find((p) => p.itemId === 'buffet_counter');
+  const buffetApproach = findApproachTile(restRoom, buffet, restBlocked, restDef.spawn);
+  assert.ok(buffetApproach);
+  assert.equal(buffetApproach.kind, 'eat');
+  const buffetCells = footprintCells(buffet.x, buffet.y, getCatalogueItem('buffet_counter').footprint, buffet.rot);
+  assert.equal(buffetCells.some((c) => c.x === buffetApproach.tile.x && c.y === buffetApproach.tile.y), false, 'approach tile is adjacent, not overlapping solid counter');
+
+  const rack = gymRoom.placed.find((p) => p.itemId === 'dumbbell_rack');
+  const rackApproach = findApproachTile(gymRoom, rack, gymBlocked, gymDef.spawn);
+  assert.ok(rackApproach);
+  assert.equal(rackApproach.kind, 'use');
+});
+
+test('v0.5.0 voxel characters: distinct treadmill, swim, eat, lie, blink, and breathe poses and side-profile eyes', () => {
+  const stand = buildParts(LOOKS.player, { stride: 0 });
+  const run0 = buildParts(LOOKS.player, { action: 'treadmill', actionFrame: 0 });
+  const run1 = buildParts(LOOKS.player, { action: 'treadmill', actionFrame: 1 });
+  const swim0 = buildParts(LOOKS.player, { action: 'swim', actionFrame: 0 });
+  const swim1 = buildParts(LOOKS.player, { action: 'swim', actionFrame: 1 });
+  const eat0 = buildParts(LOOKS.player, { sit: true, action: 'eat', actionFrame: 0 });
+  const eat1 = buildParts(LOOKS.player, { sit: true, action: 'eat', actionFrame: 1 });
+  const liePose = buildParts(LOOKS.player, { lie: true, action: 'lie' });
+  const breathePose = buildParts(LOOKS.player, { breathe: 1 });
+  const blinkPose = buildParts(LOOKS.player, { blink: true });
+
+  // Head box is the 10x9.2x8 skin box (x0 === -5, x1 === 5, y0 === -4.6, y1 === 4.6)
+  const findHead = (parts) => parts.find((p) => p.x0 === -5 && p.x1 === 5 && p.y0 === -4.6 && p.y1 === 4.6);
+
+  // Treadmill alternates vertical body bounce and leg/arm geometry
+  assert.notEqual(findHead(run0).z0, findHead(run1).z0, 'treadmill alternates vertical running cadence');
+  assert.notDeepEqual(run0[0], run1[0], 'treadmill alternates leg lift between frames');
+
+  // Swim submerges lower body (fewer total voxel boxes than standing) and alternates stroke arms
+  assert.ok(swim0.length < stand.length, 'swimming submerges legs below water surface');
+  assert.notDeepEqual(swim0, swim1, 'swimming alternates freestyle arm reach');
+
+  // Eat raises right arm & cup prop toward mouth on frame 1
+  assert.notDeepEqual(eat0, eat1, 'eating lifts right arm and cup between frames');
+
+  // Lie pose reclines head lower onto bed/mat
+  assert.ok(findHead(liePose).z0 < findHead(stand).z0, 'lying pose lowers head z onto bed/mat');
+
+  // Breathe subtly shifts head elevation
+  assert.notEqual(findHead(stand).z0, findHead(breathePose).z0, 'breathing shifts head elevation');
+
+  // Side-profile eyes exist on left/right head faces and blink modifies front eye row
+  const recordTex = (texFn, face) => {
+    const ops = [];
+    const g = {
+      fillStyle: '',
+      fillRect(x, y, w, h) { ops.push({ fill: this.fillStyle, x, y, w, h }); },
+    };
+    texFn(g, 10, 8, (c) => c, face);
+    return ops;
+  };
+  const headStand = findHead(stand);
+  const headBlink = findHead(blinkPose);
+  assert.notDeepEqual(recordTex(headStand.tex, 'front'), recordTex(headBlink.tex, 'front'), 'blinking changes front face texture');
+  const rightOps = recordTex(headStand.tex, 'right');
+  assert.ok(rightOps.length >= 2, 'side-profile head texture includes temple sideburn and cheek contour');
 });

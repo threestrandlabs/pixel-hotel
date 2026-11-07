@@ -71,28 +71,69 @@ export const LOOKS = {
 
 // ---------- model ----------
 
-/** pose: { stride: -1|0|1 (walk phase), sit: boolean } -> boxes in local space */
+/**
+ * pose: {
+ *   stride?: -1|0|1,
+ *   sit?: boolean,
+ *   lie?: boolean,
+ *   blink?: boolean,
+ *   breathe?: 0|1,
+ *   action?: null|'treadmill'|'swim'|'eat'|'use'|'lie',
+ *   actionFrame?: 0|1|2|3,
+ * } -> boxes in local space
+ */
 export function buildParts(look, pose = {}) {
-  const { stride = 0, sit = false } = pose;
-  const dz = sit ? -1 : 0;
+  const {
+    stride = 0,
+    sit = false,
+    lie = false,
+    blink = false,
+    breathe = 0,
+    action = null,
+    actionFrame = 0,
+  } = pose;
+  const isSwim = action === 'swim';
+  const isLie = lie || action === 'lie';
+  const isTreadmill = action === 'treadmill';
+  const isEat = action === 'eat';
+  const isUse = action === 'use';
+  const idleBreathe = (!sit && !isLie && !isSwim && !isTreadmill && stride === 0 && breathe) ? 0.45 : 0;
+
+  const dz = isSwim
+    ? -5.4
+    : isLie
+      ? -3.2
+      : isTreadmill
+        ? (actionFrame % 2 === 0 ? 0.75 : -0.15)
+        : sit
+          ? -1
+          : idleBreathe * 0.6;
+
   const P = [];
   const add = (x0, x1, y0, y1, z0, z1, color, tex) => P.push({ x0, x1, y0, y1, z0, z1, color, tex });
-  const skirt = look.skirt && !sit;
+  const skirt = look.skirt && !sit && !isLie && !isSwim;
   const lower = look.bareArms ? look.skin : look.shirt;
+  const effStride = isTreadmill ? (actionFrame % 2 === 0 ? 1.35 : -1.35) : stride;
 
-  // legs: thigh / shin / shoe stepped forward and back for the walk cycle
-  for (const s of [-1, 1]) {
-    const [a, b] = s > 0 ? [0.15, 3.35] : [-3.35, -0.15];
-    const o = stride * s * 1.7;
-    if (sit) {
-      add(a, b, -2.2, 4.4, 3.5, 6, look.skirt ? look.shirt : look.pants);
-      add(a, b, 2.6, 4.4, 1.6, 3.5, look.pants);
-      add(a, b, 2.4, 6, 0, 1.6, look.shoe, soleTex);
-    } else {
-      const lift = o > 0.5 ? 0.5 : 0;
-      if (!skirt) add(a, b, -1.7 + o * 0.5, 1.7 + o * 0.5, 3.6, 7, look.pants);
-      add(a, b, -1.7 + o, 1.7 + o, 1.6 + lift, skirt ? 3.8 : 3.6, look.pants);
-      add(a, b, -1.7 + o, 3.6 + o, lift, 1.6 + lift, look.shoe, soleTex);
+  // legs: thigh / shin / shoe (submerged and omitted during swimming so waterline stays clean)
+  if (!isSwim) {
+    for (const s of [-1, 1]) {
+      const [a, b] = s > 0 ? [0.15, 3.35] : [-3.35, -0.15];
+      const o = effStride * s * 1.7;
+      if (isLie) {
+        add(a, b, 0.2, 5.2, 4.0, 6.4, look.skirt ? look.shirt : look.pants);
+        add(a, b, 5.0, 7.6, 3.8, 6.1, look.pants);
+        add(a, b, 7.2, 9.0, 3.6, 6.6, look.shoe, soleTex);
+      } else if (sit) {
+        add(a, b, -2.2, 4.4, 3.5, 6, look.skirt ? look.shirt : look.pants);
+        add(a, b, 2.6, 4.4, 1.6, 3.5, look.pants);
+        add(a, b, 2.4, 6, 0, 1.6, look.shoe, soleTex);
+      } else {
+        const lift = o > 0.5 ? (isTreadmill ? 1.45 : 0.5) : 0;
+        if (!skirt) add(a, b, -1.7 + o * 0.5, 1.7 + o * 0.5, 3.6 + lift * 0.4, 7, look.pants);
+        add(a, b, -1.7 + o, 1.7 + o, 1.6 + lift, skirt ? 3.8 : 3.6 + lift * 0.4, look.pants);
+        add(a, b, -1.7 + o, 3.6 + o, lift, 1.6 + lift, look.shoe, soleTex);
+      }
     }
   }
   if (skirt) { // dress / coat tails hang over the upper legs
@@ -102,28 +143,68 @@ export function buildParts(look, pose = {}) {
 
   // torso + collar/neck detail
   const tf = look.belly ? 3.1 : 2.4;
-  add(-3.5, 3.5, -2.4, tf, 7 + dz, 15 + dz, look.shirt, torsoTex(look));
-  add(-1.8, 1.8, -1.6, 1.8, 14.6 + dz, 15.6 + dz, sh(look.skin, -0.05));
+  add(-3.5, 3.5, -2.4, tf, 7 + dz, 15 + dz + idleBreathe, look.shirt, torsoTex(look));
+  add(-1.8, 1.8, -1.6, 1.8, 14.6 + dz + idleBreathe, 15.6 + dz + idleBreathe, sh(look.skin, -0.05));
 
-  // arms
+  // arms & activity props
   for (const s of [-1, 1]) {
     const [a, b] = s > 0 ? [3.5, 5.4] : [-5.4, -3.5];
-    const o = -stride * s * 1.5;
+    const o = -effStride * s * 1.5;
     const cuff = look.cuff ? cuffTex(look.cuff) : null;
-    if (sit) {
+    if (isSwim) {
+      // Alternating freestyle/breaststroke swim stroke along the water surface
+      const strokePhase = ((actionFrame + (s > 0 ? 0 : 2)) % 4);
+      const reachY = strokePhase === 0 ? 2.2 : strokePhase === 1 ? 0.6 : strokePhase === 2 ? -1.4 : 0.4;
+      const reachZ = strokePhase === 0 ? 9.6 : strokePhase === 1 ? 8.2 : strokePhase === 2 ? 8.4 : 9.8;
+      add(a, b, -1.2 + reachY * 0.4, 1.6 + reachY * 0.4, reachZ + dz, reachZ + 3.4 + dz, look.bareArms ? look.skin : look.shirt);
+      add(a, b, 1.0 + reachY, 4.4 + reachY, reachZ - 0.8 + dz, reachZ + 1.4 + dz, lower, cuff);
+      add(a + 0.15, b - 0.15, 4.2 + reachY, 5.8 + reachY, reachZ - 0.8 + dz, reachZ + 1.0 + dz, look.skin);
+    } else if (isEat && s > 0) {
+      // Right arm lifts a gourmet cup/bowl toward the mouth on odd actionFrames
+      const liftToMouth = (actionFrame % 2) === 1;
+      const armZ = sit ? 9.6 : 10.8;
+      add(a, b, -1.2, 1.6, armZ, armZ + 4.8, look.bareArms ? look.skin : look.shirt);
+      const foreY0 = liftToMouth ? 1.2 : 0.6;
+      const foreY1 = liftToMouth ? 4.8 : 4.2;
+      const foreZ0 = liftToMouth ? 13.8 + dz : 10.4 + dz;
+      const foreZ1 = foreZ0 + 2.2;
+      add(a - 0.4, b - 0.2, foreY0, foreY1, foreZ0, foreZ1, lower, cuff);
+      add(a - 0.3, b - 0.3, foreY1, foreY1 + 1.3, foreZ0, foreZ0 + 1.7, look.skin);
+      // Voxel cup / gourmet plate held in hand
+      const cupX0 = a - 1.4, cupX1 = a + 0.6;
+      const cupY0 = foreY1 + 0.2, cupY1 = foreY1 + 2.2;
+      add(cupX0, cupX1, cupY0, cupY1, foreZ0 + 0.4, foreZ0 + 2.6, '#fff8ee');
+      add(cupX0 + 0.2, cupX1 - 0.2, cupY0 + 0.2, cupY1 - 0.2, foreZ0 + 2.4, foreZ0 + 3.0, '#e07a48');
+    } else if (isTreadmill) {
+      // Bent athletic pumping arms
+      add(a, b, -1.4 + o * 0.4, 1.4 + o * 0.4, 10.8 + dz, 14.8 + dz, look.bareArms ? look.skin : look.shirt);
+      add(a, b, 0.4 + o * 0.8, 3.8 + o * 0.8, 9.6 + dz, 11.8 + dz, lower, cuff);
+      add(a + 0.2, b - 0.2, 3.6 + o * 0.8, 4.9 + o * 0.8, 9.8 + dz, 11.6 + dz, look.skin);
+    } else if (isUse) {
+      const tap = ((actionFrame + (s > 0 ? 0 : 1)) % 2) * 0.9;
+      add(a, b, -1.2, 1.4, 10.6 + dz, 14.8 + dz, look.bareArms ? look.skin : look.shirt);
+      add(a, b, 0.6, 4.0, 9.2 + dz + tap, 11.2 + dz + tap, lower, cuff);
+      add(a + 0.2, b - 0.2, 3.8, 5.1, 9.2 + dz + tap, 10.9 + dz + tap, look.skin);
+    } else if (isLie) {
+      add(a, b, -1.6, 2.2, 6.2, 9.6, look.bareArms ? look.skin : look.shirt);
+      add(a, b, 1.8, 4.4, 5.4, 7.6, lower, cuff);
+      add(a + 0.2, b - 0.2, 4.2, 5.4, 5.4, 7.2, look.skin);
+    } else if (sit) {
       add(a, b, -1.4, 1.4, 9, 14, look.bareArms ? look.skin : look.shirt);
       add(a, b, -0.2, 3.6, 7, 9, lower, cuff);
       add(a + 0.2, b - 0.2, 3.6, 4.9, 7, 8.6, look.skin);
     } else {
-      add(a, b, -1.4 + o * 0.5, 1.4 + o * 0.5, 11.2, 15, look.bareArms ? look.skin : look.shirt);
-      add(a, b, -1.2 + o, 1.2 + o, 8.7, 11.2, lower, cuff);
-      add(a + 0.2, b - 0.2, -1 + o, 1 + o, 7.5, 8.7, look.skin);
+      const sway = idleBreathe ? s * 0.15 : 0;
+      add(a + sway, b + sway, -1.4 + o * 0.5, 1.4 + o * 0.5, 11.2 + idleBreathe * 0.5, 15 + idleBreathe, look.bareArms ? look.skin : look.shirt);
+      add(a + sway, b + sway, -1.2 + o, 1.2 + o, 8.7 + idleBreathe * 0.4, 11.2 + idleBreathe * 0.5, lower, cuff);
+      add(a + 0.2 + sway, b - 0.2 + sway, -1 + o, 1 + o, 7.5 + idleBreathe * 0.3, 8.7 + idleBreathe * 0.4, look.skin);
     }
   }
 
-  // head: skin box with the face painted on its front plane, plus 3D nose / ears
-  add(-5, 5, -4.6, 4.6, 15 + dz, 23 + dz, look.skin, headTex(look));
-  const z = (v) => v + dz;
+  // head: skin box with the face painted on its front & side planes, plus 3D nose / ears
+  const hdz = dz + idleBreathe * 0.6;
+  add(-5, 5, -4.6, 4.6, 15 + hdz, 23 + hdz, look.skin, headTex(look, { blink: blink || isLie, action, actionFrame }));
+  const z = (v) => v + hdz;
   add(-0.65, 0.65, 4.6, 5.35, z(17.2), z(18.5), sh(look.skin, -0.03));
   const hairy = ['bob', 'long'].includes(look.hairStyle);
   if (!hairy) for (const s of [-1, 1]) add(s > 0 ? 5 : -5.6, s > 0 ? 5.6 : -5, -0.6, 1, z(17.8), z(20), sh(look.skin, -0.05));
@@ -225,34 +306,109 @@ function lensTex(g, W, H, fc, face) {
   g.fillStyle = 'rgba(255,255,255,0.8)'; g.fillRect(0.7, 0.6, 0.8, 0.8);
 }
 
-function headTex(look) {
+function headTex(look, pose = {}) {
+  const { blink = false, action = null, actionFrame = 0 } = pose;
   return (g, W, H, fc, face) => {
     if (face === 'top' && look.hairStyle === 'bald') { // comb-over strands on the bald top
       g.fillStyle = fc(look.hair);
       for (const [y, a, w] of [[1.5, 2, 6], [3, 1.5, 7], [4.5, 2, 6]]) g.fillRect(a, y, w, 0.35);
       return;
     }
-    if (face !== 'front') return;
-    g.fillStyle = 'rgba(255,110,125,0.35)'; g.fillRect(0.7, 5.3, 1.9, 1); g.fillRect(7.4, 5.3, 1.9, 1);
-    const eh = look.glasses ? 1.5 : 2.1;
-    for (const ex of [1.6, 5.9]) {
-      g.fillStyle = fc('#ffffff'); g.fillRect(ex, 3, 2.5, eh);
-      g.fillStyle = look.eye; g.fillRect(ex + 0.5, 3, 1.5, eh);
-      g.fillStyle = '#fff'; g.fillRect(ex + 0.6, 3.1, 0.65, 0.65);
-      g.fillStyle = 'rgba(255,255,255,0.65)'; g.fillRect(ex + 1.4, 3.9, 0.35, 0.35);
-      if (look.lashes) { g.fillStyle = look.eye; g.fillRect(ex - 0.1, 2.6, 2.7, 0.45); g.fillRect(ex < 5 ? ex - 0.4 : ex + 2.5, 2.9, 0.4, 0.5); }
-      else if (!look.mustache) { g.fillStyle = look.brow; g.fillRect(ex - 0.1, 2.1, 2.7, 0.5); }
+    if (face === 'left' || face === 'right') {
+      // Side temple hair sideburn & warm cheek contour (no duplicate side-eye on 3/4 view)
+      g.fillStyle = fc(look.hair);
+      g.fillRect(0, 0, W * 0.42, 2.6);
+      g.fillStyle = 'rgba(255,105,125,0.26)';
+      g.fillRect(W - 2.4, 5.1, 1.5, 0.85);
+      g.fillStyle = 'rgba(255,255,255,0.18)';
+      g.fillRect(W - 2.0, 3.6, 0.8, 0.45);
+      return;
     }
+    if (face !== 'front') return;
+
+    // Rosy cheek blush + warm specular dot
+    g.fillStyle = 'rgba(255,105,125,0.38)';
+    g.fillRect(0.65, 5.25, 2.0, 1.05);
+    g.fillRect(7.35, 5.25, 2.0, 1.05);
+    g.fillStyle = 'rgba(255,230,235,0.45)';
+    g.fillRect(0.95, 5.4, 0.55, 0.35);
+    g.fillRect(8.4, 5.4, 0.55, 0.35);
+
+    const eh = look.glasses ? 1.6 : 2.15;
+    for (const ex of [1.55, 5.95]) {
+      // Subtle upper-eyelid crease for volumetric depth
+      g.fillStyle = fc(sh(look.skin, -0.16));
+      g.fillRect(ex, 2.65, 2.5, 0.32);
+
+      if (blink) {
+        // Closed eyelid with gentle lash curve
+        g.fillStyle = fc(sh(look.skin, -0.08));
+        g.fillRect(ex, 3.0, 2.5, eh * 0.75);
+        g.fillStyle = look.eye;
+        g.fillRect(ex - 0.1, 3.85, 2.7, 0.48);
+        g.fillRect(ex < 5 ? ex - 0.35 : ex + 2.45, 3.65, 0.35, 0.45);
+      } else {
+        // Open eye: sclera, iris outer tone, deep pupil core, and dual catchlights
+        g.fillStyle = fc('#ffffff');
+        g.fillRect(ex, 3.0, 2.5, eh);
+        g.fillStyle = sh(look.eye, 0.18);
+        g.fillRect(ex + 0.45, 3.0, 1.6, eh);
+        g.fillStyle = look.eye;
+        g.fillRect(ex + 0.7, 3.15, 1.15, eh - 0.25);
+        g.fillStyle = '#ffffff';
+        g.fillRect(ex + 0.55, 3.1, 0.68, 0.68);
+        g.fillStyle = 'rgba(255,255,255,0.75)';
+        g.fillRect(ex + 1.45, 3.95, 0.38, 0.38);
+      }
+
+      if (look.lashes) {
+        g.fillStyle = look.eye;
+        g.fillRect(ex - 0.1, 2.55, 2.7, 0.45);
+        g.fillRect(ex < 5 ? ex - 0.45 : ex + 2.5, 2.85, 0.42, 0.52);
+        g.fillStyle = look.brow;
+        g.fillRect(ex, 1.95, 2.5, 0.4);
+      } else if (!look.mustache) {
+        g.fillStyle = look.brow;
+        const browTilt = look.mouth === 'frown' || action === 'treadmill';
+        if (browTilt) {
+          g.fillRect(ex - 0.1, ex < 5 ? 2.05 : 2.25, 1.35, 0.48);
+          g.fillRect(ex + 1.25, ex < 5 ? 2.25 : 2.05, 1.35, 0.48);
+        } else {
+          const lift = action === 'eat' || look.mouth === 'open' ? -0.15 : 0;
+          g.fillRect(ex - 0.1, 2.08 + lift, 2.7, 0.48);
+        }
+      }
+    }
+
     if (look.glasses) {
       g.strokeStyle = '#3a3340'; g.lineWidth = 0.35;
       g.strokeRect(1.3, 2.5, 3.2, 2.5); g.strokeRect(5.5, 2.5, 3.2, 2.5);
       g.fillStyle = '#3a3340'; g.fillRect(4.5, 3.4, 1, 0.35);
     }
-    const m = look.mouth;
+
     if (look.mustache) return;
-    if (m === 'lips') { g.fillStyle = '#c0304a'; g.fillRect(3.8, 6.5, 2.4, 0.9); }
-    else if (m === 'open') { g.fillStyle = '#5a1f2c'; g.fillRect(4, 6.4, 2, 1.1); g.fillStyle = '#e0707a'; g.fillRect(4.3, 7, 1.4, 0.4); }
-    else { g.fillStyle = '#a8505a'; g.fillRect(3.9, 6.7, 2.2, 0.5); g.fillRect(3.6, m === 'frown' ? 7 : 6.4, 0.4, 0.4); g.fillRect(6, m === 'frown' ? 7 : 6.4, 0.4, 0.4); }
+    const m = action === 'eat'
+      ? (actionFrame % 2 === 1 ? 'chew' : 'smile')
+      : action === 'treadmill'
+        ? 'pant'
+        : look.mouth;
+
+    if (m === 'lips') {
+      g.fillStyle = '#c0304a'; g.fillRect(3.75, 6.45, 2.5, 0.9);
+      g.fillStyle = '#ff8da1'; g.fillRect(4.15, 6.55, 1.5, 0.3);
+    } else if (m === 'open' || m === 'pant') {
+      g.fillStyle = '#5a1f2c'; g.fillRect(3.95, 6.35, 2.1, 1.15);
+      g.fillStyle = '#ffffff'; g.fillRect(4.15, 6.35, 1.7, 0.3);
+      g.fillStyle = '#e0707a'; g.fillRect(4.25, 7.0, 1.5, 0.45);
+    } else if (m === 'chew') {
+      g.fillStyle = '#9e4450'; g.fillRect(4.1, 6.55, 1.8, 0.75);
+      g.fillStyle = 'rgba(255,120,135,0.45)'; g.fillRect(6.4, 5.9, 1.1, 0.9);
+    } else {
+      g.fillStyle = '#a8505a';
+      g.fillRect(3.85, 6.68, 2.3, 0.5);
+      g.fillRect(3.55, m === 'frown' ? 7.0 : 6.38, 0.42, 0.42);
+      g.fillRect(6.03, m === 'frown' ? 7.0 : 6.38, 0.42, 0.42);
+    }
   };
 }
 
@@ -403,7 +559,18 @@ export function renderCharacter(look, dir, pose, makeCanvas, scale = 1) {
 const cache = new Map();
 /** Cached figure canvas for a look / facing / pose / scale. */
 export function getCharacterCanvas(key, look, dir, pose, scale = 1) {
-  const k = `${key}|${dir}|${pose.stride || 0}|${pose.sit ? 1 : 0}|${scale}`;
+  const k = [
+    key,
+    dir,
+    pose.stride || 0,
+    pose.sit ? 1 : 0,
+    pose.lie ? 1 : 0,
+    pose.blink ? 1 : 0,
+    pose.breathe || 0,
+    pose.action || '',
+    pose.actionFrame || 0,
+    scale,
+  ].join('|');
   if (!cache.has(k)) {
     cache.set(k, renderCharacter(look, dir, pose, (w, h) => {
       const c = document.createElement('canvas'); c.width = w; c.height = h; return c;

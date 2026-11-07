@@ -210,6 +210,16 @@ html, body {
   margin-bottom: 6px;
   font-size: 13px;
 }
+.elevator-group-title {
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #b8a6ea;
+  padding: 6px 4px 3px;
+  border-bottom: 1px solid #352a5c;
+  margin-bottom: 5px;
+}
 .elevator-item.active-floor {
   border-color: #ffd27a;
   background: #281e46;
