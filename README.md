@@ -32,7 +32,8 @@ Then open **http://localhost:8080** in a modern desktop or mobile browser.
 | Walk | Click a floor tile — your avatar pathfinds there automatically |
 | Sit | Click a chair/sofa/stool — you'll walk over and sit facing it |
 | Chat | Type in the chat box and press Enter / Send; nearby guests reply |
-| Switch rooms | Walk onto a doorway tile at the top wall |
+| Switch rooms | Walk onto a doorway tile, or open the **🛗 Elevator** (`E`) to travel to any of the 10 floors |
+| Visit My Room | Click **🔑 My Room** or select **Floor 8 — My Room** in the Elevator Directory |
 | Buy / place furniture | Open **Items**, buy from the Shop tab, then **Place** it and click a tile (ghost preview shows green/red for valid/invalid) |
 | Move / pick up furniture | Open **Items → In This Room**, use **Move** or **Pick up** |
 | Rotate while placing | `R` or the Rotate button |
@@ -40,18 +41,26 @@ Then open **http://localhost:8080** in a modern desktop or mobile browser.
 
 ### Keyboard shortcuts
 
-`I` inventory · `Q` quests · `M` mute/unmute music · `H` help · `S` manual save
+`E` elevator directory · `I` inventory · `Q` quests · `M` mute/unmute music · `H` help · `S` manual save · `R` rotate (while placing) · `Esc` cancel/close
 
 ## Features
 
-- Isometric tile-based rooms (Grand Lobby + Rooftop Lounge) rendered on
-  `<canvas>` with depth-sorted floor/wall/furniture/avatar pixel art and crisp
-  (non-smoothed) pixel scaling.
-- Procedural 3D voxel characters: player avatar and four original NPC guests
-  (Mochi the bellhop, grumpy Gus, Dr. Pix the eccentric scientist, and Lola the
-  lounge singer) built from volumetric axis-aligned box models with true 4-way
-  rotation (no 2D mirroring), animated walk strides, sitting poses, custom
-  outfits and accessories, and soft floor contact shadows.
+- **Crisp Native-DPR Isometric Rendering**: `<canvas>` backing store automatically matches `CSS box × devicePixelRatio` via `ResizeObserver`, with DPR-scaled sprite/voxel caches blitted 1:1 to device pixels and crisp `system-ui` canvas/UI typography.
+- **Procedural Parallax City Skyline Backdrop**: Day/night sky gradients, sun and moon arcs, twinkling stars, coastal hills, harbour water, 3 deterministic seeded skyscraper layers with windows that light up at dusk/night, and blinking aircraft warning beacons — cached to offscreen canvases per time bucket.
+- **Skyscraper Tower Cut-Away**: Every floor is presented as an architectural cut-away slice of a 10-story hotel tower with reinforced concrete floor and ceiling slabs, structural steel beam markers, exterior columns, and lit windows/silhouettes on neighbouring upper and lower floors (with an open-sky parapet on the Floor 10 Rooftop Lounge).
+- **10-Floor Hotel Tower & Elevator Navigation**:
+  - **Floor 1 — Grand Lobby** (`lobby`)
+  - **Floor 2 — Starlight Cafe & Bar** (`cafe`)
+  - **Floor 3 — Skyline Restaurant** (`restaurant`)
+  - **Floor 4 — Pulse Fitness Gym** (`gym`)
+  - **Floor 5 — Azure Pool & Spa** (`pool`)
+  - **Floor 6 — Pixel Arcade & Games** (`arcade`)
+  - **Floor 7 — Quiet Library & Hub** (`library`)
+  - **Floor 8 — My Room** (`myroom`, your personal customizable suite)
+  - **Floor 9 — Cloud Nine Sky Garden** (`garden`)
+  - **Floor 10 — Rooftop Lounge** (`rooftop`)
+  - Ride between any floor using the **🛗 Elevator** button (`E`), **🔑 My Room** shortcut, or the brushed-steel elevator doors in every room, with animated doors and floor counter.
+- **Procedural 3D Voxel Characters**: Player avatar and 11 original NPC guests/staff built from volumetric axis-aligned box models with true 4-way rotation, walk strides, sitting poses, custom outfits/accessories, name tags, and soft floor contact shadows.
 - Perspective-integrated wall windows cut into north and west wall planes with
   recessed side reveals, inner sills, dynamic daylight sky gradients, sash bars,
   glare highlights, and projecting stone sills and lintels.

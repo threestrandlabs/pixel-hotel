@@ -449,10 +449,10 @@ test('rendering: both wall window orientations generate nonempty bounded sprites
   }
 });
 
-// ======================= volumetric furniture regression (v0.3.0) =======================
+// ======================= volumetric furniture regression (v0.3.0 / v0.4.0) =======================
 
 test('furniture: all catalogue model sprites generate nonempty bounded sprites with meaningful volumetric faces', () => {
-  assert.equal(CATALOGUE.length, 22, 'catalogue should contain 14 legacy + 8 new items');
+  assert.ok(CATALOGUE.length >= 41, 'catalogue should contain legacy + v0.3.0 + v0.4.0 items');
 
   for (const item of CATALOGUE) {
     const builder = FURNITURE_BUILDERS[item.spriteKey];
@@ -619,4 +619,82 @@ test('seating: seat items correctly rotate facing direction and seat interaction
   };
   assert.equal(isBlocked(3, 3), false, 'stool tile is unblocked for sitting');
   assert.equal(isBlocked(2, 4), false, 'armchair tile is unblocked for sitting');
+});
+
+// ======================= v0.4.0 hotel expansion, save migration & DPR tests =======================
+
+test('v0.4.0 rooms: all 10 floors (including facilities and My Room) have unique floor numbers, elevator doors, and valid pathfinding', () => {
+  const requiredRooms = ['lobby', 'cafe', 'restaurant', 'gym', 'pool', 'arcade', 'library', 'myroom', 'garden', 'rooftop'];
+  for (const id of requiredRooms) {
+    assert.ok(ROOMS[id], `missing room ${id}`);
+  }
+  const floors = new Set(Object.values(ROOMS).map((r) => r.floor));
+  assert.equal(floors.size, Object.keys(ROOMS).length, 'every room must have a unique floor number');
+
+  for (const room of Object.values(ROOMS)) {
+    const elevDoor = room.doors.find((d) => d.elevator);
+    assert.ok(elevDoor, `room ${room.id} should have an elevator door tile`);
+    const isBlocked = (x, y) => room.grid[y][x] === TILE.WALL || room.grid[y][x] === TILE.WINDOW;
+    const path = findPath(room.width, room.height, isBlocked, room.spawn, { x: elevDoor.x, y: elevDoor.y });
+    assert.ok(path && path.length > 1, `expected walkable path from spawn to elevator door in ${room.id}`);
+  }
+});
+
+test('v0.4.0 migration: v1 save migrates to v2 keeping coins, inventory, lobby/rooftop items and adding new rooms & My Room', () => {
+  const v1Save = {
+    version: 1,
+    coins: 345,
+    unlocked: ['rug'],
+    inventory: [{ instanceId: 'inv-1', itemId: 'lamp' }],
+    rooms: {
+      lobby: { placed: [{ instanceId: 'custom-1', itemId: 'stool', x: 2, y: 2, rot: 0 }] },
+      rooftop: { placed: [] },
+    },
+    quests: {
+      quest_greet: { progress: 3, complete: true, claimed: true },
+    },
+    player: { room: 'lobby', x: 5, y: 3, dir: 'left', sitting: null },
+  };
+  const storage = makeFakeStorage({ [SAVE_KEY]: JSON.stringify(v1Save) });
+  const loaded = loadState(storage);
+  assert.equal(loaded.version, 2);
+  assert.equal(loaded.coins, 345);
+  assert.deepEqual(loaded.unlocked, ['rug']);
+  assert.equal(loaded.inventory.length, 1);
+  assert.equal(loaded.rooms.lobby.placed.length, 1);
+  assert.equal(loaded.rooms.lobby.placed[0].instanceId, 'custom-1');
+  assert.equal(loaded.rooms.rooftop.placed.length, 0);
+  // New rooms and My Room are seeded automatically
+  assert.ok(loaded.rooms.gym && loaded.rooms.gym.placed.length > 5);
+  assert.ok(loaded.rooms.restaurant && loaded.rooms.restaurant.placed.length > 5);
+  assert.ok(loaded.rooms.myroom && loaded.rooms.myroom.placed.some((p) => p.itemId === 'suite_bed'));
+  // Old quest state preserved, new quests initialised
+  assert.equal(loaded.quests.quest_greet.claimed, true);
+  assert.ok(loaded.quests.quest_gym);
+  assert.ok(loaded.quests.quest_dine);
+  assert.ok(loaded.quests.quest_myroom);
+  assert.ok(loaded.quests.quest_explorer);
+});
+
+test('v0.4.0 quests: gym visit, restaurant dining, My Room decorating, and tower explorer quests complete and grant rewards', () => {
+  const state = createDefaultState();
+  assert.deepEqual(advanceQuestsByType(state, 'visit_gym', 1), ['quest_gym']);
+  assert.deepEqual(advanceQuestsByType(state, 'sit_restaurant', 1), ['quest_dine']);
+  assert.deepEqual(advanceQuestsByType(state, 'decorate_myroom', 3), ['quest_myroom']);
+  const visitDone = setQuestProgress(state, 'visit', 6);
+  assert.ok(visitDone.includes('quest_explorer'));
+});
+
+test('v0.4.0 DPR voxel rendering: renderCharacter scales backing canvas with DPR scale factor', () => {
+  const mockCanvas = (w, h) => ({
+    width: w,
+    height: h,
+    getContext: () => new Proxy({}, { get: () => () => {}, set: () => true }),
+  });
+  const c1 = renderCharacter(LOOKS.player, 'down', { stride: 0 }, mockCanvas, 1);
+  const c2 = renderCharacter(LOOKS.player, 'down', { stride: 0 }, mockCanvas, 2);
+  assert.equal(c2.canvas.width, c1.canvas.width * 2);
+  assert.equal(c2.canvas.height, c1.canvas.height * 2);
+  assert.equal(c2.ox, c1.ox);
+  assert.equal(c2.oy, c1.oy);
 });

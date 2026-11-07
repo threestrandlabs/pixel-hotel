@@ -39,6 +39,34 @@ export const LOOKS = {
     shirt: '#ffe08a', outfit: 'dress', skirt: true, flower: true, bareArms: true,
     pants: '#c98a62', shoe: '#c0304a',
   },
+  barista_pip: { // energetic barista: espresso apron, warm brown hair
+    skin: '#f5cba7', hair: '#6e3b24', hairStyle: 'short', eye: '#2b2230', brow: '#4e2816', mouth: 'smile',
+    shirt: '#e8d8c8', under: '#5c3824', outfit: 'cardigan', pants: '#3b2e2a', shoe: '#5c3824',
+  },
+  chef_remy: { // head chef: white jacket, tall chef toque
+    skin: '#f2c6a0', hair: '#382822', hairStyle: 'short', eye: '#2b2230', brow: '#2a1c18', mouth: 'smile',
+    shirt: '#f8f8fc', gold: '#d84040', outfit: 'bellhop', chefHat: true, pants: '#2f3542', shoe: '#1e222a',
+  },
+  coach_rex: { // fitness trainer: crimson athletic tee, headband
+    skin: '#d99b72', hair: '#282028', hairStyle: 'spiky', eye: '#2b2230', brow: '#1c161c', mouth: 'smile',
+    shirt: '#ff5252', outfit: 'tee', headband: '#ffffff', bareArms: true, pants: '#222836', shoe: '#ff5252',
+  },
+  marina: { // spa attendant: serene aqua wrap, long dark hair, flower
+    skin: '#f7d3b0', hair: '#2a344a', hairStyle: 'long', eye: '#2b2230', brow: '#1e2638', mouth: 'smile', lashes: true,
+    shirt: '#5cd6c8', outfit: 'dress', flower: true, pants: '#3a8c82', shoe: '#f4efe6',
+  },
+  zack: { // arcade wizard: neon purple hoodie, cyan visor goggles
+    skin: '#ffdbb8', hair: '#3a2058', hairStyle: 'spiky', eye: '#2b2230', brow: '#2a1640', mouth: 'open',
+    shirt: '#8c52ff', outfit: 'tee', goggles: true, pants: '#241c38', shoe: '#50f0d0',
+  },
+  clara: { // archivist: emerald cardigan, glasses, bob hair
+    skin: '#fce0c4', hair: '#8c442a', hairStyle: 'bob', eye: '#2b2230', brow: '#68301c', mouth: 'smile',
+    shirt: '#489c72', under: '#fff8e8', outfit: 'cardigan', glasses: true, pants: '#384454', shoe: '#523422',
+  },
+  flora: { // botanist: sage tunic, blonde long hair, flower
+    skin: '#ffd8b4', hair: '#e8b854', hairStyle: 'long', eye: '#2b2230', brow: '#b0842c', mouth: 'smile',
+    shirt: '#78c466', under: '#fff4d4', outfit: 'cardigan', flower: true, pants: '#4a6b48', shoe: '#7c5434',
+  },
 };
 
 // ---------- model ----------
@@ -72,9 +100,10 @@ export function buildParts(look, pose = {}) {
     add(-4.8, 4.8, -3.8, 3.8, 3.8, 5.2, look.shirt, torsoTex(look, true));
   }
 
-  // torso
+  // torso + collar/neck detail
   const tf = look.belly ? 3.1 : 2.4;
   add(-3.5, 3.5, -2.4, tf, 7 + dz, 15 + dz, look.shirt, torsoTex(look));
+  add(-1.8, 1.8, -1.6, 1.8, 14.6 + dz, 15.6 + dz, sh(look.skin, -0.05));
 
   // arms
   for (const s of [-1, 1]) {
@@ -95,7 +124,7 @@ export function buildParts(look, pose = {}) {
   // head: skin box with the face painted on its front plane, plus 3D nose / ears
   add(-5, 5, -4.6, 4.6, 15 + dz, 23 + dz, look.skin, headTex(look));
   const z = (v) => v + dz;
-  add(-0.6, 0.6, 4.6, 5.3, z(17.2), z(18.5), sh(look.skin, -0.03));
+  add(-0.65, 0.65, 4.6, 5.35, z(17.2), z(18.5), sh(look.skin, -0.03));
   const hairy = ['bob', 'long'].includes(look.hairStyle);
   if (!hairy) for (const s of [-1, 1]) add(s > 0 ? 5 : -5.6, s > 0 ? 5.6 : -5, -0.6, 1, z(17.8), z(20), sh(look.skin, -0.05));
   hairBoxes(look, add, z);
@@ -109,10 +138,17 @@ export function buildParts(look, pose = {}) {
   if (look.glasses) {
     for (const s of [-1, 1]) add(s > 0 ? 5 : -5.3, s > 0 ? 5.3 : -5, -1, 4.6, z(19.3), z(19.8), '#3a3340');
   }
+  if (look.headband) {
+    add(-5.4, 5.4, -4.8, 5.1, z(21.4), z(22.5), look.headband);
+  }
   if (look.hat) { // pillbox hat with a gold band and button
     add(-4, 4, -3.8, 3.8, z(24.3), z(25.4), look.gold);
     add(-3.7, 3.7, -3.5, 3.5, z(25.4), z(28), look.shirt, voxTex(5));
     add(-0.7, 0.7, -0.7, 0.7, z(28), z(28.8), look.gold);
+  }
+  if (look.chefHat) { // tall white chef toque
+    add(-4.4, 4.4, -4.2, 4.2, z(24.2), z(25.6), '#e8e8f0');
+    add(-4.8, 4.8, -4.5, 4.5, z(25.6), z(29.5), '#ffffff', voxTex(4));
   }
   if (look.goggles) {
     add(-5, 5, 4.6, 5, z(21), z(22.3), '#2f3a4a');
@@ -156,7 +192,12 @@ function hairBoxes(look, add, z) {
 
 // ---------- textures: tex(g, W, H, fc, face, part) in face units ----------
 
-function soleTex(g, W, H, fc) { g.fillStyle = fc('#2a2030'); g.fillRect(0, H - 0.55, W, 0.55); }
+function soleTex(g, W, H, fc) {
+  g.fillStyle = fc('#2a2030');
+  g.fillRect(0, H - 0.55, W, 0.55);
+  g.fillStyle = 'rgba(255,255,255,0.22)';
+  g.fillRect(0.2, H - 0.85, W - 0.4, 0.25);
+}
 
 function voxTex(seed) {
   return (g, W, H) => { // per-voxel sheen + faint grid so hair reads as stacked voxels
@@ -197,7 +238,8 @@ function headTex(look) {
     for (const ex of [1.6, 5.9]) {
       g.fillStyle = fc('#ffffff'); g.fillRect(ex, 3, 2.5, eh);
       g.fillStyle = look.eye; g.fillRect(ex + 0.5, 3, 1.5, eh);
-      g.fillStyle = '#fff'; g.fillRect(ex + 0.6, 3.1, 0.6, 0.6);
+      g.fillStyle = '#fff'; g.fillRect(ex + 0.6, 3.1, 0.65, 0.65);
+      g.fillStyle = 'rgba(255,255,255,0.65)'; g.fillRect(ex + 1.4, 3.9, 0.35, 0.35);
       if (look.lashes) { g.fillStyle = look.eye; g.fillRect(ex - 0.1, 2.6, 2.7, 0.45); g.fillRect(ex < 5 ? ex - 0.4 : ex + 2.5, 2.9, 0.4, 0.5); }
       else if (!look.mustache) { g.fillStyle = look.brow; g.fillRect(ex - 0.1, 2.1, 2.7, 0.5); }
     }
@@ -223,8 +265,12 @@ function torsoTex(look, skirtTier = false) {
       if (o === 'labcoat') g.fillRect(mid - 0.1, 0, 0.2, H);
       return;
     }
-    if (o === 'tee') { g.fillStyle = fc(look.skin); g.fillRect(mid - 1.3, 0, 2.6, 0.9); g.fillStyle = fc('#ffffff'); g.fillRect(mid - 0.8, 3, 1.6, 1.6); g.fillStyle = fc(sh(look.pants, 0.1)); g.fillRect(0, H - 1.2, W, 1.2); }
-    else if (o === 'bellhop') {
+    if (o === 'tee') {
+      g.fillStyle = fc(look.skin); g.fillRect(mid - 1.3, 0, 2.6, 0.9);
+      g.fillStyle = fc('#ffffff'); g.fillRect(mid - 0.9, 2.8, 1.8, 1.8);
+      g.fillStyle = fc(sh(look.pants, 0.1)); g.fillRect(0, H - 1.2, W, 1.2);
+      g.fillStyle = fc('#f6c667'); g.fillRect(mid - 0.5, H - 1.1, 1.0, 0.9);
+    } else if (o === 'bellhop') {
       g.fillStyle = fc(look.gold); g.fillRect(0, 0, W, 0.7);
       g.fillStyle = fc(sh(look.shirt, -0.25)); g.fillRect(mid - 0.1, 0.7, 0.2, H);
       g.fillStyle = fc(look.gold);
@@ -275,10 +321,11 @@ function faceOf(part, wb, n) {
 }
 
 /**
- * Draws one pose to a canvas. `makeCanvas(w,h)` supplies canvases (browser).
- * Returns { canvas, ox, oy } — (ox,oy) is the figure's ground centre in the canvas.
+ * Draws one pose to a canvas at native `scale` (e.g., devicePixelRatio).
+ * `makeCanvas(w,h)` supplies canvases.
+ * Returns { canvas, ox, oy, scale } — (ox,oy) is the figure's ground centre in CSS pixels.
  */
-export function renderCharacter(look, dir, pose, makeCanvas) {
+export function renderCharacter(look, dir, pose, makeCanvas, scale = 1) {
   const parts = buildParts(look, pose).map((p) => ({ p, wb: worldBox(p, dir) }));
   let minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9;
   for (const { p, wb } of parts) {
@@ -289,10 +336,12 @@ export function renderCharacter(look, dir, pose, makeCanvas) {
   }
   const M = 3;
   const ox = Math.ceil(-minX) + M, oy = Math.ceil(-minY) + M;
-  const W = Math.ceil(maxX - minX) + 2 * M + 1, H = Math.ceil(maxY - minY) + 2 * M + 1;
+  const cssW = Math.ceil(maxX - minX) + 2 * M + 1;
+  const cssH = Math.ceil(maxY - minY) + 2 * M + 1;
+  const W = Math.round(cssW * scale), H = Math.round(cssH * scale);
   const body = makeCanvas(W, H);
   const g = body.getContext('2d');
-  const base = [1, 0, 0, 1, 0, 0];
+  const base = [scale, 0, 0, scale, 0, 0];
   const cen = (q) => q.wb.X0 + q.wb.X1 + q.wb.Y0 + q.wb.Y1 + q.p.z0 + q.p.z1;
   parts.sort((a, b) => cen(a) - cen(b)); // nearer-to-camera boxes (larger x+y+z) paint last
 
@@ -324,36 +373,41 @@ export function renderCharacter(look, dir, pose, makeCanvas) {
       if (p.tex) {
         const o = c[0], u = scr(1, 0), v = scr(0, 1);
         g.save();
-        g.setTransform(u[0] - o[0], u[1] - o[1], v[0] - o[0], v[1] - o[1], o[0], o[1]);
+        g.setTransform(
+          (u[0] - o[0]) * scale, (u[1] - o[1]) * scale,
+          (v[0] - o[0]) * scale, (v[1] - o[1]) * scale,
+          o[0] * scale, o[1] * scale
+        );
         g.beginPath(); g.rect(0, 0, Wd, Hd); g.clip();
         p.tex(g, Wd, Hd, fc, name, p);
         g.restore();
       }
       g.setTransform(...base);
-      g.strokeStyle = 'rgba(30,14,40,0.28)'; g.lineWidth = 0.7;
+      g.strokeStyle = 'rgba(30,14,40,0.28)'; g.lineWidth = 0.65;
       g.beginPath(); c.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y))); g.closePath(); g.stroke();
     }
   }
 
-  // dark silhouette outline around the whole figure
+  // dark silhouette outline around the whole figure at native device pixel radius
   const out = makeCanvas(W, H);
   const og = out.getContext('2d');
-  for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [1, 1], [-1, 1], [1, -1]]) og.drawImage(body, dx, dy);
+  const d = Math.max(1, Math.round(scale));
+  for (const [dx, dy] of [[-d, 0], [d, 0], [0, -d], [0, d], [-d, -d], [d, d], [-d, d], [d, -d]]) og.drawImage(body, dx, dy);
   og.globalCompositeOperation = 'source-in';
   og.fillStyle = OUTLINE; og.fillRect(0, 0, W, H);
   og.globalCompositeOperation = 'source-over';
   og.drawImage(body, 0, 0);
-  return { canvas: out, ox, oy };
+  return { canvas: out, ox, oy, cssW, cssH, scale };
 }
 
 const cache = new Map();
-/** Cached figure canvas for a look / facing / pose. */
-export function getCharacterCanvas(key, look, dir, pose) {
-  const k = `${key}|${dir}|${pose.stride || 0}|${pose.sit ? 1 : 0}`;
+/** Cached figure canvas for a look / facing / pose / scale. */
+export function getCharacterCanvas(key, look, dir, pose, scale = 1) {
+  const k = `${key}|${dir}|${pose.stride || 0}|${pose.sit ? 1 : 0}|${scale}`;
   if (!cache.has(k)) {
     cache.set(k, renderCharacter(look, dir, pose, (w, h) => {
       const c = document.createElement('canvas'); c.width = w; c.height = h; return c;
-    }));
+    }, scale));
   }
   return cache.get(k);
 }

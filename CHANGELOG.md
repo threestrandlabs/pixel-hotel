@@ -4,6 +4,28 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.4.0] - 2026-11-07
+
+### Added
+
+- **Crisp Native-DPR Rendering**:
+  - Dynamic canvas backing store sized to `CSS box * window.devicePixelRatio` with `ResizeObserver` and resize handling.
+  - DPR-aware sprite and voxel character caching (`scale` included in cache keys) blitted 1:1 to integer device pixels.
+  - High-DPI volumetric 3D prism rasterisation for furniture and finer detail on voxel characters.
+  - Readable UI and canvas typography (`system-ui` / sans-serif `>= 13px`, high-contrast pill badges, NPC name tags, and speech bubbles).
+- **Procedural Parallax City Skyline Backdrop**:
+  - Time-of-day sky gradients (noon cerulean, sunset coral/amber, starry midnight navy), sun & moon arcs, twinkling stars, coastal hills, harbour water, 3 deterministic seeded skyscraper layers with windows that light up at dusk/night, and blinking aircraft warning beacons.
+  - Offscreen canvas caching keyed by viewport size, DPR, floor parallax, and quantised time bucket.
+- **Skyscraper Tower Cut-Away Architecture**:
+  - Every room is presented as a cut-away floor of a tall hotel tower with reinforced concrete floor/ceiling slabs, structural steel beam markers, exterior columns, and neighbouring upper/lower floor facade windows and silhouettes (open sky parapet on the Floor 10 Rooftop Lounge). Lower floors stand on a street-level plaza with sidewalk trees and a road; higher floors run off-screen down the tower.
+  - Floor indicator in the top bar (`Floor 1 — Grand Lobby` .. `Floor 10 — Rooftop Lounge`).
+- **10-Floor Hotel Expansion, My Room & Elevator Navigation**:
+  - 8 new rooms across Floors 2–9: **Starlight Cafe & Bar** (F2), **Skyline Restaurant** (F3), **Pulse Fitness Gym** (F4), **Azure Pool & Spa** (F5), **Pixel Arcade & Games** (F6), **Quiet Library & Hub** (F7), **My Room** private player suite (F8), and **Cloud Nine Sky Garden** (F9).
+  - 7 new NPCs (Pip, Chef Sora, Coach Rex, Marina, Zack, Clara, Flora) with custom voxel outfits and themed dialogue.
+  - 19 new volumetric 3D furniture & decor items (`suite_bed`, `treadmill`, `weight_bench`, `dumbbell_rack`, `yoga_mat`, `dining_table`, `dining_chair`, `buffet_counter`, `chef_station`, `pool_water`, `sauna_cabin`, `towel_rack`, `espresso_bar`, `cafe_table`, `pool_table`, `computer_desk`, `sky_tree`, `garden_bench`, `flower_planter`).
+  - **Elevator Directory UI** (`🛗 Elevator` button, `🔑 My Room` shortcut button, keyboard shortcut `E`, and brushed-steel elevator doors in every room) with animated elevator door & floor counter transitions.
+  - 4 new quests (`quest_gym`, `quest_dine`, `quest_myroom`, `quest_explorer`) and `SAVE_VERSION = 2` migration preserving v1 saves.
+
 ## [0.3.1] - 2026-11-07
 
 ### Added

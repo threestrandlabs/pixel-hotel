@@ -53,19 +53,41 @@ const greetedNpcs = new Set(state.stats.greetedNpcs || []);
 let chatLog = [];
 
 const ui = {
-  placing: null, // { instanceId, itemId, rot, fromInventory:bool, moveFromRoom:bool }
+  placing: null, // { instanceId, itemId, rot, moveInstanceId }
   hoverTile: null,
   phase: 0.5, // start at noon
-  startTime: performance.now(),
+  startTime: null,
+  cssW: 960,
+  cssH: 600,
+  dpr: 1,
+  elevatorAnim: null,
 };
+
+function syncCanvasSize() {
+  const rect = canvas.getBoundingClientRect();
+  const dpr = Math.max(1, window.devicePixelRatio || 1);
+  const cssW = Math.max(1, Math.round(rect.width || 960));
+  const cssH = Math.max(1, Math.round(rect.height || 600));
+  const targetW = Math.round(cssW * dpr);
+  const targetH = Math.round(cssH * dpr);
+  if (canvas.width !== targetW || canvas.height !== targetH || ui.dpr !== dpr || ui.cssW !== cssW || ui.cssH !== cssH) {
+    canvas.width = targetW;
+    canvas.height = targetH;
+    ui.cssW = cssW;
+    ui.cssH = cssH;
+    ui.dpr = dpr;
+  }
+}
+
+if (typeof ResizeObserver !== 'undefined') {
+  new ResizeObserver(() => syncCanvasSize()).observe(canvas);
+}
+window.addEventListener('resize', syncCanvasSize);
 
 // ---------- room/state helpers ----------
 
-function currentRoomDef() { return ROOMS[state.player.room]; }
+function currentRoomDef() { return ROOMS[state.player.room] || ROOMS.lobby; }
 function currentRoomRuntime() { return state.rooms[state.player.room]; }
-// inventory.js operates on a single object with both the static grid/bounds
-// and the mutable placed-items list; `placed` stays a reference into
-// state.rooms so push/splice inside inventory.js persist correctly.
 function roomForInventory(roomId = state.player.room) {
   const def = ROOMS[roomId];
   return { width: def.width, height: def.height, grid: def.grid, placed: state.rooms[roomId].placed };
@@ -74,7 +96,7 @@ function roomForInventory(roomId = state.player.room) {
 function furnitureAt(room, roomRuntime, x, y) {
   for (const p of roomRuntime.placed) {
     const item = getCatalogueItem(p.itemId);
-    if (item.flat) continue; // rugs never block or capture clicks
+    if (!item || item.flat) continue;
     const cells = footprintCells(p.x, p.y, item.footprint, p.rot);
     if (cells.some((c) => c.x === x && c.y === y)) return p;
   }
@@ -160,7 +182,7 @@ function updateMover(mover, now, onArrive) {
   }
 }
 
-// ---------- player actions ----------
+// ---------- player actions & elevator navigation ----------
 
 function tryWalkPlayer(tx, ty) {
   const room = currentRoomDef();
@@ -200,13 +222,22 @@ function onPlayerArrive() {
       if (placed.itemId === 'rooftop_sofa') {
         onQuestProgress(advanceQuestsByType(state, 'sit', 1));
       }
+      if (state.player.room === 'restaurant') {
+        onQuestProgress(advanceQuestsByType(state, 'sit_restaurant', 1));
+      }
     }
     persistPlayerPos();
     return;
   }
   if (cell === TILE.DOOR) {
     const doorDef = room.doors.find((d) => d.x === player.x && d.y === player.y);
-    if (doorDef) switchRoom(doorDef.to, doorDef.toTile);
+    if (doorDef) {
+      if (doorDef.elevator) {
+        openElevatorPanel();
+      } else {
+        switchRoom(doorDef.to, doorDef.toTile);
+      }
+    }
     return;
   }
   persistPlayerPos();
@@ -220,19 +251,48 @@ function persistPlayerPos() {
 }
 
 function switchRoom(roomId, toTile) {
+  const targetDef = ROOMS[roomId];
+  if (!targetDef) return false;
+  const dest = toTile || targetDef.spawn;
   state.player.room = roomId;
-  player.x = toTile.x;
-  player.y = toTile.y;
-  player.renderX = toTile.x;
-  player.renderY = toTile.y;
+  player.x = dest.x;
+  player.y = dest.y;
+  player.renderX = dest.x;
+  player.renderY = dest.y;
+  player.walking = false;
+  player.path = null;
   player.sitting = null;
+  player.bubbleText = null;
+  player.bubbleUntil = 0;
   state.player.sitting = null;
   persistPlayerPos();
   visitedRooms.add(roomId);
   state.stats.visitedRooms = Array.from(visitedRooms);
   onQuestProgress(setQuestProgress(state, 'visit', visitedRooms.size));
+  if (roomId === 'gym') {
+    onQuestProgress(advanceQuestsByType(state, 'visit_gym', 1));
+  }
   updateRoomLabel();
   refreshRoomTab();
+  refreshElevatorPanel();
+  autoSave();
+  return true;
+}
+
+function travelByElevator(roomId) {
+  const targetDef = ROOMS[roomId];
+  if (!targetDef) return false;
+  const fromDef = currentRoomDef();
+  ui.elevatorAnim = {
+    fromFloor: fromDef.floor || 1,
+    toFloor: targetDef.floor || 1,
+    toName: targetDef.name,
+    start: performance.now(),
+    duration: 420,
+  };
+  document.getElementById('elevatorPanel')?.classList.add('hidden');
+  audio.playSfx('place');
+  return switchRoom(roomId, targetDef.spawn);
 }
 
 // ---------- chat ----------
@@ -332,7 +392,7 @@ function npcIsBlocked(room, roomRuntime, npcId) {
 
 function tickNpcs(now) {
   for (const n of npcRuntimes) {
-    if (n.room !== state.player.room) continue; // only simulate visible room for simplicity/perf
+    if (n.room !== state.player.room) continue;
     const room = ROOMS[n.room];
     const roomRuntime = state.rooms[n.room];
     updateMover(n, now, () => {
@@ -350,7 +410,7 @@ function tickNpcs(now) {
         if (Math.random() < 0.2) {
           const freeSeat = roomRuntime.placed.find((p) => {
             const item = getCatalogueItem(p.itemId);
-            if (!item.seat) return false;
+            if (!item || !item.seat) return false;
             if (player.sitting === p.instanceId) return false;
             return !npcRuntimes.some((o) => o !== npc && o.sitting === p.instanceId);
           });
@@ -375,7 +435,6 @@ function tickNpcs(now) {
 
 // ---------- rendering frame ----------
 
-// A seated avatar must draw in front of its seat, even on a multi-tile sofa.
 function seatDepth(instanceId) {
   const p = instanceId && currentRoomRuntime().placed.find((f) => f.instanceId === instanceId);
   if (!p) return undefined;
@@ -394,7 +453,7 @@ function buildEntities() {
     if (n.room !== state.player.room) continue;
     list.push({
       x: n.renderX, y: n.renderY, dir: n.dir, frame: n.frame, walking: n.walking, sitting: !!n.sitting, depth: seatDepth(n.sitting),
-      spriteKey: n.id, kind: 'npc', color: n.def.color,
+      spriteKey: n.id, kind: 'npc', color: n.def.color, nameTag: n.def.name,
       bubbleText: n.bubble ? n.bubble.text : null,
     });
   }
@@ -406,8 +465,14 @@ function placedFurnitureWithFootprint(roomRuntime) {
 }
 
 function frame(now) {
+  if (ui.startTime === null) ui.startTime = now;
+  syncCanvasSize();
   tickNpcs(now);
   updateMover(player, now, onPlayerArrive);
+
+  if (ui.elevatorAnim && now - ui.elevatorAnim.start > ui.elevatorAnim.duration) {
+    ui.elevatorAnim = null;
+  }
 
   const room = currentRoomDef();
   const roomRuntime = currentRoomRuntime();
@@ -429,8 +494,11 @@ function frame(now) {
     hoverTile: ui.placing ? null : ui.hoverTile,
     ghost,
     phase: ui.phase,
-    width: canvas.width,
-    height: canvas.height,
+    width: ui.cssW,
+    height: ui.cssH,
+    dpr: ui.dpr,
+    now,
+    elevatorAnim: ui.elevatorAnim,
   });
 
   requestAnimationFrame(frame);
@@ -441,15 +509,13 @@ function frame(now) {
 function getCanvasPos(evt) {
   const rect = canvas.getBoundingClientRect();
   const p = evt.touches ? evt.touches[0] : evt;
-  const scaleX = canvas.width / rect.width;
-  const scaleY = canvas.height / rect.height;
-  return { x: (p.clientX - rect.left) * scaleX, y: (p.clientY - rect.top) * scaleY };
+  return { x: p.clientX - rect.left, y: p.clientY - rect.top };
 }
 
 function pickTile(evt) {
   const { x, y } = getCanvasPos(evt);
   const room = currentRoomDef();
-  const { originX, originY } = computeOrigin(room, canvas.width, canvas.height);
+  const { originX, originY } = computeOrigin(room, ui.cssW, ui.cssH);
   const tile = screenToTile(x, y, originX, originY);
   if (tile.x < 0 || tile.y < 0 || tile.x >= room.width || tile.y >= room.height) return null;
   return tile;
@@ -501,6 +567,15 @@ function cancelPlacing() {
   document.getElementById('placingBar').classList.add('hidden');
 }
 
+function recordPlacementProgress() {
+  state.stats.placedCount = (state.stats.placedCount || 0) + 1;
+  onQuestProgress(advanceQuestsByType(state, 'place', 1));
+  if (state.player.room === 'myroom') {
+    state.stats.myRoomPlacedCount = (state.stats.myRoomPlacedCount || 0) + 1;
+    onQuestProgress(advanceQuestsByType(state, 'decorate_myroom', 1));
+  }
+}
+
 function confirmPlacement(tile) {
   const room = roomForInventory();
   const occ = occupantTilesExcluding(null, null);
@@ -513,8 +588,9 @@ function confirmPlacement(tile) {
   if (result.ok) {
     audio.playSfx('place');
     if (!ui.placing.moveInstanceId) {
-      state.stats.placedCount = (state.stats.placedCount || 0) + 1;
-      onQuestProgress(advanceQuestsByType(state, 'place', 1));
+      recordPlacementProgress();
+    } else if (state.player.room === 'myroom') {
+      onQuestProgress(advanceQuestsByType(state, 'decorate_myroom', 1));
     }
     cancelPlacing();
     refreshBagTab();
@@ -536,9 +612,11 @@ document.getElementById('btnCancelPlace').addEventListener('click', cancelPlacin
 window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     if (!document.getElementById('helpOverlay').classList.contains('hidden')) hideHelp();
+    else if (!document.getElementById('elevatorPanel').classList.contains('hidden')) document.getElementById('elevatorPanel').classList.add('hidden');
     else cancelPlacing();
   }
   else if (e.key.toLowerCase() === 'r' && ui.placing) rotatePlacing();
+  else if (e.key.toLowerCase() === 'e' && !isTypingTarget(e)) togglePanel('elevatorPanel');
   else if (e.key.toLowerCase() === 'i' && !isTypingTarget(e)) togglePanel('inventoryPanel');
   else if (e.key.toLowerCase() === 'q' && !isTypingTarget(e)) togglePanel('questPanel');
   else if (e.key.toLowerCase() === 'm' && !isTypingTarget(e)) toggleMute();
@@ -556,7 +634,17 @@ function togglePanel(id) {
   if (willShow) el.classList.remove('hidden');
   if (id === 'inventoryPanel' && willShow) { refreshShopTab(); refreshBagTab(); refreshRoomTab(); }
   if (id === 'questPanel' && willShow) refreshQuestPanel();
+  if (id === 'elevatorPanel' && willShow) refreshElevatorPanel();
 }
+
+function openElevatorPanel() {
+  document.querySelectorAll('.panel').forEach((p) => p.classList.add('hidden'));
+  document.getElementById('elevatorPanel').classList.remove('hidden');
+  refreshElevatorPanel();
+}
+
+document.getElementById('btnElevator').addEventListener('click', () => togglePanel('elevatorPanel'));
+document.getElementById('btnMyRoom').addEventListener('click', () => travelByElevator('myroom'));
 document.getElementById('btnInventory').addEventListener('click', () => togglePanel('inventoryPanel'));
 document.getElementById('btnQuests').addEventListener('click', () => togglePanel('questPanel'));
 document.querySelectorAll('.panel-close').forEach((btn) => {
@@ -576,7 +664,35 @@ function refreshCoins() {
   document.getElementById('coinsValue').textContent = state.coins;
 }
 function updateRoomLabel() {
-  document.getElementById('roomName').textContent = currentRoomDef().name;
+  const def = currentRoomDef();
+  document.getElementById('roomName').textContent = `Floor ${def.floor || 1} — ${def.name}`;
+}
+
+function refreshElevatorPanel() {
+  const el = document.getElementById('elevatorList');
+  if (!el) return;
+  const floors = Object.values(ROOMS).sort((a, b) => (b.floor || 0) - (a.floor || 0));
+  el.innerHTML = floors.map((r) => {
+    const isCurrent = r.id === state.player.room;
+    return `
+      <div class="elevator-item ${isCurrent ? 'active-floor' : ''}">
+        <div class="floor-pill">F${r.floor}</div>
+        <div class="item-info">
+          <div class="item-name">${r.icon || '🏢'} ${r.name}</div>
+          <div class="item-desc">${r.privateSuite ? 'Your private personal suite' : `Tower Level ${r.floor}`}</div>
+        </div>
+        <div class="item-actions">
+          <button class="pixel-btn elevator-floor-btn" data-floor-room="${r.id}" ${isCurrent ? 'disabled' : ''}>
+            ${isCurrent ? 'Here' : 'Go'}
+          </button>
+        </div>
+      </div>`;
+  }).join('');
+  el.querySelectorAll('[data-floor-room]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      travelByElevator(btn.dataset.floorRoom);
+    });
+  });
 }
 
 function refreshShopTab() {
@@ -587,7 +703,7 @@ function refreshShopTab() {
       <div class="item-swatch" style="background:${swatchColor(item)}"></div>
       <div class="item-info">
         <div class="item-name">${item.name}</div>
-        ${item.description ? `<div class="item-desc" style="font-size:10px;color:#aaa;line-height:1.2;margin:2px 0 3px;">${item.description}</div>` : ''}
+        ${item.description ? `<div class="item-desc">${item.description}</div>` : ''}
         <div>💰 ${item.price}${item.unlocked ? '' : ' <span class="locked-tag">locked</span>'}</div>
       </div>
       <div class="item-actions">
@@ -628,7 +744,7 @@ function refreshBagTab() {
       <div class="item-swatch" style="background:${swatchColor(item)}"></div>
       <div class="item-info">
         <div class="item-name">${item.name}</div>
-        ${item.description ? `<div class="item-desc" style="font-size:10px;color:#aaa;line-height:1.2;margin:2px 0 3px;">${item.description}</div>` : ''}
+        ${item.description ? `<div class="item-desc">${item.description}</div>` : ''}
       </div>
       <div class="item-actions">
         <button class="pixel-btn" data-place="${inv.instanceId}:${inv.itemId}">Place</button>
@@ -658,7 +774,7 @@ function refreshRoomTab() {
       <div class="item-swatch" style="background:${swatchColor(item)}"></div>
       <div class="item-info">
         <div class="item-name">${item.name}</div>
-        ${item.description ? `<div class="item-desc" style="font-size:10px;color:#aaa;line-height:1.2;margin:2px 0 3px;">${item.description}</div>` : ''}
+        ${item.description ? `<div class="item-desc">${item.description}</div>` : ''}
       </div>
       <div class="item-actions">
         <button class="pixel-btn" data-move="${p.instanceId}:${p.itemId}">Move</button>
@@ -710,7 +826,7 @@ function hideHelp() {
 document.getElementById('btnHelp').addEventListener('click', showHelp);
 document.getElementById('btnHelpClose').addEventListener('click', hideHelp);
 document.getElementById('helpOverlay').addEventListener('click', (e) => {
-  if (e.target.id === 'helpOverlay') hideHelp(); // click outside the box
+  if (e.target.id === 'helpOverlay') hideHelp();
 });
 document.getElementById('btnMute').addEventListener('click', toggleMute);
 
@@ -738,8 +854,10 @@ setInterval(autoSave, 15000);
 // ---------- init ----------
 
 function init() {
+  syncCanvasSize();
   refreshCoins();
   updateRoomLabel();
+  refreshElevatorPanel();
   document.getElementById('btnMute').textContent = state.settings.muted ? '🔇' : '🔊';
   audio.setMuted(state.settings.muted);
   if (!window.localStorage.getItem(HELP_SEEN_KEY)) showHelp();
@@ -753,6 +871,7 @@ window.__pixelHotel = {
   getState: () => ({
     coins: state.coins,
     room: state.player.room,
+    floor: currentRoomDef().floor,
     player: { x: player.x, y: player.y, dir: player.dir, sitting: player.sitting },
     inventory: state.inventory,
     rooms: state.rooms,
@@ -762,6 +881,7 @@ window.__pixelHotel = {
   setDayPhase: (p) => { ui.startTime = performance.now() - (p - 0.5) * DAY_CYCLE_MS; }, // 0.5 noon, 0 midnight
   getSaveVersion: () => SAVE_VERSION,
   walkTo: (x, y) => tryWalkPlayer(x, y),
+  takeElevator: (roomId) => travelByElevator(roomId),
   sendChat: (text) => handleChatSubmit(text),
   buy: (itemId) => {
     const r = buyItem(state, itemId);
@@ -772,8 +892,8 @@ window.__pixelHotel = {
     const occ = occupantTilesExcluding(null, null);
     const r = placeItem(state, roomForInventory(), instanceId, x, y, rot, occ);
     if (r.ok) {
-      state.stats.placedCount = (state.stats.placedCount || 0) + 1;
-      onQuestProgress(advanceQuestsByType(state, 'place', 1));
+      recordPlacementProgress();
+      autoSave();
     }
     return r;
   },
@@ -785,7 +905,6 @@ window.__pixelHotel = {
     player.y = 5;
     player.dir = 'left';
     player.sitting = null;
-    // Position NPCs out of the display area so all 8 items are unobscured
     for (const n of npcRuntimes) {
       if (n.id === 'drpix') { n.x = 9; n.y = 6; n.renderX = 9; n.renderY = 6; n.dir = 'left'; n.sitting = null; }
       if (n.id === 'lola') { n.x = 1; n.y = 6; n.renderX = 1; n.renderY = 6; n.dir = 'right'; n.sitting = null; }

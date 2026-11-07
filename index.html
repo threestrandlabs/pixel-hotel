@@ -10,9 +10,11 @@
 <div id="app">
   <header id="topbar">
     <div id="brand">🏨 Pixel Hotel</div>
-    <div id="roomName">Grand Lobby</div>
+    <div id="roomName">Floor 1 — Grand Lobby</div>
     <div id="coinsDisplay">💰 <span id="coinsValue">0</span></div>
     <div id="topButtons">
+      <button id="btnElevator" class="pixel-btn" title="Elevator Directory (E)">🛗 Elevator</button>
+      <button id="btnMyRoom" class="pixel-btn" title="Go to My Room (Floor 8)">🔑 My Room</button>
       <button id="btnInventory" class="pixel-btn" title="Inventory (I)">🛋️ Items</button>
       <button id="btnQuests" class="pixel-btn" title="Quests (Q)">📜 Quests</button>
       <button id="btnMute" class="pixel-btn" title="Mute/unmute (M)">🔇</button>
@@ -39,6 +41,14 @@
       <button type="submit" class="pixel-btn">Send</button>
     </form>
   </div>
+
+  <aside id="elevatorPanel" class="panel hidden">
+    <div class="panel-header">
+      <span>🛗 Tower Elevator Directory</span>
+      <button class="panel-close" data-close="elevatorPanel">✕</button>
+    </div>
+    <div id="elevatorList" class="tab-content"></div>
+  </aside>
 
   <aside id="inventoryPanel" class="panel hidden">
     <div class="panel-header">
@@ -68,13 +78,13 @@
       <h2>Welcome to Pixel Hotel!</h2>
       <ul>
         <li><b>Click a floor tile</b> to walk there.</li>
-        <li><b>Click a chair/sofa</b> to walk over and sit.</li>
+        <li><b>Click a chair/sofa/bed</b> to walk over and sit.</li>
+        <li><b>🛗 Elevator (<kbd>E</kbd>)</b> — ride between all 10 tower floors, facilities, and <b>My Room</b>!</li>
         <li><b>Type in the chat box</b> and press Enter to talk — nearby guests reply!</li>
-        <li><b>🛋️ Items</b> — buy furniture, then place/move/rotate/pick it up.</li>
+        <li><b>🛋️ Items</b> — buy furniture, then place/move/rotate/pick it up in your suite or any room.</li>
         <li><b>📜 Quests</b> — complete goals for coins and unlocks.</li>
-        <li><b>Door tiles</b> at the top wall lead between rooms.</li>
       </ul>
-      <p class="kbd-hint">Shortcuts: <kbd>I</kbd> inventory · <kbd>Q</kbd> quests · <kbd>M</kbd> mute · <kbd>H</kbd> help · <kbd>S</kbd> save · <kbd>R</kbd> rotate (while placing) · <kbd>Esc</kbd> cancel</p>
+      <p class="kbd-hint">Shortcuts: <kbd>E</kbd> elevator · <kbd>I</kbd> inventory · <kbd>Q</kbd> quests · <kbd>M</kbd> mute · <kbd>H</kbd> help · <kbd>S</kbd> save · <kbd>R</kbd> rotate · <kbd>Esc</kbd> cancel</p>
       <button id="btnHelpClose" class="pixel-btn">Got it!</button>
     </div>
   </div>

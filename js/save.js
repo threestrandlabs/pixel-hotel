@@ -19,16 +19,43 @@ export function createDefaultState() {
     rooms,
     quests: initQuestState(),
     player: { room: 'lobby', x: ROOMS.lobby.spawn.x, y: ROOMS.lobby.spawn.y, dir: 'down', sitting: null },
-    stats: { greetedNpcs: [], visitedRooms: ['lobby'], placedCount: 0 },
+    stats: { greetedNpcs: [], visitedRooms: ['lobby'], placedCount: 0, myRoomPlacedCount: 0 },
     settings: { muted: true, helpShown: false },
   };
 }
 
 // Migration chain: each entry upgrades a save from its key version to key+1.
-// Kept intentionally simple since this is the first shipped version, but the
-// structure allows adding future migrations without touching load logic.
 const MIGRATIONS = {
   0: (old) => ({ ...createDefaultState(), ...old, version: 1 }),
+  1: (old) => {
+    const def = createDefaultState();
+    const mergedRooms = { ...def.rooms };
+    if (old.rooms && typeof old.rooms === 'object') {
+      for (const [roomId, rState] of Object.entries(old.rooms)) {
+        if (rState && Array.isArray(rState.placed)) {
+          mergedRooms[roomId] = { ...mergedRooms[roomId], ...rState };
+        }
+      }
+    }
+    const mergedQuests = { ...def.quests };
+    if (old.quests && typeof old.quests === 'object') {
+      for (const [qId, qState] of Object.entries(old.quests)) {
+        if (qState && typeof qState === 'object') {
+          mergedQuests[qId] = { ...mergedQuests[qId], ...qState };
+        }
+      }
+    }
+    return {
+      ...def,
+      ...old,
+      version: 2,
+      rooms: mergedRooms,
+      quests: mergedQuests,
+      player: { ...def.player, ...(old.player || {}) },
+      stats: { ...def.stats, ...(old.stats || {}) },
+      settings: { ...def.settings, ...(old.settings || {}) },
+    };
+  },
 };
 
 function migrate(data) {
@@ -94,12 +121,13 @@ export function loadState(storage) {
 
   // Fill in any missing fields from a default (forward-compat safety net).
   const def = createDefaultState();
+  const playerRoom = data.player?.room && ROOMS[data.player.room] ? data.player.room : 'lobby';
   return {
     ...def,
     ...data,
     rooms: { ...def.rooms, ...data.rooms },
     quests: { ...def.quests, ...data.quests },
-    player: { ...def.player, ...data.player },
+    player: { ...def.player, ...data.player, room: playerRoom },
     stats: { ...def.stats, ...data.stats },
     settings: { ...def.settings, ...data.settings },
   };

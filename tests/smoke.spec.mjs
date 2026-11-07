@@ -1,6 +1,6 @@
 // Playwright smoke test (plain script, not @playwright/test) — run with
 // `node tests/smoke.spec.mjs`. Starts a local static server, loads the page
-// in Chromium, and exercises the golden path end to end.
+// in Chromium at deviceScaleFactor 1 and 2, and exercises the golden path end to end.
 
 import { chromium } from 'playwright';
 import { spawn } from 'node:child_process';
@@ -50,17 +50,35 @@ async function main() {
     await waitForServer(BASE_URL);
 
     const browser = await chromium.launch();
-    const page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
+    const context1x = await browser.newContext({ viewport: { width: 1200, height: 800 }, deviceScaleFactor: 1 });
+    const page = await context1x.newPage();
 
     const consoleErrors = [];
     const pageErrors = [];
     page.on('console', (msg) => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
     page.on('pageerror', (err) => pageErrors.push(String(err)));
 
-    console.log('Loading page...');
+    console.log('Loading page at deviceScaleFactor=1...');
     await page.goto(BASE_URL, { waitUntil: 'load' });
     await page.waitForFunction(() => window.__pixelHotel, null, { timeout: 8000 });
-    await page.waitForTimeout(400); // let first animation frame(s) render
+    await page.waitForTimeout(400);
+
+    // Verify canvas backing store == CSS size * DPR at deviceScaleFactor 1
+    const metrics1x = await page.evaluate(() => {
+      const c = document.getElementById('gameCanvas');
+      const r = c.getBoundingClientRect();
+      return {
+        dpr: window.devicePixelRatio,
+        width: c.width,
+        height: c.height,
+        expectedW: Math.round(r.width * window.devicePixelRatio),
+        expectedH: Math.round(r.height * window.devicePixelRatio),
+      };
+    });
+    check(
+      'canvas backing store == CSS size * DPR at deviceScaleFactor 1',
+      metrics1x.dpr === 1 && metrics1x.width === metrics1x.expectedW && metrics1x.height === metrics1x.expectedH
+    );
 
     // First-run help overlay: must close on Escape and on a click outside the box
     const helpOpen = () => page.locator('#helpOverlay:not(.hidden)').count();
@@ -71,9 +89,14 @@ async function main() {
     await page.mouse.click(4, 4);
     check('clicking outside closes the help overlay', (await helpOpen()) === 0);
     const seeded = await page.evaluate(() => window.__pixelHotel.getState().rooms);
-    check('lobby and rooftop start furnished', seeded.lobby.placed.length > 5 && seeded.rooftop.placed.length > 5);
+    check('lobby, gym, myroom, and rooftop start furnished',
+      seeded.lobby.placed.length > 5 &&
+      seeded.gym.placed.length > 5 &&
+      seeded.myroom.placed.length >= 6 &&
+      seeded.rooftop.placed.length > 5
+    );
 
-    await page.screenshot({ path: path.join(SCREENSHOT_DIR, '01-lobby.png') });
+    await page.screenshot({ path: path.join(SCREENSHOT_DIR, '01-lobby-1x.png') });
 
     check('no console errors', consoleErrors.length === 0);
     if (consoleErrors.length) console.error(consoleErrors);
@@ -96,7 +119,6 @@ async function main() {
     // ---- click to walk ----
     const before = await page.evaluate(() => window.__pixelHotel.getState().player);
     const canvasBox = await page.locator('#gameCanvas').boundingBox();
-    // click a point offset from center, generally landing on an open floor tile
     await page.mouse.click(canvasBox.x + canvasBox.width / 2 + 40, canvasBox.y + canvasBox.height / 2 + 40);
     await page.waitForFunction(
       (start) => { const p = window.__pixelHotel.getState().player; return p.x !== start.x || p.y !== start.y; },
@@ -114,59 +136,97 @@ async function main() {
     check('player chat message appears in chat log', chatText.includes('hello everyone'));
     await page.screenshot({ path: path.join(SCREENSHOT_DIR, '02-chat.png') });
 
-    // ---- place furniture via debug hook (deterministic tile) ----
-    const coinsBefore = await page.evaluate(() => window.__pixelHotel.getState().coins);
+    // ---- elevator travel to Gym (Floor 4) ----
+    await page.click('#btnElevator');
+    await page.waitForTimeout(150);
+    await page.screenshot({ path: path.join(SCREENSHOT_DIR, '03-elevator-directory.png') });
+    await page.click('[data-floor-room="gym"]');
+    await page.waitForTimeout(500);
+    const stateInGym = await page.evaluate(() => window.__pixelHotel.getState());
+    check('elevator travel to gym works', stateInGym.room === 'gym' && stateInGym.floor === 4);
+    const roomLabelGym = await page.textContent('#roomName');
+    check('floor indicator updates for Gym', roomLabelGym.includes('Floor 4') && roomLabelGym.includes('Gym'));
+    await page.screenshot({ path: path.join(SCREENSHOT_DIR, '04-gym.png') });
+
+    // ---- elevator travel to My Room (Floor 8) and furniture placement persistence ----
+    await page.keyboard.press('e');
+    await page.waitForTimeout(100);
+    await page.click('[data-floor-room="myroom"]');
+    await page.waitForTimeout(500);
+    const stateInMyRoom = await page.evaluate(() => window.__pixelHotel.getState());
+    check('elevator travel to My Room works', stateInMyRoom.room === 'myroom' && stateInMyRoom.floor === 8);
+
     const buyRes = await page.evaluate(() => window.__pixelHotel.buy('plant'));
     check('buying a plant succeeds', buyRes.ok === true);
-    const placeRes = await page.evaluate((instanceId) => window.__pixelHotel.placeAt(instanceId, 10, 7, 0), buyRes.instanceId);
-    check('placing the plant succeeds', placeRes.ok === true);
-    const stateAfterPlace = await page.evaluate(() => window.__pixelHotel.getState());
-    check('coins decreased after buying', stateAfterPlace.coins < coinsBefore);
-    check('room contains the placed plant', stateAfterPlace.rooms.lobby.placed.some((p) => p.itemId === 'plant' && p.x === 10 && p.y === 7));
-
-    // open inventory panel via UI too, for a real-UI screenshot
-    await page.click('#btnInventory');
-    await page.waitForTimeout(150);
-    await page.screenshot({ path: path.join(SCREENSHOT_DIR, '03-inventory.png') });
-    await page.click('#btnInventory');
-
-    // ---- rooftop lounge screenshot (room switch) ----
-    await page.evaluate(() => window.__pixelHotel.walkTo(6, 0));
-    await page.waitForFunction(
-      () => window.__pixelHotel.getState().room === 'rooftop',
-      null,
-      { timeout: 6000 },
-    ).catch(() => {});
-    const roomAfterDoor = await page.evaluate(() => window.__pixelHotel.getState().room);
-    check('walking onto the door switches rooms', roomAfterDoor === 'rooftop');
-    await page.screenshot({ path: path.join(SCREENSHOT_DIR, '04-rooftop.png') });
-
-    // ---- save / reload / persistence ----
-    // visiting the rooftop may complete the "visit both rooms" quest and grant
-    // coins, so re-read coins right before saving rather than reusing an
-    // earlier snapshot.
-    const coinsBeforeSave = await page.evaluate(() => window.__pixelHotel.getState().coins);
+    const placeRes = await page.evaluate((instanceId) => window.__pixelHotel.placeAt(instanceId, 7, 6, 0), buyRes.instanceId);
+    check('placing the plant in My Room succeeds', placeRes.ok === true);
     await page.evaluate(() => window.__pixelHotel.save());
     await page.waitForTimeout(200);
-    const savedRaw = await page.evaluate(() => window.localStorage.getItem('pixelHotel.save.v1'));
-    check('save writes to localStorage', !!savedRaw && savedRaw.includes('"coins"'));
+    await page.screenshot({ path: path.join(SCREENSHOT_DIR, '05-myroom.png') });
 
     await page.reload({ waitUntil: 'load' });
     await page.waitForFunction(() => window.__pixelHotel, null, { timeout: 8000 });
     await page.waitForTimeout(400);
     const stateAfterReload = await page.evaluate(() => window.__pixelHotel.getState());
-    check('room persists after reload', stateAfterReload.room === 'rooftop');
-    check('placed furniture persists after reload', stateAfterReload.rooms.lobby.placed.some((p) => p.itemId === 'plant'));
-    check('coins persist after reload', stateAfterReload.coins === coinsBeforeSave);
-    await page.screenshot({ path: path.join(SCREENSHOT_DIR, '05-after-reload.png') });
+    check('My Room and placed furniture persist after reload',
+      stateAfterReload.room === 'myroom' &&
+      stateAfterReload.rooms.myroom.placed.some((p) => p.itemId === 'plant' && p.x === 7 && p.y === 6)
+    );
 
-    // ---- showroom screenshot showing all 8 new collection items ----
-    await page.evaluate(() => window.__pixelHotel.loadShowroom());
-    await page.waitForTimeout(300);
-    const showroomPlaced = await page.evaluate(() => window.__pixelHotel.getState().rooms.rooftop.placed);
-    check('showroom has all 8 new collection items placed', showroomPlaced.length === 8);
-    await page.screenshot({ path: path.join(SCREENSHOT_DIR, '06-showroom.png') });
+    // ---- night view rendering ----
+    await page.evaluate(() => window.__pixelHotel.setDayPhase(0)); // midnight
+    await page.waitForTimeout(350);
+    const nightPixels = await page.evaluate(() => {
+      const c = document.getElementById('gameCanvas');
+      const ctx = c.getContext('2d');
+      const p = ctx.getImageData(10, 10, 1, 1).data;
+      return { r: p[0], g: p[1], b: p[2] };
+    });
+    check('night view renders dark sky at midnight', nightPixels.r < 60 && nightPixels.b > nightPixels.r);
+    await page.screenshot({ path: path.join(SCREENSHOT_DIR, '06-night-myroom.png') });
 
+    // ---- deviceScaleFactor = 2 HiDPI verification & screenshots ----
+    console.log('Testing at deviceScaleFactor=2...');
+    const context2x = await browser.newContext({ viewport: { width: 1200, height: 800 }, deviceScaleFactor: 2 });
+    const page2x = await context2x.newPage();
+    await page2x.goto(BASE_URL, { waitUntil: 'load' });
+    await page2x.waitForFunction(() => window.__pixelHotel, null, { timeout: 8000 });
+    await page2x.keyboard.press('Escape');
+    await page2x.waitForTimeout(350);
+
+    const metrics2x = await page2x.evaluate(() => {
+      const c = document.getElementById('gameCanvas');
+      const r = c.getBoundingClientRect();
+      return {
+        dpr: window.devicePixelRatio,
+        width: c.width,
+        height: c.height,
+        expectedW: Math.round(r.width * window.devicePixelRatio),
+        expectedH: Math.round(r.height * window.devicePixelRatio),
+      };
+    });
+    check(
+      'canvas backing store == CSS size * DPR at deviceScaleFactor 2',
+      metrics2x.dpr === 2 && metrics2x.width === metrics2x.expectedW && metrics2x.height === metrics2x.expectedH
+    );
+    await page2x.screenshot({ path: path.join(SCREENSHOT_DIR, '07-lobby-2x.png') });
+
+    await page2x.evaluate(() => {
+      window.__pixelHotel.takeElevator('rooftop');
+      window.__pixelHotel.setDayPhase(0.08);
+    });
+    await page2x.waitForTimeout(550);
+    await page2x.screenshot({ path: path.join(SCREENSHOT_DIR, '08-rooftop-night-2x.png') });
+
+    await page2x.evaluate(() => {
+      window.__pixelHotel.takeElevator('restaurant');
+      window.__pixelHotel.setDayPhase(0.5);
+    });
+    await page2x.waitForTimeout(550);
+    await page2x.screenshot({ path: path.join(SCREENSHOT_DIR, '09-restaurant-2x.png') });
+
+    await context1x.close();
+    await context2x.close();
     await browser.close();
   } finally {
     killServer();

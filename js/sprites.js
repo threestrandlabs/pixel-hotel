@@ -282,20 +282,69 @@ export function buildDoorSegment(baseColor, kind = 'north') {
   return s;
 }
 
+export function buildElevatorDoorSegment(baseColor, kind = 'north') {
+  const s = buildWallSegment(baseColor, kind);
+  const brass = '#d8a848';
+  const brassLight = '#ffe28a';
+  const steelL = '#9aa8b8';
+  const steelR = '#7c8a9a';
+  const seam = '#28303c';
+  const xl = kind === 'north' ? 34 : 4;
+  const xr = xl + 28;
+  const mid = Math.floor((xl + xr) / 2);
+  const doorH = 48;
+  for (let x = xl; x < xr; x++) {
+    const base = Math.round(ISO.WALL_H + (kind === 'north' ? (x - 32) / 2 : (32 - x) / 2)) - 1;
+    for (let y = base - doorH; y <= base; y++) {
+      const isFrame = x < xl + 3 || x >= xr - 3 || y < base - doorH + 4;
+      const isIndicator = y >= base - doorH - 5 && y < base - doorH && x >= mid - 5 && x <= mid + 5;
+      if (isFrame) {
+        setPixel(s, x, y, x === xl || y === base - doorH ? brassLight : brass);
+      } else {
+        let c = x < mid ? steelL : steelR;
+        if (x === mid) c = seam;
+        else if (y === base - doorH + 6 || y === base - 3) c = shade(c, -0.15);
+        setPixel(s, x, y, c);
+      }
+      if (isIndicator) setPixel(s, x, y, '#1c1828');
+    }
+    // glowing floor indicator dots above elevator arch
+    const indY = Math.round(ISO.WALL_H + (kind === 'north' ? (x - 32) / 2 : (32 - x) / 2)) - doorH - 4;
+    if (x >= mid - 4 && x <= mid + 4) {
+      setPixel(s, x, indY - 1, '#221a30');
+      setPixel(s, x, indY, x % 2 === 0 ? '#ffcf56' : '#ff6b4a');
+      setPixel(s, x, indY + 1, '#221a30');
+    }
+  }
+  return s;
+}
+
+export function buildElevatorTile(baseColor) {
+  const s = buildFloorTile(baseColor, 1);
+  const w = ISO.TILE_W, h = ISO.TILE_H;
+  fillDiamond(s, w / 2, h / 2, w / 2 - 7, h / 2 - 4, '#3a4252');
+  fillDiamond(s, w / 2, h / 2, w / 2 - 11, h / 2 - 6, '#d8a848');
+  fillDiamond(s, w / 2, h / 2, w / 2 - 15, h / 2 - 8, '#546074');
+  return s;
+}
+
 // ---------- Furniture ----------
 
 // Small isometric prism toolkit: (u,v) are tile units along the x/y grid axes,
 // z is pixels of height. Sprites made this way carry ax/ay, the pixel that
-// must land on the footprint centre (the renderer honours them).
+// must land on the footprint centre (the renderer honours them), plus `boxes`
+// so the renderer can rasterise them at native DPR resolution.
 export function isoSprite(tw, th, height, draw) {
   const s = makeGrid((tw + th) * 32 + 2, (tw + th) * 16 + height + 2);
   const px0 = th * 32 + 1;
   const py0 = height + 1;
   const P = (u, v, z) => [px0 + (u - v) * 32, py0 + (u + v) * 16 - z];
+  const boxes = [];
   const box = (u0, v0, u1, v1, z0, z1, top, left, right) => {
     const topC = left !== undefined ? top : shade(top, 0.14);
     const leftC = left !== undefined ? left : top;
     const rightC = right !== undefined ? right : shade(top, -0.22);
+    boxes.push({ u0, v0, u1, v1, z0, z1, topC, leftC, rightC });
     fillPolygon(s, [P(u0, v1, z1), P(u1, v1, z1), P(u1, v1, z0), P(u0, v1, z0)], leftC);
     fillPolygon(s, [P(u1, v0, z1), P(u1, v1, z1), P(u1, v1, z0), P(u1, v0, z0)], rightC);
     fillPolygon(s, [P(u0, v0, z1), P(u1, v0, z1), P(u1, v1, z1), P(u0, v1, z1)], topC);
@@ -305,6 +354,10 @@ export function isoSprite(tw, th, height, draw) {
   const c = P(tw / 2, th / 2, 0);
   out.ax = c[0];
   out.ay = c[1];
+  out.tw = tw;
+  out.th = th;
+  out.height = height;
+  out.boxes = boxes;
   return out;
 }
 
@@ -928,6 +981,286 @@ export function buildCapsuleDispenserSprite(rot = 0) {
   });
 }
 
+export function buildSuiteBedSprite(rot = 0) {
+  const HEAD = ['#6b4226', '#52301a', '#3a2010'];
+  const SHEET = ['#f7f4ee', '#ded8cc', '#b8b0a2'];
+  const DUVET = ['#5a82c8', '#4268ac', '#2c4a82'];
+  const PILLOW = ['#ffffff', '#e6e4ec', '#c4c0cc'];
+  return isoSprite(2, 2, 38, (box) => {
+    box(0.06, 0.06, 1.94, 1.94, 0, 7, ...HEAD);
+    box(0.10, 0.10, 1.90, 1.90, 7, 15, ...SHEET);
+    if (rot % 2 === 0) {
+      box(0.06, 0.06, 1.94, 0.28, 7, 34, ...HEAD);
+      box(0.10, 0.70, 1.90, 1.90, 8, 16, ...DUVET);
+      box(0.24, 0.32, 0.92, 0.64, 15, 19, ...PILLOW);
+      box(1.08, 0.32, 1.76, 0.64, 15, 19, ...PILLOW);
+    } else {
+      box(0.06, 0.06, 0.28, 1.94, 7, 34, ...HEAD);
+      box(0.70, 0.10, 1.90, 1.90, 8, 16, ...DUVET);
+      box(0.32, 0.24, 0.64, 0.92, 15, 19, ...PILLOW);
+      box(0.32, 1.08, 0.64, 1.76, 15, 19, ...PILLOW);
+    }
+  });
+}
+
+export function buildTreadmillSprite(rot = 0) {
+  const [tw, th] = rot % 2 ? [2, 1] : [1, 2];
+  const FRAME = ['#525866', '#3c424e', '#282c36'];
+  const BELT = ['#282a30', '#1c1e24', '#121418'];
+  const SCREEN = ['#38d8f0', '#20a8c0', '#127488'];
+  return isoSprite(tw, th, 42, (box) => {
+    box(0.10, 0.08, tw - 0.10, th - 0.08, 0, 5, ...FRAME);
+    box(0.16, 0.14, tw - 0.16, th - 0.14, 5, 6, ...BELT);
+    if (rot % 2 === 0) {
+      box(0.12, 0.12, 0.22, 0.30, 5, 34, ...FRAME);
+      box(0.78, 0.12, 0.88, 0.30, 5, 34, ...FRAME);
+      box(0.12, 0.10, 0.88, 0.42, 32, 39, ...FRAME);
+      box(0.24, 0.16, 0.76, 0.36, 39, 41, ...SCREEN);
+    } else {
+      box(0.12, 0.12, 0.30, 0.22, 5, 34, ...FRAME);
+      box(0.12, 0.78, 0.30, 0.88, 5, 34, ...FRAME);
+      box(0.10, 0.12, 0.42, 0.88, 32, 39, ...FRAME);
+      box(0.16, 0.24, 0.36, 0.76, 39, 41, ...SCREEN);
+    }
+  });
+}
+
+export function buildWeightBenchSprite(rot = 0) {
+  const [tw, th] = rot % 2 ? [2, 1] : [1, 2];
+  const STEEL = ['#8a92a4', '#687082', '#464c5a'];
+  const PAD = ['#d83c48', '#b02834', '#7e1822'];
+  const PLATE = ['#2c303a', '#1e222a', '#12141a'];
+  return isoSprite(tw, th, 38, (box) => {
+    box(0.26, 0.16, tw - 0.26, th - 0.16, 0, 9, ...STEEL);
+    box(0.22, 0.14, tw - 0.22, th - 0.14, 9, 13, ...PAD);
+    if (rot % 2 === 0) {
+      box(0.14, 0.18, 0.24, 0.28, 0, 30, ...STEEL);
+      box(0.76, 0.18, 0.86, 0.28, 0, 30, ...STEEL);
+      box(0.02, 0.20, 0.98, 0.26, 26, 28, '#d8e0ec', '#b0b8c6', '#7c8494');
+      box(0.04, 0.12, 0.12, 0.34, 21, 33, ...PLATE);
+      box(0.88, 0.12, 0.96, 0.34, 21, 33, ...PLATE);
+    } else {
+      box(0.18, 0.14, 0.28, 0.24, 0, 30, ...STEEL);
+      box(0.18, 0.76, 0.28, 0.86, 0, 30, ...STEEL);
+      box(0.20, 0.02, 0.26, 0.98, 26, 28, '#d8e0ec', '#b0b8c6', '#7c8494');
+      box(0.12, 0.04, 0.34, 0.12, 21, 33, ...PLATE);
+      box(0.12, 0.88, 0.34, 0.96, 21, 33, ...PLATE);
+    }
+  });
+}
+
+export function buildDumbbellRackSprite(rot = 0) {
+  const [tw, th] = rot % 2 ? [1, 2] : [2, 1];
+  const RACK = ['#565e6e', '#3e4452', '#262a34'];
+  const IRON = ['#2e3440', '#20242e', '#14161c'];
+  const CHROME = ['#dce2ee', '#b2bac8', '#808898'];
+  return isoSprite(tw, th, 32, (box) => {
+    box(0.08, 0.14, tw - 0.08, th - 0.14, 0, 10, ...RACK);
+    box(0.10, 0.18, tw - 0.10, th - 0.18, 10, 22, ...RACK);
+    for (let i = 0; i < 4; i++) {
+      const t = 0.20 + i * 0.40;
+      const x = rot % 2 ? 0.28 : t;
+      const y = rot % 2 ? t : 0.28;
+      box(x, y, x + 0.26, y + 0.26, 22, 26, ...IRON);
+      box(x + 0.06, y + 0.06, x + 0.20, y + 0.20, 26, 28, ...CHROME);
+    }
+  });
+}
+
+export function buildYogaMatSprite(rot = 0) {
+  const [tw, th] = rot % 2 ? [2, 1] : [1, 2];
+  const MAT = ['#a678e2', '#8658c2', '#5e3892'];
+  const TRIM = ['#70e4d0', '#4cb8a6', '#2e8476'];
+  return isoSprite(tw, th, 8, (box) => {
+    box(0.12, 0.08, tw - 0.12, th - 0.08, 0, 2, ...MAT);
+    box(0.18, 0.14, tw - 0.18, th - 0.14, 2, 3, ...TRIM);
+    box(0.22, 0.16, 0.68, 0.36, 2, 6, '#f4f0fc', '#d4cce4', '#a49cb8');
+  });
+}
+
+export function buildDiningTableSprite(rot = 0) {
+  const [tw, th] = rot % 2 ? [1, 2] : [2, 1];
+  const LINEN = ['#fbf8f2', '#e2dcd0', '#bab2a4'];
+  const GOLD = ['#f6c862', '#d4a23c', '#986e1c'];
+  return isoSprite(tw, th, 34, (box) => {
+    box(0.20, 0.20, tw - 0.20, th - 0.20, 0, 18, ...WOOD);
+    box(0.06, 0.08, tw - 0.06, th - 0.08, 18, 25, ...LINEN);
+    box(tw / 2 - 0.10, th / 2 - 0.10, tw / 2 + 0.10, th / 2 + 0.10, 25, 31, ...GOLD);
+    box(tw / 2 - 0.06, th / 2 - 0.06, tw / 2 + 0.06, th / 2 + 0.06, 31, 33, '#fff6a0', '#ffc840', '#d08818');
+  });
+}
+
+export function buildDiningChairSprite(rot = 0) {
+  const r = ((rot % 4) + 4) % 4;
+  const VELVET = ['#c83e58', '#a22840', '#721428'];
+  return isoSprite(1, 1, 34, (box) => {
+    box(0.20, 0.20, 0.32, 0.32, 0, 10, ...WOOD);
+    box(0.68, 0.20, 0.80, 0.32, 0, 10, ...WOOD);
+    box(0.20, 0.68, 0.32, 0.80, 0, 10, ...WOOD);
+    box(0.68, 0.68, 0.80, 0.80, 0, 10, ...WOOD);
+    box(0.18, 0.18, 0.82, 0.82, 10, 14, ...VELVET);
+    if (r === 0) box(0.18, 0.16, 0.82, 0.32, 14, 32, ...VELVET);
+    else if (r === 1) box(0.16, 0.18, 0.32, 0.82, 14, 32, ...VELVET);
+    else if (r === 2) box(0.18, 0.68, 0.82, 0.84, 14, 32, ...VELVET);
+    else box(0.68, 0.18, 0.84, 0.82, 14, 32, ...VELVET);
+  });
+}
+
+export function buildBuffetCounterSprite(rot = 0) {
+  const [tw, th] = rot % 2 ? [1, 3] : [3, 1];
+  const MARBLE = ['#f6f0e4', '#dcd2c0', '#b2a692'];
+  const BRASS = ['#f4c662', '#d2a03c', '#986c1c'];
+  return isoSprite(tw, th, 40, (box) => {
+    box(0.06, 0.10, tw - 0.06, th - 0.10, 0, 22, ...WOOD);
+    box(0.02, 0.06, tw - 0.02, th - 0.06, 22, 26, ...MARBLE);
+    for (let i = 0; i < 3; i++) {
+      const t = 0.24 + i * 0.90;
+      const x = rot % 2 ? 0.22 : t;
+      const y = rot % 2 ? t : 0.22;
+      box(x, y, x + 0.52, y + 0.52, 26, 33, ...BRASS);
+    }
+  });
+}
+
+export function buildChefStationSprite(rot = 0) {
+  const [tw, th] = rot % 2 ? [1, 2] : [2, 1];
+  const STEEL = ['#d8dfe8', '#b0b8c4', '#7e8694'];
+  const GRILL = ['#383c46', '#262a32', '#16181e'];
+  const COPPER = ['#e07c44', '#b85c28', '#843c14'];
+  return isoSprite(tw, th, 38, (box) => {
+    box(0.05, 0.08, tw - 0.05, th - 0.08, 0, 24, ...STEEL);
+    box(0.12, 0.14, tw * 0.55, th * 0.82, 24, 27, ...GRILL);
+    box(tw * 0.62, th * 0.24, tw * 0.62 + 0.26, th * 0.24 + 0.26, 24, 33, ...COPPER);
+  });
+}
+
+export function buildPoolWaterSprite(rot = 0) {
+  const RIM = ['#e8f4f8', '#c4dce4', '#92aeb8'];
+  const WATER = ['#48d4e8', '#2ab0c8', '#187c94'];
+  const FOAM = ['#b8f6ff', '#84e2f4', '#50b4c8'];
+  return isoSprite(2, 2, 8, (box) => {
+    box(0.02, 0.02, 1.98, 1.98, 0, 4, ...RIM);
+    box(0.14, 0.14, 1.86, 1.86, 0, 5, ...WATER);
+    box(0.36, 0.44, 0.92, 0.62, 5, 6, ...FOAM);
+    box(1.10, 1.22, 1.64, 1.40, 5, 6, ...FOAM);
+  });
+}
+
+export function buildSaunaCabinSprite(rot = 0) {
+  const [tw, th] = rot % 2 ? [1, 2] : [2, 1];
+  const CEDAR = ['#d48c52', '#b06c36', '#804a1e'];
+  const GLASS = ['#ffb860', '#d88c38', '#985c18'];
+  return isoSprite(tw, th, 56, (box) => {
+    box(0.06, 0.08, tw - 0.06, th - 0.08, 0, 52, ...CEDAR);
+    box(tw * 0.30, th * 0.30, tw * 0.70, th * 0.92, 4, 44, ...GLASS);
+    box(0.04, 0.06, tw - 0.04, th - 0.06, 52, 55, '#e8a468', '#c48248', '#8c5628');
+  });
+}
+
+export function buildTowelRackSprite(rot = 0) {
+  const BAMBOO = ['#dfc082', '#ba9a58', '#886c34'];
+  const TOWEL1 = ['#ffffff', '#dce4ec', '#b0bac6'];
+  const TOWEL2 = ['#68dcd0', '#44b4a8', '#288076'];
+  return isoSprite(1, 1, 42, (box) => {
+    box(0.18, 0.18, 0.82, 0.82, 0, 38, ...BAMBOO);
+    box(0.22, 0.22, 0.78, 0.84, 8, 15, ...TOWEL1);
+    box(0.22, 0.22, 0.78, 0.84, 18, 25, ...TOWEL2);
+    box(0.22, 0.22, 0.78, 0.84, 28, 35, ...TOWEL1);
+  });
+}
+
+export function buildEspressoBarSprite(rot = 0) {
+  const [tw, th] = rot % 2 ? [1, 2] : [2, 1];
+  const COUNTER = ['#5c3c28', '#442a1a', '#2c180e'];
+  const COPPER = ['#e2884e', '#ba6630', '#844218'];
+  const GLASS = ['#d8f2ff', '#a8d4ec', '#74a0bc'];
+  return isoSprite(tw, th, 44, (box) => {
+    box(0.05, 0.08, tw - 0.05, th - 0.08, 0, 24, ...COUNTER);
+    box(0.14 * tw, 0.20 * th, 0.48 * tw, 0.76 * th, 24, 38, ...COPPER);
+    box(0.56 * tw, 0.20 * th, 0.90 * tw, 0.80 * th, 24, 35, ...GLASS);
+  });
+}
+
+export function buildCafeTableSprite(rot = 0) {
+  const BRASS = ['#e8ba54', '#c49434', '#8c6418'];
+  const TOP = ['#f8f4ec', '#dcd4c6', '#b0a898'];
+  return isoSprite(1, 1, 28, (box) => {
+    box(0.30, 0.30, 0.70, 0.70, 0, 4, ...BRASS);
+    box(0.44, 0.44, 0.56, 0.56, 4, 20, ...BRASS);
+    box(0.12, 0.12, 0.88, 0.88, 20, 24, ...TOP);
+    box(0.38, 0.38, 0.58, 0.58, 24, 27, '#d87a48', '#b05a2c', '#7c3a16');
+  });
+}
+
+export function buildPoolTableSprite(rot = 0) {
+  const [tw, th] = rot % 2 ? [1, 2] : [2, 1];
+  const MAHOGANY = ['#7c3626', '#5e2418', '#40140c'];
+  const FELT = ['#28a862', '#1c844a', '#105830'];
+  return isoSprite(tw, th, 30, (box) => {
+    box(0.12, 0.12, 0.26, 0.26, 0, 16, ...MAHOGANY);
+    box(tw - 0.26, 0.12, tw - 0.12, 0.26, 0, 16, ...MAHOGANY);
+    box(0.12, th - 0.26, 0.26, th - 0.12, 0, 16, ...MAHOGANY);
+    box(tw - 0.26, th - 0.26, tw - 0.12, th - 0.12, 0, 16, ...MAHOGANY);
+    box(0.04, 0.06, tw - 0.04, th - 0.06, 16, 24, ...MAHOGANY);
+    box(0.12, 0.14, tw - 0.12, th - 0.14, 24, 26, ...FELT);
+    box(tw * 0.35, th * 0.42, tw * 0.35 + 0.12, th * 0.42 + 0.12, 26, 28, '#ffd840', '#d4a820', '#987410');
+    box(tw * 0.62, th * 0.48, tw * 0.62 + 0.12, th * 0.48 + 0.12, 26, 28, '#ff4050', '#c82030', '#8c101c');
+  });
+}
+
+export function buildComputerDeskSprite(rot = 0) {
+  const [tw, th] = rot % 2 ? [1, 2] : [2, 1];
+  const MONITOR = ['#283040', '#1c222e', '#10141c'];
+  const SCREEN = ['#50d8ff', '#30a8d0', '#187494'];
+  return isoSprite(tw, th, 40, (box) => {
+    box(0.06, 0.10, tw - 0.06, th - 0.10, 0, 22, ...WOOD);
+    box(0.20 * tw, 0.20 * th, 0.56 * tw, 0.42 * th, 22, 36, ...MONITOR);
+    box(0.24 * tw, 0.38 * th, 0.52 * tw, 0.44 * th, 24, 34, ...SCREEN);
+    box(0.64 * tw, 0.28 * th, 0.82 * tw, 0.48 * th, 22, 34, '#f6c862', '#d4a23c', '#986e1c');
+  });
+}
+
+export function buildSkyTreeSprite(rot = 0) {
+  const STONE = ['#949aa8', '#747a88', '#525662'];
+  const TRUNK = ['#6e4832', '#523422', '#382014'];
+  const BLOSSOM1 = ['#ff9ec6', '#de78a2', '#a84e74'];
+  const BLOSSOM2 = ['#ffb8d8', '#f090b8', '#ba6288'];
+  return isoSprite(1, 1, 58, (box) => {
+    box(0.20, 0.20, 0.80, 0.80, 0, 12, ...STONE);
+    box(0.42, 0.42, 0.58, 0.58, 12, 34, ...TRUNK);
+    box(0.14, 0.14, 0.86, 0.86, 32, 46, ...BLOSSOM1);
+    box(0.24, 0.24, 0.76, 0.76, 46, 56, ...BLOSSOM2);
+  });
+}
+
+export function buildGardenBenchSprite(rot = 0) {
+  const r = ((rot % 4) + 4) % 4;
+  const [tw, th] = r % 2 ? [1, 2] : [2, 1];
+  const TEAK = ['#d29456', '#ae743a', '#7e4e20'];
+  const IRON = ['#3c424e', '#2a2e38', '#1a1c22'];
+  return isoSprite(tw, th, 32, (box) => {
+    box(0.08, 0.14, 0.20, th - 0.14, 0, 18, ...IRON);
+    box(tw - 0.20, 0.14, tw - 0.08, th - 0.14, 0, 18, ...IRON);
+    box(0.08, 0.14, tw - 0.08, th - 0.14, 10, 14, ...TEAK);
+    if (r % 2 === 0) box(0.08, 0.12, tw - 0.08, 0.30, 14, 30, ...TEAK);
+    else box(0.12, 0.08, 0.30, th - 0.08, 14, 30, ...TEAK);
+  });
+}
+
+export function buildFlowerPlanterSprite(rot = 0) {
+  const [tw, th] = rot % 2 ? [1, 2] : [2, 1];
+  const STONE = ['#b8b2a6', '#969084', '#6e685e'];
+  const FOLIAGE = ['#4ec464', '#369c4a', '#226c30'];
+  const BLOOM1 = ['#68a8ff', '#4884d8', '#2c5ca0'];
+  const BLOOM2 = ['#ffbe44', '#d89624', '#9c6610'];
+  return isoSprite(tw, th, 32, (box) => {
+    box(0.06, 0.10, tw - 0.06, th - 0.10, 0, 14, ...STONE);
+    box(0.10, 0.14, tw - 0.10, th - 0.14, 14, 24, ...FOLIAGE);
+    box(0.18 * tw, 0.24 * th, 0.44 * tw, 0.72 * th, 24, 30, ...BLOOM1);
+    box(0.56 * tw, 0.24 * th, 0.82 * tw, 0.72 * th, 24, 30, ...BLOOM2);
+  });
+}
+
 export const FURNITURE_BUILDERS = {
   stool: (rot) => buildStoolSprite(rot),
   sofa: (rot) => buildSofaSprite('#e2607a', rot),
@@ -943,7 +1276,7 @@ export const FURNITURE_BUILDERS = {
   bookshelf: (rot) => buildBookshelf(rot),
   barCounter: (rot) => buildBarCounter(rot),
   stringLights: (rot) => buildStringLightsSprite(rot),
-  // 8 new original collection items
+  // 8 original v0.3.0 collection items
   aquarium: (rot) => buildAquariumSprite(rot),
   bobaBar: (rot) => buildBobaBarSprite(rot),
   miniArcade: (rot) => buildMiniArcadeSprite(rot),
@@ -952,6 +1285,26 @@ export const FURNITURE_BUILDERS = {
   telescope: (rot) => buildTelescopeSprite(rot),
   koiPond: (rot) => buildKoiPondSprite(rot),
   capsuleDispenser: (rot) => buildCapsuleDispenserSprite(rot),
+  // 19 original v0.4.0 facility & suite items
+  suiteBed: (rot) => buildSuiteBedSprite(rot),
+  treadmill: (rot) => buildTreadmillSprite(rot),
+  weightBench: (rot) => buildWeightBenchSprite(rot),
+  dumbbellRack: (rot) => buildDumbbellRackSprite(rot),
+  yogaMat: (rot) => buildYogaMatSprite(rot),
+  diningTable: (rot) => buildDiningTableSprite(rot),
+  diningChair: (rot) => buildDiningChairSprite(rot),
+  buffetCounter: (rot) => buildBuffetCounterSprite(rot),
+  chefStation: (rot) => buildChefStationSprite(rot),
+  poolWater: (rot) => buildPoolWaterSprite(rot),
+  saunaCabin: (rot) => buildSaunaCabinSprite(rot),
+  towelRack: (rot) => buildTowelRackSprite(rot),
+  espressoBar: (rot) => buildEspressoBarSprite(rot),
+  cafeTable: (rot) => buildCafeTableSprite(rot),
+  poolTable: (rot) => buildPoolTableSprite(rot),
+  computerDesk: (rot) => buildComputerDeskSprite(rot),
+  skyTree: (rot) => buildSkyTreeSprite(rot),
+  gardenBench: (rot) => buildGardenBenchSprite(rot),
+  flowerPlanter: (rot) => buildFlowerPlanterSprite(rot),
 };
 
 export function shadeColor(hex, amt) {
