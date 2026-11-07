@@ -21,7 +21,14 @@ export function createDefaultState() {
     quests: initQuestState(),
     player: { room: 'lobby', x: ROOMS.lobby.spawn.x, y: ROOMS.lobby.spawn.y, dir: 'down', sitting: null, activity: null },
     stats: { greetedNpcs: [], visitedRooms: ['lobby'], placedCount: 0, myRoomPlacedCount: 0, activitiesUsed: [] },
-    settings: { muted: true, helpShown: false },
+    settings: {
+      muted: false,
+      musicMuted: false,
+      sfxMuted: false,
+      musicVolume: 0.55,
+      sfxVolume: 0.7,
+      helpShown: false,
+    },
   };
 }
 
@@ -162,6 +169,15 @@ export function loadState(storage) {
   // Fill in any missing fields from a default (forward-compat safety net).
   const def = createDefaultState();
   const playerRoom = data.player?.room && ROOMS[data.player.room] ? data.player.room : 'lobby';
+  const rawSettings = data.settings && typeof data.settings === 'object' ? data.settings : {};
+  const mergedSettings = { ...def.settings, ...rawSettings };
+  if (typeof rawSettings.musicMuted !== 'boolean' && typeof rawSettings.muted === 'boolean') {
+    mergedSettings.musicMuted = rawSettings.muted;
+  }
+  if (typeof rawSettings.sfxMuted !== 'boolean' && typeof rawSettings.muted === 'boolean') {
+    mergedSettings.sfxMuted = rawSettings.muted;
+  }
+  mergedSettings.muted = !!(mergedSettings.musicMuted && mergedSettings.sfxMuted);
   return {
     ...def,
     ...data,
@@ -169,7 +185,7 @@ export function loadState(storage) {
     quests: { ...def.quests, ...data.quests },
     player: { ...def.player, ...data.player, room: playerRoom },
     stats: { ...def.stats, ...data.stats },
-    settings: { ...def.settings, ...data.settings },
+    settings: mergedSettings,
   };
 }
 

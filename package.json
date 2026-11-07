@@ -1,6 +1,6 @@
 {
   "name": "pixel-hotel",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "private": true,
   "description": "A cosy, original pixel-art isometric virtual hotel built with plain HTML/CSS/JS.",
   "type": "module",

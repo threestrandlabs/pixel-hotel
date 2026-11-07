@@ -17,7 +17,9 @@
       <button id="btnMyRoom" class="pixel-btn" title="Go to My Room (Floor 8)">🔑 My Room</button>
       <button id="btnInventory" class="pixel-btn" title="Inventory (I)">🛋️ Items</button>
       <button id="btnQuests" class="pixel-btn" title="Quests (Q)">📜 Quests</button>
-      <button id="btnMute" class="pixel-btn" title="Mute/unmute (M)">🔇</button>
+      <button id="btnMusicMute" class="pixel-btn" title="Mute/unmute Music (M)">🎵 On</button>
+      <button id="btnSfxMute" class="pixel-btn" title="Mute/unmute SFX">🔔 On</button>
+      <button id="btnMute" class="pixel-btn" title="Audio Mixer &amp; Volume">🎚️</button>
       <button id="btnHelp" class="pixel-btn" title="Help (H)">❓</button>
       <button id="btnSave" class="pixel-btn" title="Save (S)">💾 Save</button>
       <button id="btnReset" class="pixel-btn" title="Reset progress">♻️ Reset</button>
@@ -71,6 +73,33 @@
       <button class="panel-close" data-close="questPanel">✕</button>
     </div>
     <div id="questList"></div>
+  </aside>
+
+  <aside id="audioPanel" class="panel hidden">
+    <div class="panel-header">
+      <span>🎚️ Lounge Audio &amp; SFX</span>
+      <button class="panel-close" data-close="audioPanel">✕</button>
+    </div>
+    <div class="tab-content audio-controls">
+      <div class="audio-mood-row">
+        <span class="audio-mood-title">Area Mood:</span>
+        <span id="audioMoodLabel" class="audio-mood-badge">Velvet Lounge</span>
+      </div>
+      <div class="audio-channel">
+        <div class="audio-channel-header">
+          <label for="musicVolume">🎵 Lounge Music</label>
+          <button id="btnPanelMusicMute" class="pixel-btn">On</button>
+        </div>
+        <input id="musicVolume" type="range" min="0" max="100" step="5" value="55" />
+      </div>
+      <div class="audio-channel">
+        <div class="audio-channel-header">
+          <label for="sfxVolume">🔔 Soft SFX</label>
+          <button id="btnPanelSfxMute" class="pixel-btn">On</button>
+        </div>
+        <input id="sfxVolume" type="range" min="0" max="100" step="5" value="70" />
+      </div>
+    </div>
   </aside>
 
   <div id="helpOverlay" class="overlay hidden">

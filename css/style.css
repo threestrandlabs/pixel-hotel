@@ -252,6 +252,47 @@ html, body {
 .quest-progress { font-size: 13px; color: #cfc3ee; }
 .quest-complete { color: #7cfc9a; }
 
+.audio-controls { display: flex; flex-direction: column; gap: 10px; }
+.audio-mood-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #1b1430;
+  border: 1px solid #0e0a1d;
+  border-radius: 6px;
+  padding: 7px 10px;
+}
+.audio-mood-title { font-size: 12.5px; color: #cfc3ee; font-weight: 600; }
+.audio-mood-badge {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #ffd27a;
+  background: #352a5c;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+.audio-channel {
+  background: #1b1430;
+  border: 1px solid #0e0a1d;
+  border-radius: 6px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.audio-channel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 600;
+  font-size: 13px;
+}
+.audio-channel input[type="range"] {
+  width: 100%;
+  accent-color: #ffd27a;
+  cursor: pointer;
+}
+
 .overlay {
   position: fixed;
   inset: 0;

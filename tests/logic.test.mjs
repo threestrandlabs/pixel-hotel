@@ -15,6 +15,11 @@ import { getCatalogueItem, TILE, SAVE_VERSION, ROOMS, NPCS, CATALOGUE } from '..
 import { respondToMessage } from '../js/npc.js';
 import { LOOKS, renderCharacter, buildParts } from '../js/voxel.js';
 import { buildWindowSegment, FURNITURE_BUILDERS } from '../js/sprites.js';
+import {
+  tileToScreen, computeOrigin, computeGroundDy, computeCityGroundDy,
+  projectIsoCityPoint, buildIsoCityLayout,
+} from '../js/render.js';
+import { ChiptuneAudio, MOOD_PROFILES, moodForRoom } from '../js/audio.js';
 
 // ---------- fake localStorage ----------
 function makeFakeStorage(initial = {}) {
@@ -912,4 +917,169 @@ test('v0.5.0 voxel characters: distinct treadmill, swim, eat, lie, blink, and br
   assert.notDeepEqual(recordTex(headStand.tex, 'front'), recordTex(headBlink.tex, 'front'), 'blinking changes front face texture');
   const rightOps = recordTex(headStand.tex, 'right');
   assert.ok(rightOps.length >= 2, 'side-profile head texture includes temple sideburn and cheek contour');
+});
+
+// ======================= v0.6.0 isometric city, lounge audio & persisted mutes =======================
+
+test('v0.6.0 isometric city: roads, crossings, blocks, trees, and buildings share the hotel 2:1 isometric axes', () => {
+  const lobby = ROOMS.lobby;
+  const layout = buildIsoCityLayout(lobby, 1200, 800, 0.5);
+  const { originX, originY } = computeOrigin(lobby, 1200, 800);
+
+  // Verify u and v basis vectors match tileToScreen exactly (+32,+16 and -32,+16)
+  const p00 = projectIsoCityPoint(0, 0, 0, originX, layout.groundOriginY);
+  const p10 = projectIsoCityPoint(1, 0, 0, originX, layout.groundOriginY);
+  const p01 = projectIsoCityPoint(0, 1, 0, originX, layout.groundOriginY);
+  const t00 = tileToScreen(0, 0, originX, originY);
+  const t10 = tileToScreen(1, 0, originX, originY);
+  const t01 = tileToScreen(0, 1, originX, originY);
+  assert.equal(p10[0] - p00[0], t10.sx - t00.sx);
+  assert.equal(p10[1] - p00[1], t10.sy - t00.sy);
+  assert.equal(p01[0] - p00[0], t01.sx - t00.sx);
+  assert.equal(p01[1] - p00[1], t01.sy - t00.sy);
+
+  // Every road segment edge lies along a 2:1 isometric slope (|dy/dx| === 0.5)
+  assert.ok(layout.roads.length >= 8, 'city layout contains u and v road avenues');
+  for (const r of layout.roads) {
+    const [a, b, c] = r.pts;
+    const slopeAB = Math.abs((b[1] - a[1]) / (b[0] - a[0]));
+    const slopeBC = Math.abs((c[1] - b[1]) / (c[0] - b[0]));
+    assert.ok(Math.abs(slopeAB - 0.5) < 1e-6, `road edge AB slope ${slopeAB} must be 0.5`);
+    assert.ok(Math.abs(slopeBC - 0.5) < 1e-6, `road edge BC slope ${slopeBC} must be 0.5`);
+  }
+
+  // Zebra crossings, hotel block, varied building heights, trees,lamps & distance haze
+  assert.ok(layout.crossings.length >= 8, 'intersections include isometric pedestrian crossings');
+  const hotelBlock = layout.blocks.find((b) => b.bi === 0 && b.bj === 0);
+  assert.ok(hotelBlock && hotelBlock.kind === 'hotel', 'central block (0,0) is reserved for hotel plaza');
+  assert.ok(hotelBlock.trees.length > 0 && hotelBlock.lamps.length > 0, 'hotel block has perimeter trees and streetlamps');
+
+  const allBuildings = layout.blocks.flatMap((b) => b.buildings).filter((b) => !b.isPlaza);
+  assert.ok(allBuildings.length >= 12, 'surrounding blocks contain 3D isometric buildings');
+  const heights = new Set(allBuildings.map((b) => b.heightZ));
+  assert.ok(heights.size >= 4, 'neighbouring buildings have varied heights');
+
+  // Distance haze increases for blocks farther toward the horizon
+  const sortedByHaze = [...layout.blocks].filter((b) => !(b.bi === 0 && b.bj === 0));
+  const nearBlock = sortedByHaze.find((b) => b.bi + b.bj >= 2);
+  const farBlock = sortedByHaze.find((b) => b.bi + b.bj <= -1);
+  assert.ok(nearBlock && farBlock);
+  assert.ok(farBlock.haze > nearBlock.haze, 'distant blocks have stronger atmospheric haze than foreground blocks');
+
+  // Night phase lights up building facade windows
+  const nightLayout = buildIsoCityLayout(lobby, 1200, 800, 0.02);
+  const nightLitCount = nightLayout.blocks
+    .flatMap((b) => b.buildings)
+    .filter((b) => !b.isPlaza)
+    .flatMap((b) => [...b.windowsLeft, ...b.windowsRight])
+    .filter((w) => w.lit).length;
+  assert.ok(nightLitCount > 25, 'night city layout illuminates building facade windows');
+
+  // Floor-dependent elevation shifts ground plane downward on upper floors
+  assert.ok(computeGroundDy(1) < computeGroundDy(4));
+  assert.ok(computeGroundDy(4) < computeGroundDy(8));
+  assert.ok(computeCityGroundDy(1) < computeCityGroundDy(4));
+  assert.ok(computeCityGroundDy(4) < computeCityGroundDy(10));
+});
+
+test('v0.6.0 audio: defers AudioContext until user gesture, separates music/SFX mutes & volumes, and switches area moods', () => {
+  let createdContexts = 0;
+  let createdOscillators = 0;
+  let createdFilters = 0;
+  class FakeAudioContext {
+    constructor() {
+      createdContexts++;
+      this.state = 'running';
+      this.currentTime = 0;
+      this.sampleRate = 22050;
+      this.destination = {};
+    }
+    createGain() {
+      return {
+        gain: {
+          value: 1,
+          setValueAtTime() {},
+          linearRampToValueAtTime() {},
+          exponentialRampToValueAtTime() {},
+          setTargetAtTime(v) { this.value = v; },
+        },
+        connect() {},
+      };
+    }
+    createBiquadFilter() {
+      createdFilters++;
+      return { type: 'lowpass', frequency: { value: 1000 }, Q: { value: 0.7 }, connect() {} };
+    }
+    createOscillator() {
+      createdOscillators++;
+      return {
+        type: 'sine',
+        frequency: { value: 440, setValueAtTime() {}, exponentialRampToValueAtTime() {} },
+        detune: { value: 0 },
+        connect() {},
+        start() {},
+        stop() {},
+      };
+    }
+    createBuffer(ch, len, sr) {
+      return { getChannelData: () => new Float32Array(len) };
+    }
+    createBufferSource() {
+      return { buffer: null, connect() {}, start() {}, stop() {} };
+    }
+    resume() { this.state = 'running'; }
+  }
+
+  const synth = new ChiptuneAudio(FakeAudioContext);
+  synth.configure({ musicMuted: false, sfxMuted: false, musicVolume: 0.6, sfxVolume: 0.8 });
+
+  // Before gesture: no AudioContext created, SFX blocked
+  assert.equal(synth.isUnlocked(), false);
+  assert.equal(createdContexts, 0, 'AudioContext must not be created before user gesture');
+  assert.equal(synth.playSfx('click'), false);
+
+  // Unlock on user gesture
+  assert.equal(synth.unlockGesture(), true);
+  assert.equal(createdContexts, 1, 'AudioContext created on gesture unlock');
+  synth.stopLoop();
+
+  // Soft filtered SFX and music step synthesis
+  assert.equal(synth.playSfx('coin'), true);
+  assert.equal(synth.playSfx('elevator'), true);
+  assert.equal(synth.playSfx('quest'), true);
+  synth._tickMusicStep();
+  assert.ok(createdOscillators > 4 && createdFilters > 2, 'lounge music & SFX route oscillators through lowpass filters');
+
+  // Independent music vs SFX mute & volume
+  synth.setMusicMuted(true);
+  assert.equal(synth.musicMuted, true);
+  assert.equal(synth.sfxMuted, false, 'muting music leaves SFX unmuted');
+  assert.equal(synth.playSfx('click'), true, 'SFX still plays when only music is muted');
+
+  synth.setSfxMuted(true);
+  assert.equal(synth.playSfx('click'), false, 'SFX muted independently');
+
+  // Area moods & night mood
+  assert.equal(moodForRoom('lobby', 0.5), 'lobby');
+  assert.equal(moodForRoom('gym', 0.5), 'gym');
+  assert.equal(moodForRoom('pool', 0.5), 'spa');
+  assert.equal(moodForRoom('lobby', 0.05), 'night');
+  assert.ok(MOOD_PROFILES.gym.stepMs < MOOD_PROFILES.spa.stepMs, 'gym tempo is faster than spa drift');
+});
+
+test('v0.6.0 persistence: separate musicMuted, sfxMuted, musicVolume, and sfxVolume round-trip through saveState/loadState', () => {
+  const storage = makeFakeStorage();
+  const state = createDefaultState();
+  state.settings.musicMuted = true;
+  state.settings.sfxMuted = false;
+  state.settings.musicVolume = 0.35;
+  state.settings.sfxVolume = 0.85;
+  saveState(storage, state);
+
+  const loaded = loadState(storage);
+  assert.equal(loaded.settings.musicMuted, true);
+  assert.equal(loaded.settings.sfxMuted, false);
+  assert.equal(loaded.settings.musicVolume, 0.35);
+  assert.equal(loaded.settings.sfxVolume, 0.85);
+  assert.equal(loaded.settings.muted, false);
 });

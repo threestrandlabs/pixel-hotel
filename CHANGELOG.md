@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.6.0] - 2026-11-07
+
+### Added
+
+- **Shared Isometric City & Street Grid (`js/render.js`)**:
+  - Replaced the flat front-facing 2D skyline and horizontal road strip with a unified 3D isometric city and ground plane (`projectIsoCityPoint`, `buildIsoCityLayout`, `computeGroundDy`, `computeCityGroundDy`) projected on the exact same 2:1 `(u, v)` axes as the hotel tower.
+  - Added isometric avenues along the `u` and `v` axes, dashed centre lane markings, pedestrian zebra crossings at intersections, raised block sidewalks with kerbs and paving joints, isometric street trees, streetlamps with warm dusk/night glow pools, and foreground fountain park plazas.
+  - Added depth-sorted neighbouring 3D isometric buildings of varied heights (`2`–`10` stories) with true isometric facade windows on both left (`+u`) and right (`+v`) walls, recessed roof decks, rooftop penthouses/spires, HVAC units, skylights, sky-garden terraces, atmospheric distance haze, and floor-dependent camera elevation (street-level avenues on lower floors vs neighbouring isometric rooftops on high floors).
+  - Added offscreen static layer caching (`cutawayCache` + `skylineCache`) for both the isometric city backdrop and the lower tower cutaway shaft.
+- **Procedural Web Audio Lounge/Lofi Music & Soft Enveloped SFX (`js/audio.js`, `js/main.js`, `js/save.js`, `index.html`)**:
+  - Replaced harsh square-wave chiptune beeps with warm procedural Web Audio lounge/lofi looping music featuring low-pass filtered Rhodes/pad 7th chords, triangle sub-bass, bell plucks, and brushed pink-noise percussion.
+  - Added area and time-of-day musical moods (`MOOD_PROFILES`, `moodForRoom`): **Velvet Lounge** (`lobby`), **Pulse Synth Groove** (`gym`), **Azure Spa Drift** (`spa`), and **Midnight Lofi** (`night`).
+  - Added soft low-pass filtered, smooth-enveloped SFX for UI clicks (`click`), player footsteps (`footstep`), shop coins (`coin`), furniture placement (`place`), quest completion (`quest`), chat (`chat`), and two-tone luxury elevator bells (`elevator`).
+  - Added separate Music and SFX mute buttons (`#btnMusicMute`, `#btnSfxMute`) and volume sliders (`#musicVolume`, `#sfxVolume` in `#audioPanel`), persisted in `state.settings` (`musicMuted`, `sfxMuted`, `musicVolume`, `sfxVolume`), and deferred `AudioContext` creation until the first user gesture (`unlockGesture`).
+
 ## [0.5.0] - 2026-11-07
 
 ### Added

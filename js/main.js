@@ -174,6 +174,7 @@ function beginStep(mover, now) {
   mover.dir = directionBetween({ x: mover.x, y: mover.y }, next);
   mover.stepStart = now;
   mover.walking = true;
+  if (mover === player) audio.playSfx('footstep');
 }
 
 function startPath(mover, path, now) {
@@ -370,6 +371,8 @@ function switchRoom(roomId, toTile) {
     onQuestProgress(advanceQuestsByType(state, 'visit_gym', 1));
   }
   updateRoomLabel();
+  audio.setRoomMood(roomId, ui.phase);
+  refreshAudioUi();
   refreshRoomTab();
   refreshElevatorPanel();
   autoSave();
@@ -388,7 +391,7 @@ function travelByElevator(roomId) {
     duration: 420,
   };
   document.getElementById('elevatorPanel')?.classList.add('hidden');
-  audio.playSfx('place');
+  audio.playSfx('elevator');
   return switchRoom(roomId, targetDef.spawn);
 }
 
@@ -620,6 +623,7 @@ function frame(now) {
   const room = currentRoomDef();
   const roomRuntime = currentRoomRuntime();
   ui.phase = (0.5 + (now - ui.startTime) / DAY_CYCLE_MS) % 1;
+  audio.setRoomMood(state.player.room, ui.phase);
 
   let ghost = null;
   if (ui.placing && ui.hoverTile) {
@@ -774,6 +778,7 @@ function togglePanel(id) {
   if (id === 'inventoryPanel' && willShow) { refreshShopTab(); refreshBagTab(); refreshRoomTab(); }
   if (id === 'questPanel' && willShow) refreshQuestPanel();
   if (id === 'elevatorPanel' && willShow) refreshElevatorPanel();
+  if (id === 'audioPanel' && willShow) refreshAudioUi();
 }
 
 function openElevatorPanel() {
@@ -955,13 +960,70 @@ function refreshQuestPanel() {
     </div>`).join('');
 }
 
-// ---------- mute / help / save ----------
+// ---------- mute / audio / help / save ----------
+
+function ensureGestureAudio() {
+  audio.unlockGesture();
+}
+['pointerdown', 'keydown', 'click', 'touchstart'].forEach((ev) => {
+  window.addEventListener(ev, ensureGestureAudio, { passive: true });
+});
+
+function syncSettingsState() {
+  if (typeof state.settings.musicMuted !== 'boolean') state.settings.musicMuted = !!state.settings.muted;
+  if (typeof state.settings.sfxMuted !== 'boolean') state.settings.sfxMuted = !!state.settings.muted;
+  if (typeof state.settings.musicVolume !== 'number') state.settings.musicVolume = 0.55;
+  if (typeof state.settings.sfxVolume !== 'number') state.settings.sfxVolume = 0.7;
+  state.settings.muted = !!(state.settings.musicMuted && state.settings.sfxMuted);
+}
+
+function refreshAudioUi() {
+  syncSettingsState();
+  const mMuted = state.settings.musicMuted || state.settings.musicVolume <= 0;
+  const sMuted = state.settings.sfxMuted || state.settings.sfxVolume <= 0;
+
+  const btnMusic = document.getElementById('btnMusicMute');
+  if (btnMusic) btnMusic.textContent = mMuted ? '🎵 Off' : '🎵 On';
+  const btnSfx = document.getElementById('btnSfxMute');
+  if (btnSfx) btnSfx.textContent = sMuted ? '🔕 Off' : '🔔 On';
+  const btnMute = document.getElementById('btnMute');
+  if (btnMute) btnMute.textContent = (mMuted && sMuted) ? '🔇' : '🎚️';
+
+  const panelMusicBtn = document.getElementById('btnPanelMusicMute');
+  if (panelMusicBtn) panelMusicBtn.textContent = mMuted ? 'Muted' : 'On';
+  const panelSfxBtn = document.getElementById('btnPanelSfxMute');
+  if (panelSfxBtn) panelSfxBtn.textContent = sMuted ? 'Muted' : 'On';
+
+  const musicSlider = document.getElementById('musicVolume');
+  if (musicSlider) musicSlider.value = String(Math.round(state.settings.musicVolume * 100));
+  const sfxSlider = document.getElementById('sfxVolume');
+  if (sfxSlider) sfxSlider.value = String(Math.round(state.settings.sfxVolume * 100));
+
+  const moodEl = document.getElementById('audioMoodLabel');
+  if (moodEl) moodEl.textContent = audio.getMoodInfo().label;
+}
+
+function toggleMusicMute() {
+  syncSettingsState();
+  state.settings.musicMuted = !state.settings.musicMuted;
+  state.settings.muted = !!(state.settings.musicMuted && state.settings.sfxMuted);
+  audio.setMusicMuted(state.settings.musicMuted);
+  refreshAudioUi();
+  saveState(window.localStorage, state);
+}
+
+function toggleSfxMute() {
+  syncSettingsState();
+  state.settings.sfxMuted = !state.settings.sfxMuted;
+  state.settings.muted = !!(state.settings.musicMuted && state.settings.sfxMuted);
+  audio.setSfxMuted(state.settings.sfxMuted);
+  if (!state.settings.sfxMuted) audio.playSfx('click');
+  refreshAudioUi();
+  saveState(window.localStorage, state);
+}
 
 function toggleMute() {
-  state.settings.muted = !state.settings.muted;
-  audio.setMuted(state.settings.muted);
-  document.getElementById('btnMute').textContent = state.settings.muted ? '🔇' : '🔊';
-  autoSave();
+  toggleMusicMute();
 }
 
 function showHelp() { document.getElementById('helpOverlay').classList.remove('hidden'); }
@@ -974,7 +1036,31 @@ document.getElementById('btnHelpClose').addEventListener('click', hideHelp);
 document.getElementById('helpOverlay').addEventListener('click', (e) => {
   if (e.target.id === 'helpOverlay') hideHelp();
 });
-document.getElementById('btnMute').addEventListener('click', toggleMute);
+document.getElementById('btnMute').addEventListener('click', () => togglePanel('audioPanel'));
+document.getElementById('btnMusicMute')?.addEventListener('click', toggleMusicMute);
+document.getElementById('btnSfxMute')?.addEventListener('click', toggleSfxMute);
+document.getElementById('btnPanelMusicMute')?.addEventListener('click', toggleMusicMute);
+document.getElementById('btnPanelSfxMute')?.addEventListener('click', toggleSfxMute);
+document.getElementById('musicVolume')?.addEventListener('input', (e) => {
+  const v = Math.max(0, Math.min(1, Number(e.target.value) / 100));
+  state.settings.musicVolume = v;
+  state.settings.musicMuted = v === 0;
+  state.settings.muted = !!(state.settings.musicMuted && state.settings.sfxMuted);
+  audio.setMusicMuted(state.settings.musicMuted);
+  audio.setMusicVolume(v);
+  refreshAudioUi();
+  saveState(window.localStorage, state);
+});
+document.getElementById('sfxVolume')?.addEventListener('input', (e) => {
+  const v = Math.max(0, Math.min(1, Number(e.target.value) / 100));
+  state.settings.sfxVolume = v;
+  state.settings.sfxMuted = v === 0;
+  state.settings.muted = !!(state.settings.musicMuted && state.settings.sfxMuted);
+  audio.setSfxMuted(state.settings.sfxMuted);
+  audio.setSfxVolume(v);
+  refreshAudioUi();
+  saveState(window.localStorage, state);
+});
 
 function manualSave() {
   persistPlayerPos();
@@ -1001,11 +1087,13 @@ setInterval(autoSave, 15000);
 
 function init() {
   syncCanvasSize();
+  syncSettingsState();
   refreshCoins();
   updateRoomLabel();
   refreshElevatorPanel();
-  document.getElementById('btnMute').textContent = state.settings.muted ? '🔇' : '🔊';
-  audio.setMuted(state.settings.muted);
+  audio.configure(state.settings);
+  audio.setRoomMood(state.player.room, ui.phase);
+  refreshAudioUi();
   if (!window.localStorage.getItem(HELP_SEEN_KEY)) showHelp();
   requestAnimationFrame(frame);
 }
@@ -1030,8 +1118,23 @@ window.__pixelHotel = {
     rooms: state.rooms,
     quests: listQuests(state),
     unlocked: state.unlocked,
+    settings: state.settings,
   }),
-  setDayPhase: (p) => { ui.startTime = performance.now() - (p - 0.5) * DAY_CYCLE_MS; }, // 0.5 noon, 0 midnight
+  getAudioState: () => ({
+    gestureUnlocked: audio.gestureUnlocked,
+    hasContext: !!audio.ctx,
+    musicMuted: audio.musicMuted,
+    sfxMuted: audio.sfxMuted,
+    musicVolume: audio.musicVolume,
+    sfxVolume: audio.sfxVolume,
+    mood: audio.getMoodInfo(),
+  }),
+  setDayPhase: (p) => {
+    ui.startTime = performance.now() - (p - 0.5) * DAY_CYCLE_MS;
+    ui.phase = ((p % 1) + 1) % 1;
+    audio.setRoomMood(state.player.room, ui.phase);
+    refreshAudioUi();
+  }, // 0.5 noon, 0 midnight
   getSaveVersion: () => SAVE_VERSION,
   walkTo: (x, y) => tryWalkPlayer(x, y),
   interactWith: (itemIdOrInstanceId, immediate = false) => {
@@ -1093,7 +1196,11 @@ window.__pixelHotel = {
     return r;
   },
   save: () => manualSave(),
-  reset: () => { state = resetState(window.localStorage); },
+  reset: () => {
+    state = resetState(window.localStorage);
+    audio.configure(state.settings);
+    refreshAudioUi();
+  },
   loadShowroom: () => {
     state.player.room = 'rooftop';
     player.x = 7;

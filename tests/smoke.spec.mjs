@@ -80,11 +80,25 @@ async function main() {
       metrics1x.dpr === 1 && metrics1x.width === metrics1x.expectedW && metrics1x.height === metrics1x.expectedH
     );
 
+    // Verify audio is NOT started before a user gesture
+    const audioBeforeGesture = await page.evaluate(() => window.__pixelHotel.getAudioState());
+    check(
+      'audio context is deferred before first user gesture',
+      audioBeforeGesture.gestureUnlocked === false && audioBeforeGesture.hasContext === false
+    );
+
     // First-run help overlay: must close on Escape and on a click outside the box
     const helpOpen = () => page.locator('#helpOverlay:not(.hidden)').count();
     check('help overlay is shown on first run', (await helpOpen()) === 1);
     await page.keyboard.press('Escape');
     check('Escape closes the help overlay', (await helpOpen()) === 0);
+
+    const audioAfterGesture = await page.evaluate(() => window.__pixelHotel.getAudioState());
+    check(
+      'audio unlocks and initializes after first user gesture',
+      audioAfterGesture.gestureUnlocked === true && audioAfterGesture.hasContext === true
+    );
+
     await page.click('#btnHelp');
     await page.mouse.click(4, 4);
     check('clicking outside closes the help overlay', (await helpOpen()) === 0);
@@ -97,6 +111,7 @@ async function main() {
     );
 
     await page.screenshot({ path: path.join(SCREENSHOT_DIR, '01-lobby-1x.png') });
+    await page.screenshot({ path: '/workspace/pixel-hotel-v060-dpr1.png' });
 
     check('no console errors', consoleErrors.length === 0);
     if (consoleErrors.length) console.error(consoleErrors);
@@ -183,6 +198,20 @@ async function main() {
     check('buying a plant succeeds', buyRes.ok === true);
     const placeRes = await page.evaluate((instanceId) => window.__pixelHotel.placeAt(instanceId, 7, 6, 0), buyRes.instanceId);
     check('placing the plant in My Room succeeds', placeRes.ok === true);
+
+    // ---- separate music and SFX mute/volume controls & persistence ----
+    await page.click('#btnMusicMute');
+    const afterMusicMute = await page.evaluate(() => window.__pixelHotel.getAudioState());
+    check(
+      'toggling Music mute mutes music while leaving SFX unmuted',
+      afterMusicMute.musicMuted === true && afterMusicMute.sfxMuted === false
+    );
+    await page.click('#btnMute');
+    await page.waitForTimeout(100);
+    await page.locator('#sfxVolume').fill('40');
+    await page.locator('#sfxVolume').dispatchEvent('input');
+    await page.click('[data-close="audioPanel"]');
+
     await page.evaluate(() => window.__pixelHotel.save());
     await page.waitForTimeout(200);
     await page.screenshot({ path: path.join(SCREENSHOT_DIR, '05-myroom.png') });
@@ -191,9 +220,17 @@ async function main() {
     await page.waitForFunction(() => window.__pixelHotel, null, { timeout: 8000 });
     await page.waitForTimeout(400);
     const stateAfterReload = await page.evaluate(() => window.__pixelHotel.getState());
+    const audioAfterReload = await page.evaluate(() => window.__pixelHotel.getAudioState());
     check('My Room and placed furniture persist after reload',
       stateAfterReload.room === 'myroom' &&
       stateAfterReload.rooms.myroom.placed.some((p) => p.itemId === 'plant' && p.x === 7 && p.y === 6)
+    );
+    check(
+      'separate musicMuted and sfxVolume settings persist across reload and defer context until gesture',
+      audioAfterReload.musicMuted === true &&
+      audioAfterReload.sfxMuted === false &&
+      Math.abs(audioAfterReload.sfxVolume - 0.4) < 0.01 &&
+      audioAfterReload.hasContext === false
     );
 
     // ---- night view rendering ----
@@ -233,19 +270,10 @@ async function main() {
       metrics2x.dpr === 2 && metrics2x.width === metrics2x.expectedW && metrics2x.height === metrics2x.expectedH
     );
     await page2x.screenshot({ path: path.join(SCREENSHOT_DIR, '07-lobby-2x.png') });
-    await page2x.screenshot({ path: '/workspace/pixel-hotel-v050-lobby.png' });
+    await page2x.screenshot({ path: '/workspace/pixel-hotel-v060-street.png' });
+    await page2x.screenshot({ path: '/workspace/pixel-hotel-v060-dpr2.png' });
 
-    // Facility screenshot: Azure Pool & Spa (Floor 5) with multi-lane swimming
-    await page2x.evaluate(() => {
-      window.__pixelHotel.takeElevator('pool');
-      window.__pixelHotel.setDayPhase(0.52);
-      window.__pixelHotel.setNpcActivity('marina', 'pool_water');
-      window.__pixelHotel.interactWith('pool_water', true);
-    });
-    await page2x.waitForTimeout(550);
-    await page2x.screenshot({ path: '/workspace/pixel-hotel-v050-facility.png' });
-
-    // Interaction screenshot: Pulse Fitness Gym (Floor 4) with dual treadmill cardio
+    // Gym screenshot (Floor 4): Pulse Fitness Gym with isometric city mid-level view & dual treadmill cardio
     await page2x.evaluate(() => {
       window.__pixelHotel.takeElevator('gym');
       window.__pixelHotel.setDayPhase(0.5);
@@ -253,22 +281,32 @@ async function main() {
       window.__pixelHotel.interactWith('treadmill', true);
     });
     await page2x.waitForTimeout(550);
-    await page2x.screenshot({ path: '/workspace/pixel-hotel-v050-interaction.png' });
+    await page2x.screenshot({ path: '/workspace/pixel-hotel-v060-gym.png' });
 
-    // Night screenshot: Skyline Restaurant (Floor 3) at night with eating animation & warm emissive light pools
+    // High-floor screenshot (Floor 10 — Rooftop Lounge): looking across neighbouring isometric rooftops & haze
     await page2x.evaluate(() => {
-      window.__pixelHotel.takeElevator('restaurant');
+      window.__pixelHotel.takeElevator('rooftop');
+      window.__pixelHotel.setDayPhase(0.52);
+      window.__pixelHotel.interactWith('rooftop_sofa', true);
+    });
+    await page2x.waitForTimeout(550);
+    await page2x.screenshot({ path: '/workspace/pixel-hotel-v060-highfloor.png' });
+
+    // Night screenshot: Floor 1 / Floor 3 at night with illuminated isometric city windows, streetlamps & warm emissive pools
+    await page2x.evaluate(() => {
+      window.__pixelHotel.takeElevator('lobby');
       window.__pixelHotel.setDayPhase(0.04);
-      window.__pixelHotel.interactWith('dining_chair', true);
+      window.__pixelHotel.interactWith('sofa', true);
     });
     await page2x.waitForTimeout(550);
     await page2x.screenshot({ path: path.join(SCREENSHOT_DIR, '08-rooftop-night-2x.png') });
-    await page2x.screenshot({ path: '/workspace/pixel-hotel-v050-night.png' });
+    await page2x.screenshot({ path: '/workspace/pixel-hotel-v060-night.png' });
 
     await page2x.evaluate(() => {
+      window.__pixelHotel.takeElevator('restaurant');
       window.__pixelHotel.setDayPhase(0.5);
     });
-    await page2x.waitForTimeout(350);
+    await page2x.waitForTimeout(450);
     await page2x.screenshot({ path: path.join(SCREENSHOT_DIR, '09-restaurant-2x.png') });
 
     await context1x.close();

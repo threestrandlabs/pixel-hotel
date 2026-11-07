@@ -177,7 +177,27 @@ function hexToRgb(hex) {
   return { r: (n >> 16) & 0xff, g: (n >> 8) & 0xff, b: n & 0xff };
 }
 
-// ---------- Deterministic City Skyline Backdrop (Cached Offscreen) ----------
+// ---------- Shared Isometric City & Ground Backdrop (Cached Offscreen) ----------
+
+export const SLAB_H = 16;
+export const STORY_H = 44;
+
+export function computeGroundDy(floor = 1) {
+  return SLAB_H + 6 + (Math.max(1, floor) - 1) * STORY_H;
+}
+
+export function computeCityGroundDy(floor = 1) {
+  const f = Math.max(1, floor);
+  if (f <= 5) return computeGroundDy(f);
+  return computeGroundDy(5) + (f - 5) * 26;
+}
+
+export function projectIsoCityPoint(u, v, z, originX, groundOriginY) {
+  return [
+    originX + (u - v) * (TILE_W / 2),
+    groundOriginY + (u + v) * (TILE_H / 2) - z,
+  ];
+}
 
 function seededRand(seed) {
   let s = seed >>> 0;
@@ -187,11 +207,304 @@ function seededRand(seed) {
   };
 }
 
-let skylineCache = { key: '', canvas: null, beacons: [] };
+export function buildIsoCityLayout(room = { id: 'lobby', width: 12, height: 9, floor: 1 }, width = 960, height = 600, phase = 0.5) {
+  const W = room?.width || 12;
+  const H = room?.height || 9;
+  const floor = room?.floor || 1;
+  const { originX, originY } = computeOrigin({ width: W, height: H }, width, height);
+  const groundDy = computeGroundDy(floor);
+  const cityGroundDy = computeCityGroundDy(floor);
+  const groundOriginY = originY + cityGroundDy;
+  const horizonY = Math.round(height * 0.26 + (floor - 1) * 3);
+  const { day } = dayNightColors(phase);
+  const nightFactor = Math.max(0, Math.min(1, (0.78 - day) * 1.55));
 
-export function drawBackground(ctx, width, height, phase, floor = 1, dpr = 1, now = 0) {
+  const P = (u, v, z = 0) => projectIsoCityPoint(u, v, z, originX, groundOriginY);
+
+  const PAD = 0.6;
+  const ROAD_W = 1.6;
+  const BLK_U = 4.2;
+  const BLK_V = 4.2;
+  const PITCH_U = BLK_U + ROAD_W;
+  const PITCH_V = BLK_V + ROAD_W;
+
+  const uBounds = (bi) => {
+    if (bi === 0) return [-PAD, W + PAD];
+    if (bi < 0) {
+      const u1 = -PAD - ROAD_W + (bi + 1) * PITCH_U;
+      return [u1 - BLK_U, u1];
+    }
+    const u0 = W + PAD + ROAD_W + (bi - 1) * PITCH_U;
+    return [u0, u0 + BLK_U];
+  };
+
+  const vBounds = (bj) => {
+    if (bj === 0) return [-PAD, H + PAD];
+    if (bj < 0) {
+      const v1 = -PAD - ROAD_W + (bj + 1) * PITCH_V;
+      return [v1 - BLK_V, v1];
+    }
+    const v0 = H + PAD + ROAD_W + (bj - 1) * PITCH_V;
+    return [v0, v0 + BLK_V];
+  };
+
+  // Road corridors between block columns (v-axis avenues) and rows (u-axis avenues)
+  const vRoads = [];
+  const uRoads = [];
+  for (let bi = -4; bi <= 3; bi++) {
+    const [, leftU1] = uBounds(bi);
+    const [rightU0] = uBounds(bi + 1);
+    vRoads.push({ axis: 'v', idx: bi, u0: leftU1, u1: rightU0, v0: -38, v1: 44 });
+  }
+  for (let bj = -4; bj <= 3; bj++) {
+    const [, topV1] = vBounds(bj);
+    const [botV0] = vBounds(bj + 1);
+    uRoads.push({ axis: 'u', idx: bj, u0: -38, u1: 44, v0: topV1, v1: botV0 });
+  }
+
+  const roads = [
+    ...vRoads.map((r) => ({ ...r, pts: [P(r.u0, r.v0), P(r.u1, r.v0), P(r.u1, r.v1), P(r.u0, r.v1)] })),
+    ...uRoads.map((r) => ({ ...r, pts: [P(r.u0, r.v0), P(r.u1, r.v0), P(r.u1, r.v1), P(r.u0, r.v1)] })),
+  ];
+
+  // Zebra crossings at intersections around the hotel and neighbouring avenues
+  const crossings = [];
+  for (const vr of vRoads) {
+    if (vr.idx < -2 || vr.idx > 1) continue;
+    for (let bj = -2; bj <= 2; bj++) {
+      const [bv0, bv1] = vBounds(bj);
+      for (const crossV of [bv0 + 0.25, bv1 - 0.75]) {
+        const stripes = [];
+        for (let s = 0; s < 4; s++) {
+          const su0 = vr.u0 + 0.16 + s * 0.34;
+          const su1 = su0 + 0.18;
+          stripes.push([P(su0, crossV), P(su1, crossV), P(su1, crossV + 0.48), P(su0, crossV + 0.48)]);
+        }
+        crossings.push({ axis: 'u', u: (vr.u0 + vr.u1) / 2, v: crossV, stripes });
+      }
+    }
+  }
+  for (const ur of uRoads) {
+    if (ur.idx < -2 || ur.idx > 1) continue;
+    for (let bi = -2; bi <= 2; bi++) {
+      const [bu0, bu1] = uBounds(bi);
+      for (const crossU of [bu0 + 0.25, bu1 - 0.75]) {
+        const stripes = [];
+        for (let s = 0; s < 4; s++) {
+          const sv0 = ur.v0 + 0.16 + s * 0.34;
+          const sv1 = sv0 + 0.18;
+          stripes.push([P(crossU, sv0), P(crossU + 0.48, sv0), P(crossU + 0.48, sv1), P(crossU, sv1)]);
+        }
+        crossings.push({ axis: 'v', u: crossU, v: (ur.v0 + ur.v1) / 2, stripes });
+      }
+    }
+  }
+
+  const hotelWestX = originX + (0.5 - (H - 0.5)) * (TILE_W / 2);
+  const hotelEastX = originX + ((W - 0.5) - 0.5) * (TILE_W / 2);
+  const palettes = [
+    ['#6c7e9c', '#50617c', '#889ab8'],
+    ['#86748e', '#64546c', '#a290aa'],
+    ['#68888e', '#4c686e', '#84a4aa'],
+    ['#927c6e', '#6e5c50', '#ae988a'],
+    ['#5e7092', '#445472', '#7a8cae'],
+    ['#7a846e', '#5a6450', '#96a08a'],
+  ];
+
+  const blocks = [];
+  const beacons = [];
+
+  for (let sum = -8; sum <= 8; sum++) {
+    for (let bi = -4; bi <= 4; bi++) {
+      const bj = sum - bi;
+      if (bj < -4 || bj > 4) continue;
+      const [u0, u1] = uBounds(bi);
+      const [v0, v1] = vBounds(bj);
+      const cPt = P((u0 + u1) / 2, (v0 + v1) / 2, 0);
+      if (cPt[0] < -320 || cPt[0] > width + 320 || cPt[1] < horizonY - 110 || cPt[1] > height + 240) {
+        continue;
+      }
+
+      const distMetric = Math.max(0, (horizonY + 260 - cPt[1]) / 360) + Math.hypot(bi, bj) * 0.09;
+      const haze = Math.max(0, Math.min(0.68, distMetric * 0.42));
+      const rand = seededRand((bi + 17) * 73856093 ^ (bj + 19) * 19349663);
+
+      const trees = [];
+      const lamps = [];
+      const addPerimeterProps = (step = 2.4, frontOnly = false) => {
+        for (let u = u0 + 0.75; u <= u1 - 0.75; u += step) {
+          if (!frontOnly) trees.push({ u, v: v0 + 0.26, layer: 'back' });
+          trees.push({ u, v: v1 - 0.26, layer: 'front' });
+        }
+        for (let v = v0 + 0.95; v <= v1 - 0.95; v += step) {
+          if (!frontOnly) lamps.push({ u: u0 + 0.26, v, layer: 'back' });
+          lamps.push({ u: u1 - 0.26, v, layer: 'front' });
+        }
+      };
+
+      if (bi === 0 && bj === 0) {
+        addPerimeterProps(2.4, true);
+        blocks.push({
+          bi, bj, u0, v0, u1, v1,
+          kind: 'hotel',
+          haze: 0,
+          buildings: [],
+          trees,
+          lamps,
+        });
+        continue;
+      }
+
+      // Subdivide block into parcels (or single parcel on compact outer blocks)
+      const uSpanBlk = u1 - u0;
+      const vSpanBlk = v1 - v0;
+      let parcels;
+      if (bi === 0 && bj === 1) {
+        parcels = [
+          { pu0: u0 + 0.32, pv0: v0 + 0.32, pu1: 2.6, pv1: v1 - 0.32 },
+          { pu0: 3.1, pv0: v0 + 0.32, pu1: u1 - 0.32, pv1: v1 - 0.32 },
+        ];
+      } else if (bi === 1 && bj === 0) {
+        parcels = [
+          { pu0: u0 + 0.32, pv0: v0 + 0.32, pu1: u1 - 0.32, pv1: 2.6 },
+          { pu0: u0 + 0.32, pv0: 3.1, pu1: u1 - 0.32, pv1: v1 - 0.32 },
+        ];
+      } else if (uSpanBlk > 6) {
+        const midU = (u0 + u1) / 2;
+        parcels = [
+          { pu0: u0 + 0.32, pv0: v0 + 0.32, pu1: midU - 0.18, pv1: v1 - 0.32 },
+          { pu0: midU + 0.18, pv0: v0 + 0.32, pu1: u1 - 0.32, pv1: v1 - 0.32 },
+        ];
+      } else if (vSpanBlk > 6) {
+        const midV = (v0 + v1) / 2;
+        parcels = [
+          { pu0: u0 + 0.32, pv0: v0 + 0.32, pu1: u1 - 0.32, pv1: midV - 0.18 },
+          { pu0: u0 + 0.32, pv0: midV + 0.18, pu1: u1 - 0.32, pv1: v1 - 0.32 },
+        ];
+      } else {
+        parcels = [{ pu0: u0 + 0.32, pv0: v0 + 0.32, pu1: u1 - 0.32, pv1: v1 - 0.32 }];
+      }
+
+      const buildings = [];
+      let isParkBlock = (bi === 1 && bj === 1);
+
+      for (let pi = 0; pi < parcels.length; pi++) {
+        const { pu0, pv0, pu1, pv1 } = parcels[pi];
+        const pMinX = P(pu0, pv1, 0)[0];
+        const pMaxX = P(pu1, pv0, 0)[0];
+        const overlapsHotelCorridor = (bi > 0 || bj > 0) && (pMaxX > hotelWestX - 18 && pMinX < hotelEastX + 18);
+
+        if (isParkBlock || overlapsHotelCorridor) {
+          buildings.push({
+            isPlaza: true,
+            u0: pu0, v0: pv0, u1: pu1, v1: pv1,
+            heightZ: 6,
+            roofStyle: 'fountain',
+          });
+          trees.push({ u: (pu0 + pu1) / 2 - 0.9, v: (pv0 + pv1) / 2 + 0.7, layer: 'front' });
+          trees.push({ u: (pu0 + pu1) / 2 + 0.9, v: (pv0 + pv1) / 2 - 0.7, layer: 'front' });
+          continue;
+        }
+
+        // Determine building height (in vertical screen pixels) with rich urban variety
+        const isBackRing = (bi <= 0 && bj <= 0);
+        const minStories = isBackRing ? 3 : 2;
+        const maxStories = isBackRing ? 7 : 6;
+        const rawStories = minStories + Math.floor(rand() * (maxStories - minStories + 1));
+        const storyPx = 22;
+        const baseScreenY = P((pu0 + pu1) / 2, (pv0 + pv1) / 2, 0)[1];
+        const maxAllowedStories = Math.max(2, Math.floor((baseScreenY - 52) / storyPx));
+        const stories = Math.min(rawStories, maxAllowedStories);
+        const heightZ = stories * storyPx;
+        const pal = palettes[Math.floor(rand() * palettes.length)];
+        const roofStyle = Math.floor(rand() * 3); // 0: penthouse+spire, 1: HVAC+skylight, 2: sky-garden
+
+        const windowsLeft = [];
+        const windowsRight = [];
+        const uSpan = pu1 - pu0;
+        const vSpan = pv1 - pv0;
+        const uCols = Math.max(2, Math.floor(uSpan * 1.4));
+        const vCols = Math.max(2, Math.floor(vSpan * 1.4));
+
+        for (let st = 0; st < stories; st++) {
+          const z0 = 3 + 6 + st * storyPx;
+          const z1 = z0 + 13;
+          for (let c = 0; c < uCols; c++) {
+            const wu0 = pu0 + 0.35 + (c / uCols) * (uSpan - 0.7);
+            const wu1 = wu0 + ((uSpan - 0.7) / uCols) * 0.62;
+            const wSeed = rand();
+            const lit = nightFactor > 0.08 && wSeed < 0.58 * nightFactor;
+            windowsLeft.push({ u0: wu0, u1: wu1, v: pv1, z0, z1, lit, tone: wSeed < 0.18 ? 'cyan' : 'warm' });
+          }
+          for (let c = 0; c < vCols; c++) {
+            const wv0 = pv0 + 0.35 + (c / vCols) * (vSpan - 0.7);
+            const wv1 = wv0 + ((vSpan - 0.7) / vCols) * 0.62;
+            const wSeed = rand();
+            const lit = nightFactor > 0.08 && wSeed < 0.54 * nightFactor;
+            windowsRight.push({ v0: wv0, v1: wv1, u: pu1, z0, z1, lit, tone: wSeed < 0.18 ? 'cyan' : 'warm' });
+          }
+        }
+
+        if (roofStyle === 0 && stories >= 6) {
+          const spireTop = P((pu0 + pu1) / 2, (pv0 + pv1) / 2, 3 + heightZ + 32);
+          if (spireTop[0] >= 0 && spireTop[0] <= width && spireTop[1] >= 10 && spireTop[1] <= height) {
+            beacons.push({ x: spireTop[0], y: spireTop[1] });
+          }
+        }
+
+        buildings.push({
+          isPlaza: false,
+          u0: pu0, v0: pv0, u1: pu1, v1: pv1,
+          stories,
+          heightZ,
+          leftCol: pal[0],
+          rightCol: pal[1],
+          roofCol: pal[2],
+          roofStyle,
+          windowsLeft,
+          windowsRight,
+        });
+      }
+
+      addPerimeterProps(2.4, true);
+      blocks.push({
+        bi, bj, u0, v0, u1, v1,
+        depth: bi + bj,
+        kind: isParkBlock ? 'park' : 'buildings',
+        haze,
+        buildings,
+        trees,
+        lamps,
+      });
+    }
+  }
+
+  return {
+    originX,
+    originY,
+    groundDy,
+    cityGroundDy,
+    groundOriginY,
+    horizonY,
+    axes: {
+      uVec: [TILE_W / 2, TILE_H / 2],
+      vVec: [-TILE_W / 2, TILE_H / 2],
+    },
+    roads,
+    crossings,
+    blocks,
+    beacons,
+  };
+}
+
+let skylineCache = { key: '', canvas: null, beacons: [] };
+let cutawayCache = { key: '', canvas: null };
+
+export function drawBackground(ctx, width, height, phase, floor = 1, dpr = 1, now = 0, room = null) {
   const phaseBucket = Math.round(phase * 48) % 48;
-  const key = `${width}x${height}@${dpr}:p${phaseBucket}:f${floor}`;
+  const rW = room?.width || 12;
+  const rH = room?.height || 9;
+  const key = `${width}x${height}@${dpr}:p${phaseBucket}:f${floor}:${rW}x${rH}`;
 
   if (skylineCache.key !== key) {
     const off = skylineCache.canvas || document.createElement('canvas');
@@ -199,13 +512,13 @@ export function drawBackground(ctx, width, height, phase, floor = 1, dpr = 1, no
     off.height = Math.max(1, Math.round(height * dpr));
     const g = off.getContext('2d');
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const beacons = renderSkylineToCanvas(g, width, height, phaseBucket / 48, floor);
+    const beacons = renderSkylineToCanvas(g, width, height, phaseBucket / 48, floor, room);
     skylineCache = { key, canvas: off, beacons };
   }
 
   blitDeviceAligned(ctx, skylineCache.canvas, 0, 0, dpr);
 
-  // Live blinking red aircraft warning beacons on skyscraper spires
+  // Live blinking red aircraft warning beacons on tall isometric skyscraper spires
   const blinkOn = Math.floor(now / 650) % 2 === 0;
   for (const b of skylineCache.beacons) {
     ctx.fillStyle = blinkOn ? '#ff3b4e' : '#6e1c28';
@@ -221,206 +534,295 @@ export function drawBackground(ctx, width, height, phase, floor = 1, dpr = 1, no
   }
 }
 
-function renderSkylineToCanvas(g, width, height, phase, floor) {
-  const { skyTop, skyMid, skyBottom, day } = dayNightColors(phase);
-  // Higher floors look down slightly further over the city horizon
-  const parallaxY = Math.round((floor - 1) * 5);
-  const horizonY = Math.round(height * 0.66 + parallaxY);
+function drawIsoPrism(g, P, u0, v0, u1, v1, z0, z1, leftCol, rightCol, topCol) {
+  fillPoly(g, [P(u0, v1, z1), P(u1, v1, z1), P(u1, v1, z0), P(u0, v1, z0)], leftCol);
+  fillPoly(g, [P(u1, v0, z1), P(u1, v1, z1), P(u1, v1, z0), P(u1, v0, z0)], rightCol);
+  fillPoly(g, [P(u0, v0, z1), P(u1, v0, z1), P(u1, v1, z1), P(u0, v1, z1)], topCol);
+}
 
-  const grad = g.createLinearGradient(0, 0, 0, horizonY + 60);
+function renderSkylineToCanvas(g, width, height, phase, floor, room = null) {
+  const { skyTop, skyMid, skyBottom, day } = dayNightColors(phase);
+  const roomSpec = room || { id: 'lobby', width: 12, height: 9, floor };
+  const layout = buildIsoCityLayout(roomSpec, width, height, phase);
+  const { originX, groundOriginY, horizonY } = layout;
+  const P = (u, v, z = 0) => projectIsoCityPoint(u, v, z, originX, groundOriginY);
+
+  // 1. Sky backdrop gradient
+  const grad = g.createLinearGradient(0, 0, 0, horizonY + 50);
   grad.addColorStop(0, skyTop);
   grad.addColorStop(0.58, skyMid);
   grad.addColorStop(1, skyBottom);
   g.fillStyle = grad;
   g.fillRect(0, 0, width, height);
 
-  // Stars at night / twilight
+  // 2. Twinkling stars at night / twilight
   if (day < 0.72) {
     const starAlpha = Math.min(0.95, (0.72 - day) * 1.45);
     const rStar = seededRand(90421);
-    for (let i = 0; i < 95; i++) {
+    for (let i = 0; i < 85; i++) {
       const sx = Math.round(rStar() * width);
-      const sy = Math.round(rStar() * (horizonY * 0.78));
+      const sy = Math.round(rStar() * (horizonY * 0.85));
       const sz = rStar() > 0.8 ? 2 : 1.2;
       g.fillStyle = `rgba(255, 248, 224, ${(starAlpha * (0.4 + rStar() * 0.6)).toFixed(2)})`;
       g.fillRect(sx, sy, sz, sz);
     }
   }
 
-  // Sun & Moon arc across the sky
+  // 3. Sun & Moon arc above the horizon
   const sunAngle = (phase - 0.22) * Math.PI * 1.8;
   const cx = width * 0.5;
   const rx = width * 0.38;
-  const ry = horizonY * 0.62;
+  const ry = horizonY * 0.65;
   if (day > 0.15) {
     const sunX = cx - Math.cos(sunAngle) * rx;
-    const sunY = horizonY * 0.72 - Math.sin(sunAngle) * ry;
-    if (sunY < horizonY + 20) {
-      const glow = g.createRadialGradient(sunX, sunY, 4, sunX, sunY, 44);
+    const sunY = horizonY * 0.78 - Math.sin(sunAngle) * ry;
+    if (sunY < horizonY + 18) {
+      const glow = g.createRadialGradient(sunX, sunY, 4, sunX, sunY, 40);
       glow.addColorStop(0, 'rgba(255, 246, 190, 0.95)');
       glow.addColorStop(0.4, 'rgba(255, 200, 110, 0.35)');
       glow.addColorStop(1, 'rgba(255, 180, 90, 0)');
       g.fillStyle = glow;
       g.beginPath();
-      g.arc(sunX, sunY, 44, 0, Math.PI * 2);
+      g.arc(sunX, sunY, 40, 0, Math.PI * 2);
       g.fill();
       g.fillStyle = '#fff5c0';
       g.beginPath();
-      g.arc(sunX, sunY, 15, 0, Math.PI * 2);
+      g.arc(sunX, sunY, 13, 0, Math.PI * 2);
       g.fill();
     }
   }
   if (day < 0.65) {
     const moonAngle = ((phase + 0.5) % 1) * Math.PI;
-    const moonX = width * 0.18 + Math.cos(moonAngle * 0.7) * (width * 0.28);
-    const moonY = Math.max(36, horizonY * 0.28);
+    const moonX = width * 0.16 + Math.cos(moonAngle * 0.7) * (width * 0.25);
+    const moonY = Math.max(32, horizonY * 0.34);
     g.fillStyle = 'rgba(210, 228, 255, 0.18)';
     g.beginPath();
-    g.arc(moonX, moonY, 26, 0, Math.PI * 2);
+    g.arc(moonX, moonY, 24, 0, Math.PI * 2);
     g.fill();
     g.fillStyle = '#eef4ff';
     g.beginPath();
-    g.arc(moonX, moonY, 12, 0, Math.PI * 2);
-    g.fill();
-    g.fillStyle = '#cad8f0';
-    g.beginPath();
-    g.arc(moonX - 3, moonY - 2, 2.5, 0, Math.PI * 2);
-    g.arc(moonX + 4, moonY + 3, 2, 0, Math.PI * 2);
+    g.arc(moonX, moonY, 11, 0, Math.PI * 2);
     g.fill();
   }
 
-  // Distant coastal hills silhouette
-  const hillColor = lerpColor('#141b3d', '#6e94c0', day);
+  // Distant soft hills silhouette along horizon
+  const hillColor = lerpColor('#151d3f', '#789ec8', day);
   g.fillStyle = hillColor;
   g.beginPath();
   g.moveTo(0, horizonY);
   for (let x = 0; x <= width; x += 40) {
-    const h = Math.sin(x * 0.0065 + 1.2) * 18 + Math.cos(x * 0.015) * 9 + 16;
+    const h = Math.sin(x * 0.0065 + 1.2) * 12 + Math.cos(x * 0.015) * 6 + 10;
     g.lineTo(x, horizonY - h);
   }
-  g.lineTo(width, height);
-  g.lineTo(0, height);
+  g.lineTo(width, horizonY + 8);
+  g.lineTo(0, horizonY + 8);
   g.closePath();
   g.fill();
 
-  // Distant harbour / sea band below hills
-  const seaTop = lerpColor('#101838', '#4a8ec2', day);
-  const seaBot = lerpColor('#0a0e24', '#2d5c8a', day);
-  const seaGrad = g.createLinearGradient(0, horizonY - 4, 0, height);
-  seaGrad.addColorStop(0, seaTop);
-  seaGrad.addColorStop(1, seaBot);
-  g.fillStyle = seaGrad;
-  g.fillRect(0, horizonY - 2, width, height - horizonY + 2);
+  // 4. Shared Isometric Ground Plane, Roads, Lane Markings & Zebra Crossings (clipped below horizonY)
+  const hazeColor = lerpColor('#1d244b', '#9ec6ec', day);
+  const asphaltNear = lerpColor('#191926', '#4c5360', day);
+  const asphaltFar = lerpColor(asphaltNear, hazeColor, 0.48);
 
-  // 3 Parallax Skyscraper Layers (far, mid, near)
-  const layers = [
-    {
-      seed: 101,
-      baseY: horizonY + Math.round((floor - 1) * 1.5),
-      minW: 26, maxW: 44, minH: 55, maxH: 135, step: 28,
-      bodyCol: lerpColor('#161e42', '#5b7ea8', day),
-      sideCol: lerpColor('#101634', '#486890', day),
-      winStepX: 6, winStepY: 8, winW: 3, winH: 4,
-      winLitThreshold: 0.48,
-    },
-    {
-      seed: 202,
-      baseY: horizonY + 38 + Math.round((floor - 1) * 3),
-      minW: 34, maxW: 58, minH: 80, maxH: 185, step: 38,
-      bodyCol: lerpColor('#1d244c', '#45648c', day),
-      sideCol: lerpColor('#141a38', '#334d70', day),
-      winStepX: 7, winStepY: 9, winW: 3.5, winH: 5,
-      winLitThreshold: 0.56,
-    },
-    {
-      seed: 303,
-      baseY: horizonY + 86 + Math.round((floor - 1) * 4.5),
-      minW: 42, maxW: 72, minH: 105, maxH: 230, step: 50,
-      bodyCol: lerpColor('#242a56', '#334b6e', day),
-      sideCol: lerpColor('#181c3c', '#243754', day),
-      winStepX: 8, winStepY: 11, winW: 4, winH: 6,
-      winLitThreshold: 0.62,
-      spires: true,
-    },
-  ];
+  g.save();
+  g.beginPath();
+  g.rect(0, horizonY, width, height - horizonY);
+  g.clip();
 
-  const beacons = [];
-  const nightFactor = Math.max(0, Math.min(1, (0.78 - day) * 1.55));
-  const dayWinCol = lerpColor('#26365e', '#6fa4d2', day);
+  const groundGrad = g.createLinearGradient(0, horizonY, 0, height);
+  groundGrad.addColorStop(0, asphaltFar);
+  groundGrad.addColorStop(0.38, lerpColor(asphaltNear, hazeColor, 0.18));
+  groundGrad.addColorStop(1, asphaltNear);
+  g.fillStyle = groundGrad;
+  g.fillRect(0, horizonY, width, height - horizonY);
 
-  for (const L of layers) {
-    const rand = seededRand(L.seed);
-    for (let bx = -20; bx < width + 40; bx += L.step + Math.floor(rand() * 14)) {
-      const bw = Math.round(L.minW + rand() * (L.maxW - L.minW));
-      const bh = Math.round(L.minH + rand() * (L.maxH - L.minH));
-      const topY = Math.round(L.baseY - bh);
-      const sideW = Math.max(6, Math.round(bw * 0.24));
-
-      // Main front face + shaded 3D side face + 2:1 isometric roof cap
-      const roofBevel = Math.max(4, Math.round(sideW * 0.5));
-      g.fillStyle = shadeColor(L.bodyCol, 0.14);
-      g.beginPath();
-      g.moveTo(bx, topY);
-      g.lineTo(bx + bw - sideW, topY);
-      g.lineTo(bx + bw, topY + roofBevel);
-      g.lineTo(bx + sideW, topY + roofBevel);
-      g.closePath();
-      g.fill();
-
-      g.fillStyle = L.bodyCol;
-      g.fillRect(bx, topY, bw - sideW, bh + 180);
-      g.fillStyle = L.sideCol;
-      g.beginPath();
-      g.moveTo(bx + bw - sideW, topY);
-      g.lineTo(bx + bw, topY + roofBevel);
-      g.lineTo(bx + bw, topY + bh + 180);
-      g.lineTo(bx + bw - sideW, topY + bh + 180);
-      g.closePath();
-      g.fill();
-
-      // Stepped roof crown or spire with 2:1 isometric parapet
-      const crownStyle = Math.floor(rand() * 3);
-      if (crownStyle === 0) {
-        const cw = Math.round((bw - sideW) * 0.6);
-        const cx0 = bx + Math.round((bw - sideW - cw) / 2);
-        g.fillStyle = shadeColor(L.bodyCol, 0.16);
-        g.fillRect(cx0, topY - 11, cw, 2);
-        g.fillStyle = L.bodyCol;
-        g.fillRect(cx0, topY - 9, cw, 9);
-        if (L.spires && bh > 155) {
-          const sx = cx0 + Math.round(cw / 2);
-          g.fillStyle = L.sideCol;
-          g.fillRect(sx - 1, topY - 28, 2, 18);
-          beacons.push({ x: sx, y: topY - 29 });
-        }
-      } else if (crownStyle === 1) {
-        g.fillStyle = shadeColor(L.bodyCol, 0.14);
-        g.fillRect(bx, topY - 2, bw - sideW, 3);
-      }
-
-      // Deterministic building windows
-      const cols = Math.floor((bw - sideW - 8) / L.winStepX);
-      const rows = Math.floor((bh - 14) / L.winStepY);
-      for (let r = 0; r < rows; r++) {
-        const wy = topY + 8 + r * L.winStepY;
-        if (wy > height) break;
-        for (let c = 0; c < cols; c++) {
-          const wRand = rand();
-          const wx = bx + 5 + c * L.winStepX;
-          const isLit = nightFactor > 0.08 && wRand < L.winLitThreshold * nightFactor;
-          if (isLit) {
-            g.fillStyle = wRand < 0.14 ? '#90e8ff' : wRand < 0.45 ? '#ffe494' : '#ffbe64';
-            g.fillRect(wx, wy, L.winW, L.winH);
-          } else if (wRand < 0.65) {
-            g.fillStyle = dayWinCol;
-            g.fillRect(wx, wy, L.winW, L.winH);
-          }
-        }
-      }
+  // Isometric road corridors & centre lane dashes aligned with hotel (u, v) axes
+  const roadSurfCol = lerpColor('#161622', '#454c58', day);
+  const dashCol = lerpColor('#7a6e3e', '#ebd998', day);
+  for (const r of layout.roads) {
+    fillPoly(g, r.pts, roadSurfCol);
+    const mid = (r.axis === 'v') ? (r.u0 + r.u1) / 2 : (r.v0 + r.v1) / 2;
+    for (let t = -36; t <= 42; t += 1.8) {
+      const dPts = (r.axis === 'v')
+        ? [P(mid - 0.07, t), P(mid + 0.07, t), P(mid + 0.07, t + 0.85), P(mid - 0.07, t + 0.85)]
+        : [P(t, mid - 0.07), P(t + 0.85, mid - 0.07), P(t + 0.85, mid + 0.07), P(t, mid + 0.07)];
+      fillPoly(g, dPts, dashCol);
     }
   }
 
-  // High-altitude atmospheric cloud ribbons on upper tower floors (Floors 7-10)
+  // Isometric pedestrian zebra crossings at intersections
+  const zebraCol = lerpColor('#8c92a6', '#eef0f6', day);
+  for (const c of layout.crossings) {
+    for (const st of c.stripes) {
+      fillPoly(g, st, zebraCol);
+    }
+  }
+  g.restore();
+
+  // Soft distance haze ribbon along the horizon (drawn before 3D buildings so towers rise cleanly through it)
+  const mistGrad = g.createLinearGradient(0, horizonY - 12, 0, horizonY + 28);
+  mistGrad.addColorStop(0, 'rgba(255,255,255,0)');
+  mistGrad.addColorStop(0.45, lerpColor('#1d244b', '#cde4fa', day) + '55');
+  mistGrad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = mistGrad;
+  g.fillRect(0, horizonY - 12, width, 40);
+
+  // 5. Depth-Sorted Isometric City Blocks, Pavements, 3D Buildings, Trees & Streetlamps
+  const basePaveTop = lerpColor('#343244', '#b8b2a6', day);
+  const basePaveLeft = lerpColor('#282636', '#948e82', day);
+  const basePaveRight = lerpColor('#1e1c2a', '#787268', day);
+  const dayWinLeft = lerpColor('#2a3e64', '#7ab2de', day);
+  const dayWinRight = lerpColor('#203050', '#5c90bc', day);
+
+  // Pass 5a: Raised isometric sidewalk slabs for all city blocks
+  for (const blk of layout.blocks) {
+    const { u0, v0, u1, v1, haze } = blk;
+    const paveTop = lerpColor(basePaveTop, hazeColor, haze);
+    const paveLeft = lerpColor(basePaveLeft, hazeColor, haze);
+    const paveRight = lerpColor(basePaveRight, hazeColor, haze);
+
+    const sPt = P(u1, v1, 0);
+    if (sPt[1] > horizonY) {
+      drawIsoPrism(g, P, u0, v0, u1, v1, 0, 3, paveLeft, paveRight, paveTop);
+      g.strokeStyle = lerpColor(shadeColor(basePaveTop, -0.1), hazeColor, haze);
+      g.lineWidth = 0.8;
+      g.beginPath();
+      for (let u = u0 + 1.5; u < u1; u += 1.8) {
+        const a = P(u, v0, 3), b = P(u, v1, 3);
+        g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]);
+      }
+      for (let v = v0 + 1.5; v < v1; v += 1.8) {
+        const a = P(u0, v, 3), b = P(u1, v, 3);
+        g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]);
+      }
+      g.stroke();
+    }
+
+    if (blk.kind === 'hotel') {
+      const W = roomSpec.width || 12;
+      const H = roomSpec.height || 9;
+      fillPoly(
+        g,
+        [P(0.2, 0.2, 3), P(W - 0.2, 0.2, 3), P(W - 0.2, H - 0.2, 3), P(0.2, H - 0.2, 3)],
+        lerpColor('#443e52', '#cfc6b8', day),
+      );
+      const midU = W * 0.5;
+      fillPoly(
+        g,
+        [P(midU - 0.9, H - 0.5, 3.2), P(midU + 0.9, H - 0.5, 3.2), P(midU + 0.9, v1, 3.2), P(midU - 0.9, v1, 3.2)],
+        lerpColor('#5c2434', '#b83b4e', day),
+      );
+    }
+  }
+
+  // Pass 5b: Draw each block's buildings/plazas and front-sidewalk trees/lamps in topological block order
+  for (const blk of layout.blocks) {
+    const { haze } = blk;
+    const paveTop = lerpColor(basePaveTop, hazeColor, haze);
+    const paveLeft = lerpColor(basePaveLeft, hazeColor, haze);
+    const paveRight = lerpColor(basePaveRight, hazeColor, haze);
+
+    for (const b of blk.buildings) {
+      if (b.isPlaza) {
+        const lawnTop = lerpColor(lerpColor('#1d3b2a', '#4ea25c', day), hazeColor, haze);
+        const lawnLeft = shadeColor(lawnTop, -0.14);
+        const lawnRight = shadeColor(lawnTop, -0.26);
+        drawIsoPrism(g, P, b.u0 + 0.2, b.v0 + 0.2, b.u1 - 0.2, b.v1 - 0.2, 3, 5, lawnLeft, lawnRight, lawnTop);
+        const cu = (b.u0 + b.u1) / 2;
+        const cv = (b.v0 + b.v1) / 2;
+        drawIsoPrism(g, P, cu - 0.85, cv - 0.85, cu + 0.85, cv + 0.85, 5, 9, paveLeft, paveRight, paveTop);
+        const waterCol = lerpColor('#246a88', '#48c6e8', day);
+        fillPoly(g, [P(cu - 0.65, cv - 0.65, 9.2), P(cu + 0.65, cv - 0.65, 9.2), P(cu + 0.65, cv + 0.65, 9.2), P(cu - 0.65, cv + 0.65, 9.2)], waterCol);
+        continue;
+      }
+
+      const leftCol = lerpColor(lerpColor('#252a48', b.leftCol, day), hazeColor, haze);
+      const rightCol = lerpColor(lerpColor('#191d36', b.rightCol, day), hazeColor, haze);
+      const roofCol = lerpColor(lerpColor('#32385c', b.roofCol, day), hazeColor, haze);
+      const zTop = 3 + b.heightZ;
+
+      drawIsoPrism(g, P, b.u0, b.v0, b.u1, b.v1, 3, zTop, leftCol, rightCol, roofCol);
+
+      const deckCol = shadeColor(roofCol, -0.15);
+      fillPoly(
+        g,
+        [P(b.u0 + 0.26, b.v0 + 0.26, zTop), P(b.u1 - 0.26, b.v0 + 0.26, zTop), P(b.u1 - 0.26, b.v1 - 0.26, zTop), P(b.u0 + 0.26, b.v1 - 0.26, zTop)],
+        deckCol,
+      );
+
+      for (const w of b.windowsLeft) {
+        const wCol = w.lit
+          ? lerpColor(w.tone === 'cyan' ? '#92e8ff' : '#ffd878', hazeColor, haze * 0.45)
+          : lerpColor(dayWinLeft, hazeColor, haze);
+        fillPoly(g, [P(w.u0, w.v, w.z1), P(w.u1, w.v, w.z1), P(w.u1, w.v, w.z0), P(w.u0, w.v, w.z0)], wCol);
+      }
+      for (const w of b.windowsRight) {
+        const wCol = w.lit
+          ? lerpColor(w.tone === 'cyan' ? '#7ad0ee' : '#f0bc5e', hazeColor, haze * 0.45)
+          : lerpColor(dayWinRight, hazeColor, haze);
+        fillPoly(g, [P(w.u, w.v0, w.z1), P(w.u, w.v1, w.z1), P(w.u, w.v1, w.z0), P(w.u, w.v0, w.z0)], wCol);
+      }
+
+      const mu = (b.u0 + b.u1) / 2;
+      const mv = (b.v0 + b.v1) / 2;
+      if (b.roofStyle === 0) {
+        drawIsoPrism(g, P, b.u0 + 0.65, b.v0 + 0.65, b.u1 - 0.65, b.v1 - 0.65, zTop, zTop + 16, shadeColor(leftCol, 0.06), shadeColor(rightCol, 0.06), shadeColor(roofCol, 0.08));
+        if (b.stories >= 6) {
+          const spBase = P(mu, mv, zTop + 16);
+          const spTop = P(mu, mv, zTop + 32);
+          g.strokeStyle = rightCol;
+          g.lineWidth = 1.8;
+          g.beginPath();
+          g.moveTo(spBase[0], spBase[1]);
+          g.lineTo(spTop[0], spTop[1]);
+          g.stroke();
+        }
+      } else if (b.roofStyle === 1) {
+        drawIsoPrism(g, P, mu - 0.7, mv - 0.6, mu - 0.1, mv + 0.1, zTop, zTop + 8, leftCol, rightCol, shadeColor(roofCol, 0.1));
+        const skyGlass = day > 0.6 ? '#88c6ee' : '#ffd884';
+        fillPoly(g, [P(mu + 0.1, mv - 0.5, zTop + 1), P(mu + 0.75, mv - 0.5, zTop + 1), P(mu + 0.75, mv + 0.4, zTop + 1), P(mu + 0.1, mv + 0.4, zTop + 1)], lerpColor(skyGlass, hazeColor, haze * 0.5));
+      } else {
+        const hedgeTop = lerpColor(lerpColor('#1e4430', '#489858', day), hazeColor, haze);
+        drawIsoPrism(g, P, b.u0 + 0.45, b.v0 + 0.45, b.u1 - 0.45, b.v1 - 0.45, zTop, zTop + 5, shadeColor(hedgeTop, -0.15), shadeColor(hedgeTop, -0.28), hedgeTop);
+      }
+    }
+
+    const treeTop = lerpColor(lerpColor('#224830', '#54ac60', day), hazeColor, haze);
+    const treeLeft = shadeColor(treeTop, -0.14);
+    const treeRight = shadeColor(treeTop, -0.28);
+    const trunkCol = lerpColor('#4e3624', hazeColor, haze);
+    for (const tr of blk.trees) {
+      const base = P(tr.u, tr.v, 3);
+      if (base[1] < horizonY + 4 || base[1] > height + 20) continue;
+      g.fillStyle = 'rgba(18, 12, 28, 0.22)';
+      g.beginPath();
+      g.ellipse(base[0], base[1], 7, 3.5, 0, 0, Math.PI * 2);
+      g.fill();
+      g.fillStyle = trunkCol;
+      g.fillRect(Math.round(base[0] - 1.5), Math.round(base[1] - 9), 3, 9);
+      drawIsoPrism(g, P, tr.u - 0.24, tr.v - 0.24, tr.u + 0.24, tr.v + 0.24, 9, 19, treeLeft, treeRight, treeTop);
+    }
+
+    const poleCol = lerpColor('#2c2a3a', hazeColor, haze);
+    for (const lp of blk.lamps) {
+      const base = P(lp.u, lp.v, 3);
+      if (base[1] < horizonY + 4 || base[1] > height + 20) continue;
+      if (day < 0.72) {
+        g.fillStyle = `rgba(255, 214, 120, ${(0.22 * (1 - haze)).toFixed(2)})`;
+        g.beginPath();
+        g.ellipse(base[0], base[1], 16, 8, 0, 0, Math.PI * 2);
+        g.fill();
+      }
+      g.fillStyle = poleCol;
+      g.fillRect(Math.round(base[0] - 1), Math.round(base[1] - 18), 2, 18);
+      g.fillStyle = day < 0.72 ? '#ffe492' : '#d8dce8';
+      g.beginPath();
+      g.arc(base[0], base[1] - 19, 2.6, 0, Math.PI * 2);
+      g.fill();
+    }
+  }
+
+  // 7. High-altitude atmospheric cloud ribbons on upper tower floors (Floors 7-10)
   if (floor >= 7) {
     const cloudAlpha = day > 0.5 ? 0.18 : 0.08;
     g.fillStyle = `rgba(236, 244, 255, ${cloudAlpha})`;
@@ -432,55 +834,27 @@ function renderSkylineToCanvas(g, width, height, phase, floor) {
       g.fill();
     }
   }
-  return beacons;
+
+  return layout.beacons;
 }
 
-// Street-level plaza drawn under the tower when the ground is on screen.
-function drawStreetPlaza(ctx, westPt, southPt, eastPt, northPt, groundDy, height, day, cw) {
-  const w = cw / (ctx.getTransform().a || 1);
-  const gy = (pt) => pt[1] + groundDy;
-  const top = Math.round(Math.max(gy(westPt), gy(eastPt)) - 4);
-  // Kerb-side sidewalk strip with street trees and streetlamps, then the road below it
-  ctx.fillStyle = lerpColor('#2e2c38', '#a49e94', day);
-  ctx.fillRect(0, top, w, 12);
-  ctx.fillStyle = lerpColor('#1c1a28', '#5d6470', day);
-  ctx.fillRect(0, top + 12, w, height - top + 8);
-  for (let x = 18; x < w; x += 64) {
-    ctx.fillStyle = lerpColor('#1d3a26', '#3f8f4a', day);
-    ctx.beginPath(); ctx.arc(x, top - 4, 9, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#5a3e2a'; ctx.fillRect(x - 1, top + 2, 3, 7);
-    // Streetlamp every other interval
-    if ((x / 64) % 2 === 0 || x < 90) {
-      const lx = x + 28;
-      ctx.fillStyle = '#383446';
-      ctx.fillRect(lx, top - 16, 2, 22);
-      ctx.fillStyle = day < 0.7 ? '#ffe28a' : '#d8dce8';
-      ctx.beginPath(); ctx.arc(lx + 1, top - 17, 3, 0, Math.PI * 2); ctx.fill();
-      if (day < 0.7) {
-        ctx.fillStyle = 'rgba(255, 214, 120, 0.22)';
-        ctx.beginPath(); ctx.ellipse(lx + 1, top + 6, 18, 7, 0, 0, Math.PI * 2); ctx.fill();
-      }
-    }
+// ---------- Hotel Tower Cut-Away Architecture (Cached Static Layer) ----------
+
+function drawTowerCutawayUnderCached(ctx, room, originX, originY, width, height, phase, dpr = 1) {
+  const phaseBucket = Math.round(phase * 48) % 48;
+  const key = `cutaway:${room.id}:${width}x${height}@${dpr}:p${phaseBucket}`;
+  if (cutawayCache.key !== key) {
+    const off = cutawayCache.canvas || document.createElement('canvas');
+    off.width = Math.max(1, Math.round(width * dpr));
+    off.height = Math.max(1, Math.round(height * dpr));
+    const g = off.getContext('2d');
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.clearRect(0, 0, width, height);
+    drawTowerCutawayUnder(g, room, originX, originY, height, phaseBucket / 48);
+    cutawayCache = { key, canvas: off };
   }
-  // Lane dashes
-  ctx.fillStyle = lerpColor('#8a7a40', '#f2e3a0', day);
-  const laneY = Math.round(top + 12 + Math.max(10, (height - top - 12) * 0.5));
-  for (let x = 6; x < w; x += 46) ctx.fillRect(x, laneY, 22, 3);
-  // Sidewalk plaza diamond around the tower base
-  const pad = 26;
-  const plaza = [
-    [westPt[0] - pad * 2, gy(westPt)],
-    [southPt[0], gy(southPt) + pad],
-    [eastPt[0] + pad * 2, gy(eastPt)],
-    [northPt[0], gy(westPt) - (southPt[1] - westPt[1]) - pad],
-  ];
-  fillPoly(ctx, plaza, lerpColor('#3a3846', '#b9b2a6', day));
-  ctx.strokeStyle = lerpColor('#2a2834', '#8f887c', day);
-  ctx.lineWidth = 2;
-  ctx.beginPath(); plaza.forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]))); ctx.closePath(); ctx.stroke();
+  blitDeviceAligned(ctx, cutawayCache.canvas, 0, 0, dpr);
 }
-
-// ---------- Hotel Tower Cut-Away Architecture ----------
 
 function drawTowerCutawayUnder(ctx, room, originX, originY, height, phase) {
   const { day } = dayNightColors(phase);
@@ -506,14 +880,12 @@ function drawTowerCutawayUnder(ctx, room, originX, originY, height, phase) {
   const facadeRight = lerpColor('#1f1c30', '#585268', day);
   const colLeft = shadeColor(facadeLeft, 0.14);
   const colRight = shadeColor(facadeRight, 0.12);
-  const SLAB_H = 16;
-  const storyH = 54;
+  const storyH = STORY_H;
   const floorNo = room.floor || 1;
-  const groundDy = SLAB_H + 6 + (floorNo - 1) * storyH;
+  const groundDy = computeGroundDy(floorNo);
   const grounded = southPt[1] + groundDy < height;
   const bottomY = height + 20;
   const gL = (pt) => (grounded ? pt[1] + groundDy : bottomY);
-  if (grounded) drawStreetPlaza(ctx, westPt, southPt, eastPt, northPt, groundDy, height, day, ctx.canvas.width);
 
   // Outer left & right structural corner columns
   fillPoly(ctx, [
@@ -567,7 +939,7 @@ function drawTowerCutawayUnder(ctx, room, originX, originY, height, phase) {
 
   // Silhouette-accurate lower tower shaft, neighbouring floor windows, and concrete slab per non-VOID boundary tile
   const underSlabCol = shadeColor(floorBaseColor(room), -0.25);
-  const storiesBelow = Math.min(6, floorNo - 1);
+  const storiesBelow = Math.min(8, floorNo - 1);
   for (let y = 1; y < room.height; y++) {
     for (let x = 1; x < room.width; x++) {
       if (!isFloorTile(x, y)) continue;
@@ -582,7 +954,7 @@ function drawTowerCutawayUnder(ctx, room, originX, originY, height, phase) {
       if (!isFloorTile(x, y + 1)) {
         fillPoly(ctx, [wPt, sPt, [sPt[0], gL(sPt)], [wPt[0], gL(wPt)]], facadeLeft);
         for (let story = 0; story < storiesBelow; story++) {
-          const dy0 = SLAB_H + 10 + story * storyH;
+          const dy0 = SLAB_H + 8 + story * storyH;
           if (wPt[1] + dy0 > height) continue;
           const x0 = wPt[0] + (sPt[0] - wPt[0]) * 0.2;
           const y0 = wPt[1] + (sPt[1] - wPt[1]) * 0.2 + dy0;
@@ -590,7 +962,7 @@ function drawTowerCutawayUnder(ctx, room, originX, originY, height, phase) {
           const y1 = wPt[1] + (sPt[1] - wPt[1]) * 0.8 + dy0;
           const isLit = ((x * 7 + story * 13 + floorNo) % 5) !== 0;
           const winCol = day > 0.65 ? (isLit ? '#9ad0f4' : '#4a6484') : (isLit ? '#ffd884' : '#242238');
-          fillPoly(ctx, [[x0, y0], [x1, y1], [x1, y1 + 24], [x0, y0 + 24]], winCol);
+          fillPoly(ctx, [[x0, y0], [x1, y1], [x1, y1 + 20], [x0, y0 + 20]], winCol);
         }
         fillPoly(ctx, [wPt, sPt, [sPt[0], sPt[1] + SLAB_H], [wPt[0], wPt[1] + SLAB_H]], '#787486');
         ctx.fillStyle = '#3a3646';
@@ -601,7 +973,7 @@ function drawTowerCutawayUnder(ctx, room, originX, originY, height, phase) {
       if (!isFloorTile(x + 1, y)) {
         fillPoly(ctx, [sPt, ePt, [ePt[0], gL(ePt)], [sPt[0], gL(sPt)]], facadeRight);
         for (let story = 0; story < storiesBelow; story++) {
-          const dy0 = SLAB_H + 10 + story * storyH;
+          const dy0 = SLAB_H + 8 + story * storyH;
           if (sPt[1] + dy0 > height) continue;
           const x0 = sPt[0] + (ePt[0] - sPt[0]) * 0.2;
           const y0 = sPt[1] + (ePt[1] - sPt[1]) * 0.2 + dy0;
@@ -609,7 +981,7 @@ function drawTowerCutawayUnder(ctx, room, originX, originY, height, phase) {
           const y1 = sPt[1] + (ePt[1] - sPt[1]) * 0.8 + dy0;
           const isLit = ((y * 11 + story * 5 + floorNo) % 4) !== 0;
           const winCol = day > 0.65 ? (isLit ? '#78b0d8' : '#384e68') : (isLit ? '#f0be68' : '#1b182c');
-          fillPoly(ctx, [[x0, y0], [x1, y1], [x1, y1 + 24], [x0, y0 + 24]], winCol);
+          fillPoly(ctx, [[x0, y0], [x1, y1], [x1, y1 + 20], [x0, y0 + 20]], winCol);
         }
         fillPoly(ctx, [sPt, ePt, [ePt[0], ePt[1] + SLAB_H], [sPt[0], sPt[1] + SLAB_H]], '#565264');
         ctx.fillStyle = '#2a2636';
@@ -878,7 +1250,7 @@ export function renderRoom(ctx, opts) {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.imageSmoothingEnabled = false;
 
-  drawBackground(ctx, width, height, phase, room.floor || 1, dpr, now);
+  drawBackground(ctx, width, height, phase, room.floor || 1, dpr, now, room);
   const { originX, originY } = computeOrigin(room, width, height);
   const floorColor = floorBaseColor(room);
   const wallColor = wallBaseColor(room);
@@ -886,8 +1258,8 @@ export function renderRoom(ctx, opts) {
   const wb = Math.round(day * 8) / 8;
   const sky = { top: lerpColor('#1a2250', '#8fd0ff', wb), bottom: lerpColor('#ffd27a', '#fff6c9', wb) };
 
-  // Tower cut-away shaft, concrete floor slab, and neighbouring floors
-  drawTowerCutawayUnder(ctx, room, originX, originY, height, phase);
+  // Tower cut-away shaft, concrete floor slab, and neighbouring floors (cached static layer)
+  drawTowerCutawayUnderCached(ctx, room, originX, originY, width, height, phase, dpr);
 
   // Pass 1: floor tiles (skipping walls, windows, doors, and irregular VOID cutouts)
   const doorMap = new Map();
