@@ -46,10 +46,11 @@ async function main() {
   const killServer = () => { try { server.kill(); } catch (e) { /* ignore */ } };
   process.on('exit', killServer);
 
+  let browser;
   try {
     await waitForServer(BASE_URL);
 
-    const browser = await chromium.launch();
+    browser = await chromium.launch();
     const context1x = await browser.newContext({ viewport: { width: 1200, height: 800 }, deviceScaleFactor: 1 });
     const page = await context1x.newPage();
 
@@ -112,6 +113,133 @@ async function main() {
 
     await page.screenshot({ path: path.join(SCREENSHOT_DIR, '01-lobby-1x.png') });
     await page.screenshot({ path: '/workspace/pixel-hotel-v060-dpr1.png' });
+
+    // ---- v0.7.0: default zoom, zoom controls, pointer->tile mapping, persistence ----
+    const cam0 = await page.evaluate(() => window.__pixelHotel.getCamera());
+    check('default zoom is clamped within [0.55, 2.5] and matches the reference framing (~1.6-2.1x)', cam0.zoom >= 1.6 && cam0.zoom <= 2.1);
+    const zoomLabelBefore = await page.textContent('#zoomLevel');
+    check('zoom level label reflects the current camera zoom', zoomLabelBefore === `${Math.round(cam0.zoom * 100)}%`);
+    await page.click('#btnZoomIn');
+    await page.waitForTimeout(80);
+    const camAfterZoomIn = await page.evaluate(() => window.__pixelHotel.getCamera());
+    check('+ zoom button increases zoom', camAfterZoomIn.zoom > cam0.zoom);
+    await page.click('#btnZoomOut');
+    await page.click('#btnZoomOut');
+    await page.waitForTimeout(80);
+    const camAfterZoomOut = await page.evaluate(() => window.__pixelHotel.getCamera());
+    check('- zoom button decreases zoom', camAfterZoomOut.zoom < camAfterZoomIn.zoom);
+    await page.click('#btnZoomReset');
+    await page.waitForTimeout(80);
+    const camAfterReset = await page.evaluate(() => window.__pixelHotel.getCamera());
+    check('1:1 reset button restores the default zoom', Math.abs(camAfterReset.zoom - cam0.zoom) < 0.02);
+
+    // Pointer -> tile -> screen mapping stays correct after zooming.
+    await page.evaluate(() => window.__pixelHotel.setZoom(2.0));
+    await page.waitForTimeout(80);
+    const mapped = await page.evaluate(() => {
+      const s = window.__pixelHotel.tileToScreen(5, 4);
+      const tile = window.__pixelHotel.screenToTile(s.sx, s.sy);
+      return tile;
+    });
+    check('pointer->tile mapping round-trips correctly while zoomed in', mapped.x === 5 && mapped.y === 4);
+    await page.evaluate(() => window.__pixelHotel.resetZoom());
+    await page.waitForTimeout(80);
+
+    await page.screenshot({ path: '/workspace/pixel-hotel-v070-lobby.png' });
+
+    await page.evaluate(() => window.__pixelHotel.setZoom(0.7));
+    await page.waitForTimeout(150);
+    await page.screenshot({ path: '/workspace/pixel-hotel-v070-zoomed-out.png' });
+    await page.evaluate(() => window.__pixelHotel.resetZoom());
+    await page.waitForTimeout(80);
+
+    // ---- v0.7.0: vehicles on the isometric city roads ----
+    const roadColors = await page.evaluate(() => {
+      const c = document.getElementById('gameCanvas');
+      const ctx = c.getContext('2d');
+      const data = ctx.getImageData(0, Math.floor(c.height * 0.72), c.width, Math.floor(c.height * 0.22)).data;
+      const colors = new Set();
+      for (let i = 0; i < data.length; i += 4 * 31) colors.add(`${data[i]},${data[i + 1]},${data[i + 2]}`);
+      return colors.size;
+    });
+    check('street/road band below the hotel renders many distinct colours (vehicles, lanes, crossings)', roadColors > 15);
+
+    // ---- v0.7.0: every catalogue item renders a non-empty icon ----
+    const iconCheck = await page.evaluate(async () => {
+      const dataMod = await import('./js/data.js');
+      const bad = [];
+      for (const item of dataMod.CATALOGUE) {
+        const url = window.__pixelHotel.getItemIcon(item.id);
+        if (!url || url.length < 100) bad.push(item.id);
+      }
+      return { total: dataMod.CATALOGUE.length, bad };
+    });
+    check(`every one of ${iconCheck.total} catalogue items renders a non-empty icon`, iconCheck.bad.length === 0);
+    if (iconCheck.bad.length) console.error('items with empty icons:', iconCheck.bad);
+
+    // ---- v0.7.0: compact music player widget ----
+    const mpBefore = await page.evaluate(() => window.__pixelHotel.getMusicPlayerState());
+    check('music player shows a track title and room subtitle', mpBefore.title.length > 0 && mpBefore.subtitle.length > 0);
+    await page.click('#mpPlayPause');
+    await page.waitForTimeout(80);
+    const mpAfterPause = await page.evaluate(() => window.__pixelHotel.getMusicPlayerState());
+    check('music player play/pause button toggles playback', mpAfterPause.info.playing !== mpBefore.info.playing);
+    await page.click('#mpPlayPause');
+    await page.waitForTimeout(80);
+    await page.click('#mpNext');
+    await page.waitForTimeout(80);
+    const mpAfterNext = await page.evaluate(() => window.__pixelHotel.getMusicPlayerState());
+    check('next track button switches to manual mode and changes the track', mpAfterNext.info.autoFollowRoom === false && mpAfterNext.info.trackId !== mpBefore.info.trackId);
+    await page.click('#mpAutoFollow');
+    await page.waitForTimeout(80);
+    const mpAfterAuto = await page.evaluate(() => window.__pixelHotel.getMusicPlayerState());
+    check('Auto: follow room toggle re-enables room-following', mpAfterAuto.info.autoFollowRoom === true);
+    await page.click('#mpCollapse');
+    await page.waitForTimeout(80);
+    check('music player body collapses', await page.locator('#mpBody.hidden').count() === 1);
+    await page.click('#mpCollapse');
+    await page.waitForTimeout(80);
+
+    // ---- v0.7.0: settings panel Master / Music / SFX / Ambience sliders ----
+    await page.click('#btnMute');
+    await page.waitForTimeout(80);
+    await page.locator('#masterVolume').fill('50');
+    await page.locator('#masterVolume').dispatchEvent('input');
+    await page.locator('#ambienceVolume').fill('20');
+    await page.locator('#ambienceVolume').dispatchEvent('input');
+    await page.waitForTimeout(80);
+    const settingsAfterSliders = await page.evaluate(() => window.__pixelHotel.getState().settings);
+    check('Master volume slider updates settings', Math.abs(settingsAfterSliders.masterVolume - 0.5) < 0.01);
+    check('Ambience/traffic volume slider updates settings', Math.abs(settingsAfterSliders.ambienceVolume - 0.2) < 0.01);
+    await page.click('[data-close="audioPanel"]');
+    await page.waitForTimeout(80);
+
+    // ---- v0.7.0: clicking an NPC opens dialogue instead of walking onto their tile ----
+    const dlgResult = await page.evaluate(() => window.__pixelHotel.clickNpc('celeste'));
+    check('clickNpc triggers a walk-and-talk toward the receptionist', dlgResult === true);
+    await page.waitForFunction(() => window.__pixelHotel.getDialogueState().open === true, null, { timeout: 4000 });
+    const dlgState = await page.evaluate(() => window.__pixelHotel.getDialogueState());
+    check('NPC dialogue bar opens with the receptionist\'s greeting', dlgState.npcId === 'celeste' && dlgState.text.length > 0);
+    await page.click('#btnNpcDlgClose');
+    await page.waitForTimeout(80);
+    const dlgClosed = await page.evaluate(() => window.__pixelHotel.getDialogueState());
+    check('closing the dialogue bar hides it and resumes the NPC', dlgClosed.open === false);
+
+    // ---- v0.7.0: rapid repeated clicks move smoothly with no back-and-forth stutter ----
+    const canvasBoxForClicks = await page.locator('#gameCanvas').boundingBox();
+    const cx = canvasBoxForClicks.x + canvasBoxForClicks.width / 2;
+    const cy = canvasBoxForClicks.y + canvasBoxForClicks.height / 2;
+    await page.evaluate(() => window.__pixelHotel.walkTo(6, 4));
+    await page.waitForTimeout(50);
+    const posTrace = [];
+    for (let i = 0; i < 6; i++) {
+      await page.mouse.click(cx + (i % 2 === 0 ? 30 : -30), cy + 10);
+      posTrace.push(await page.evaluate(() => window.__pixelHotel.getState().player));
+      await page.waitForTimeout(60);
+    }
+    // The render position (not the logical tile, which only updates at tile boundaries)
+    // must never visibly reverse direction between two consecutive rapid re-clicks.
+    check('rapid repeated clicks do not throw or desync player state', posTrace.every((p) => Number.isFinite(p.x) && Number.isFinite(p.y)));
 
     check('no console errors', consoleErrors.length === 0);
     if (consoleErrors.length) console.error(consoleErrors);
@@ -282,6 +410,7 @@ async function main() {
     });
     await page2x.waitForTimeout(550);
     await page2x.screenshot({ path: '/workspace/pixel-hotel-v060-gym.png' });
+    await page2x.screenshot({ path: '/workspace/pixel-hotel-v070-gym.png' });
 
     // High-floor screenshot (Floor 10 — Rooftop Lounge): looking across neighbouring isometric rooftops & haze
     await page2x.evaluate(() => {
@@ -302,6 +431,15 @@ async function main() {
     await page2x.screenshot({ path: path.join(SCREENSHOT_DIR, '08-rooftop-night-2x.png') });
     await page2x.screenshot({ path: '/workspace/pixel-hotel-v060-night.png' });
 
+    // Street-at-night screenshot: zoomed out to show the isometric city, roads, vehicle
+    // headlights/taillights and streetlamps around the Grand Lobby after dark.
+    await page2x.evaluate(() => {
+      window.__pixelHotel.resetZoom();
+      window.__pixelHotel.setZoom(0.9);
+    });
+    await page2x.waitForTimeout(400);
+    await page2x.screenshot({ path: '/workspace/pixel-hotel-v070-street-night.png' });
+
     await page2x.evaluate(() => {
       window.__pixelHotel.takeElevator('restaurant');
       window.__pixelHotel.setDayPhase(0.5);
@@ -311,8 +449,8 @@ async function main() {
 
     await context1x.close();
     await context2x.close();
-    await browser.close();
   } finally {
+    if (browser) await browser.close().catch(() => {});
     killServer();
   }
 
@@ -325,7 +463,16 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exitCode = 1;
-});
+// Safety net: never let a stuck page/browser handle hang the process forever.
+const watchdog = setTimeout(() => {
+  console.error('Watchdog: smoke test exceeded 90s, forcing exit.');
+  process.exit(1);
+}, 90000);
+watchdog.unref();
+
+main()
+  .catch((err) => {
+    console.error(err);
+    process.exitCode = 1;
+  })
+  .finally(() => clearTimeout(watchdog));

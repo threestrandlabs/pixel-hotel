@@ -1261,6 +1261,130 @@ export function buildFlowerPlanterSprite(rot = 0) {
   });
 }
 
+export function buildMarblePillarSprite() {
+  const MARBLE = ['#f7f0e4', '#ded4c2', '#b8ab96'];
+  const GOLD = ['#f8cf6a', '#d4a438', '#9c7218'];
+  return isoSprite(1, 1, 58, (box) => {
+    box(0.16, 0.16, 0.84, 0.84, 0, 6, ...GOLD);
+    box(0.22, 0.22, 0.78, 0.78, 6, 11, ...MARBLE);
+    box(0.28, 0.28, 0.72, 0.72, 11, 48, ...MARBLE);
+    box(0.22, 0.22, 0.78, 0.78, 48, 53, ...MARBLE);
+    box(0.16, 0.16, 0.84, 0.84, 53, 57, ...GOLD);
+  });
+}
+
+export function buildChandelierSprite() {
+  const GOLD = ['#ffe082', '#d8a838', '#9e7216'];
+  const CRYSTAL = ['#e8f8ff', '#b8e2f8', '#7cb4d8'];
+  const GLOW = ['#fff9d2', '#ffe074', '#d89e28'];
+  return isoSprite(2, 2, 54, (box) => {
+    // Subtle inlaid golden marble floor medallion beneath chandelier
+    box(0.35, 0.35, 1.65, 1.65, 0, 2, ...GOLD);
+    box(0.55, 0.55, 1.45, 1.45, 0, 3, ...CRYSTAL);
+    // Suspended multi-tier crystal & brass chandelier crown
+    box(0.92, 0.92, 1.08, 1.08, 36, 52, ...GOLD);
+    box(0.38, 0.38, 1.62, 1.62, 30, 35, ...GOLD);
+    box(0.46, 0.46, 1.54, 1.54, 25, 30, ...CRYSTAL);
+    box(0.66, 0.66, 1.34, 1.34, 20, 25, ...CRYSTAL);
+    box(0.34, 0.34, 0.52, 0.52, 35, 41, ...GLOW);
+    box(1.48, 0.34, 1.66, 0.52, 35, 41, ...GLOW);
+    box(0.34, 1.48, 0.52, 1.66, 35, 41, ...GLOW);
+    box(1.48, 1.48, 1.66, 1.66, 35, 41, ...GLOW);
+  });
+}
+
+export function buildGrandStaircaseSprite(rot = 0) {
+  const MARBLE = ['#f4ece0', '#d8cebe', '#b0a492'];
+  const CARPET = ['#c83850', '#9e2438', '#6e1424'];
+  const BRASS = ['#f4c658', '#ca962c', '#8e6414'];
+  return isoSprite(2, 2, 52, (box) => {
+    if (rot % 2 === 0) {
+      box(0.06, 0.06, 1.94, 0.65, 0, 36, ...MARBLE);
+      box(0.06, 0.65, 1.94, 1.15, 0, 24, ...MARBLE);
+      box(0.06, 1.15, 1.94, 1.60, 0, 14, ...MARBLE);
+      box(0.06, 1.60, 1.94, 1.94, 0, 6, ...MARBLE);
+      // Crimson carpet runner down steps
+      box(0.42, 0.12, 1.58, 0.65, 36, 38, ...CARPET);
+      box(0.42, 0.65, 1.58, 1.15, 24, 26, ...CARPET);
+      box(0.42, 1.15, 1.58, 1.60, 14, 16, ...CARPET);
+      box(0.42, 1.60, 1.58, 1.92, 6, 8, ...CARPET);
+      // Brass balustrades
+      box(0.08, 0.08, 0.24, 1.90, 6, 44, ...BRASS);
+      box(1.76, 0.08, 1.92, 1.90, 6, 44, ...BRASS);
+    } else {
+      box(0.06, 0.06, 0.65, 1.94, 0, 36, ...MARBLE);
+      box(0.65, 0.06, 1.15, 1.94, 0, 24, ...MARBLE);
+      box(1.15, 0.06, 1.60, 1.94, 0, 14, ...MARBLE);
+      box(1.60, 0.06, 1.94, 1.94, 0, 6, ...MARBLE);
+      box(0.12, 0.42, 0.65, 1.58, 36, 38, ...CARPET);
+      box(0.65, 0.42, 1.15, 1.58, 24, 26, ...CARPET);
+      box(1.15, 0.42, 1.60, 1.58, 14, 16, ...CARPET);
+      box(1.60, 0.42, 1.92, 1.58, 6, 8, ...CARPET);
+      box(0.08, 0.08, 1.90, 0.24, 6, 44, ...BRASS);
+      box(0.08, 1.76, 1.90, 1.92, 6, 44, ...BRASS);
+    }
+  });
+}
+
+export function buildLobbyFountainSprite() {
+  const MARBLE = ['#f2eae0', '#d4cab8', '#a89e8c'];
+  const WATER = ['#6ce4f8', '#3cb8d4', '#1e829c'];
+  const GOLD = ['#f8cf68', '#d09e30', '#966c14'];
+  return isoSprite(2, 2, 46, (box) => {
+    box(0.10, 0.10, 1.90, 1.90, 0, 10, ...MARBLE);
+    box(0.22, 0.22, 1.78, 1.78, 10, 12, ...WATER);
+    box(0.56, 0.56, 1.44, 1.44, 12, 24, ...MARBLE);
+    box(0.64, 0.64, 1.36, 1.36, 24, 26, ...WATER);
+    box(0.82, 0.82, 1.18, 1.18, 26, 38, ...MARBLE);
+    box(0.88, 0.88, 1.12, 1.12, 38, 44, ...GOLD);
+  });
+}
+
+export function buildLuggageTrolleySprite(rot = 0) {
+  const BRASS = ['#f6cb62', '#cf9c30', '#946a14'];
+  const BASE = ['#c4364c', '#982236', '#681222'];
+  const CASE1 = ['#8c5230', '#6c3a1e', '#4a2410'];
+  const CASE2 = ['#3e6b8c', '#2a4e68', '#183246'];
+  return isoSprite(1, 1, 44, (box) => {
+    box(0.14, 0.18, 0.86, 0.82, 0, 6, ...BASE);
+    box(0.16, 0.20, 0.26, 0.80, 6, 38, ...BRASS);
+    box(0.74, 0.20, 0.84, 0.80, 6, 38, ...BRASS);
+    box(0.16, 0.20, 0.84, 0.80, 38, 42, ...BRASS);
+    if (rot % 2 === 0) {
+      box(0.28, 0.24, 0.72, 0.54, 6, 18, ...CASE1);
+      box(0.30, 0.54, 0.70, 0.78, 6, 16, ...CASE2);
+    } else {
+      box(0.24, 0.28, 0.54, 0.72, 6, 18, ...CASE1);
+      box(0.54, 0.30, 0.78, 0.70, 6, 16, ...CASE2);
+    }
+  });
+}
+
+export function buildConciergeDeskSprite(rot = 0) {
+  const [tw, th] = rot % 2 ? [1, 2] : [2, 1];
+  const WALNUT = ['#6e4228', '#522e18', '#361c0c'];
+  const BRASS = ['#f4c65a', '#cc982e', '#926814'];
+  const LEDGER = ['#fcf6e8', '#dfd4be', '#b4a890'];
+  return isoSprite(tw, th, 38, (box) => {
+    box(0.06, 0.10, tw - 0.06, th - 0.10, 0, 22, ...WALNUT);
+    box(0.04, 0.08, tw - 0.04, th - 0.08, 22, 26, ...BRASS);
+    box(0.22 * tw, 0.26 * th, 0.54 * tw, 0.72 * th, 26, 30, ...LEDGER);
+    box(0.66 * tw, 0.30 * th, 0.84 * tw, 0.68 * th, 26, 35, ...BRASS);
+  });
+}
+
+export function buildLobbyRunnerSprite(rot = 0) {
+  const [tw, th] = rot % 2 ? [3, 2] : [2, 3];
+  const GOLD = ['#f6c667', '#d8a442', '#a07424'];
+  const CRIMSON = ['#b8324a', '#942238', '#681424'];
+  const INNER = ['#d84a64', '#b4344c', '#822034'];
+  return isoSprite(tw, th, 10, (box) => {
+    box(0.04, 0.04, tw - 0.04, th - 0.04, 0, 2, ...GOLD);
+    box(0.14, 0.14, tw - 0.14, th - 0.14, 0, 2, ...CRIMSON);
+    box(0.32, 0.32, tw - 0.32, th - 0.32, 0, 2, ...INNER);
+  });
+}
+
 export const FURNITURE_BUILDERS = {
   stool: (rot) => buildStoolSprite(rot),
   sofa: (rot) => buildSofaSprite('#e2607a', rot),
@@ -1305,6 +1429,14 @@ export const FURNITURE_BUILDERS = {
   skyTree: (rot) => buildSkyTreeSprite(rot),
   gardenBench: (rot) => buildGardenBenchSprite(rot),
   flowerPlanter: (rot) => buildFlowerPlanterSprite(rot),
+  // v0.7.0 Grand Lobby architectural & luxury collection
+  marblePillar: (rot) => buildMarblePillarSprite(rot),
+  chandelier: (rot) => buildChandelierSprite(rot),
+  grandStaircase: (rot) => buildGrandStaircaseSprite(rot),
+  lobbyFountain: (rot) => buildLobbyFountainSprite(rot),
+  luggageTrolley: (rot) => buildLuggageTrolleySprite(rot),
+  conciergeDesk: (rot) => buildConciergeDeskSprite(rot),
+  lobbyRunner: (rot) => buildLobbyRunnerSprite(rot),
 };
 
 export function shadeColor(hex, amt) {

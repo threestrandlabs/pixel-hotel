@@ -1,5 +1,5 @@
 import { ROOMS, NPCS, QUESTS, getCatalogueItem, TILE, SAVE_VERSION } from './data.js';
-import { findPath } from './pathfinding.js';
+import { retargetMover, advanceMover, findPath } from './pathfinding.js';
 import {
   buyItem, placeItem, pickupItem, moveItem, canPlaceAt, footprintCells,
   availableCatalogue, rotatedFootprint, findApproachTile, seatDirFromRot,
@@ -9,7 +9,10 @@ import { loadState, saveState, resetState } from './save.js';
 import {
   createNpcRuntime, tickNpc, findWanderTarget, directionBetween, respondToMessage, pickRandom,
 } from './npc.js';
-import { renderRoom, computeOrigin, screenToTile } from './render.js';
+import {
+  renderRoom, computeOrigin, screenToTile, tileToScreen, worldToScreen, hitTestNpc, getItemIconDataUrl,
+  DEFAULT_ZOOM, MIN_ZOOM, MAX_ZOOM, clampZoom, zoomAtPoint, centerCameraOnTile,
+} from './render.js';
 import { audio } from './audio.js';
 
 const STEP_MS = 240;
@@ -42,16 +45,24 @@ const player = {
   renderY: state.player.y,
   x: state.player.x,
   y: state.player.y,
+  fromX: state.player.x,
+  fromY: state.player.y,
+  toX: state.player.x,
+  toY: state.player.y,
+  targetX: null,
+  targetY: null,
   dir: state.player.dir || 'down',
   frame: 0,
   walking: false,
   path: null,
   pathIdx: 0,
   stepStart: 0,
+  stepDuration: STEP_MS,
   sitting: state.player.sitting || null,
   lying: false,
   activity: state.player.activity || null,
   pendingInteract: null,
+  pendingDialogue: null,
 };
 
 const visitedRooms = new Set(state.stats.visitedRooms || ['lobby']);
@@ -67,7 +78,52 @@ const ui = {
   cssH: 600,
   dpr: 1,
   elevatorAnim: null,
+  camera: { zoom: clampZoom(state.settings.zoom || DEFAULT_ZOOM), panX: 0, panY: 0 },
+  dragging: false,
+  dragMoved: false,
+  dragLast: null,
+  pinchDist: null,
+  activeDialogue: null, // { npcId }
 };
+
+function recenterCamera(tx = player.x, ty = player.y, zoom = ui.camera.zoom) {
+  const room = currentRoomDef();
+  const centered = centerCameraOnTile(tx, ty, room, ui.cssW, ui.cssH, zoom);
+  ui.camera.zoom = centered.zoom;
+  ui.camera.panX = centered.panX;
+  ui.camera.panY = centered.panY;
+}
+
+let zoomSaveTimer = null;
+function persistZoom() {
+  state.settings.zoom = ui.camera.zoom;
+  if (zoomSaveTimer) clearTimeout(zoomSaveTimer);
+  zoomSaveTimer = setTimeout(() => saveState(window.localStorage, state), 600);
+}
+
+function setZoomAtPoint(newZoom, cursorX, cursorY) {
+  const result = zoomAtPoint(ui.camera, newZoom, cursorX, cursorY, ui.cssW, ui.cssH);
+  ui.camera.zoom = result.zoom;
+  ui.camera.panX = result.panX;
+  ui.camera.panY = result.panY;
+  updateZoomLabel();
+  persistZoom();
+}
+
+function stepZoom(delta) {
+  setZoomAtPoint(ui.camera.zoom + delta, ui.cssW / 2, ui.cssH / 2);
+}
+
+function resetZoom() {
+  recenterCamera(player.x, player.y, DEFAULT_ZOOM);
+  updateZoomLabel();
+  persistZoom();
+}
+
+function updateZoomLabel() {
+  const el = document.getElementById('zoomLevel');
+  if (el) el.textContent = `${Math.round(ui.camera.zoom * 100)}%`;
+}
 
 function syncCanvasSize() {
   const rect = canvas.getBoundingClientRect();
@@ -164,56 +220,19 @@ function isBlockedFactory(room, roomRuntime, occupantTiles) {
 }
 
 // ---------- mover step engine (shared by player + NPCs) ----------
+// Movement uses pathfinding.js's retargetMover (click to walk / seamless
+// mid-step re-targeting, duplicate-click coalescing) and advanceMover
+// (constant-speed interpolation + dynamic re-plan around moving blockers).
 
-function beginStep(mover, now) {
-  const next = mover.path[mover.pathIdx + 1];
-  mover.fromX = mover.x;
-  mover.fromY = mover.y;
-  mover.toX = next.x;
-  mover.toY = next.y;
-  mover.dir = directionBetween({ x: mover.x, y: mover.y }, next);
-  mover.stepStart = now;
-  mover.walking = true;
-  if (mover === player) audio.playSfx('footstep');
-}
-
-function startPath(mover, path, now) {
-  if (!path || path.length < 2) {
-    mover.path = null;
-    mover.walking = false;
-    return;
+function walkMoverTo(mover, tx, ty, room, isBlocked, { nearestFallback = true } = {}) {
+  const now = performance.now();
+  const result = retargetMover(mover, tx, ty, now, {
+    width: room.width, height: room.height, isBlocked, stepMs: STEP_MS, nearestFallback,
+  });
+  if (result.ok && !result.ignoredDuplicate && mover === player) {
+    audio.playSfx('footstep');
   }
-  mover.path = path;
-  mover.pathIdx = 0;
-  mover.sitting = null;
-  mover.lying = false;
-  mover.activity = null;
-  mover.pendingInteract = null;
-  beginStep(mover, now);
-}
-
-function updateMover(mover, now, onArrive) {
-  if (!mover.walking) {
-    mover.renderX = mover.x;
-    mover.renderY = mover.y;
-    return;
-  }
-  const t = Math.min(1, (now - mover.stepStart) / STEP_MS);
-  mover.renderX = mover.fromX + (mover.toX - mover.fromX) * t;
-  mover.renderY = mover.fromY + (mover.toY - mover.fromY) * t;
-  mover.frame = Math.floor(now / 140) % 2;
-  if (t >= 1) {
-    mover.x = mover.toX;
-    mover.y = mover.toY;
-    mover.pathIdx++;
-    if (mover.pathIdx >= mover.path.length - 1) {
-      mover.walking = false;
-      mover.path = null;
-      if (onArrive) onArrive();
-    } else {
-      beginStep(mover, now);
-    }
-  }
+  return result;
 }
 
 // ---------- player actions & elevator navigation ----------
@@ -255,14 +274,16 @@ function tryWalkPlayer(tx, ty) {
   const room = currentRoomDef();
   const occ = occupantTilesExcluding('player', null);
   const blocked = isBlockedFactory(room, currentRoomRuntime(), occ);
-  const path = findPath(room.width, room.height, blocked, { x: player.x, y: player.y }, { x: tx, y: ty });
-  if (!path) return false;
+  const result = walkMoverTo(player, tx, ty, room, blocked);
+  if (!result.ok) return false;
+  if (result.ignoredDuplicate) return true;
   player.sitting = null;
   player.lying = false;
   player.activity = null;
+  player.pendingInteract = null;
+  player.pendingDialogue = null;
   state.player.sitting = null;
   state.player.activity = null;
-  startPath(player, path, performance.now());
   return true;
 }
 
@@ -288,18 +309,142 @@ function tryInteractPlayer(placedItem, immediate = false) {
     player.renderY = approach.tile.y;
     player.walking = false;
     player.path = null;
+    player.targetX = null;
+    player.targetY = null;
     player.pendingInteract = null;
     applyInteractionArrival(player, pending, true);
     return true;
   }
-  startPath(player, approach.path, performance.now());
+  const result = walkMoverTo(player, approach.tile.x, approach.tile.y, room, blocked, { nearestFallback: false });
+  if (!result.ok) return false;
+  player.sitting = null;
+  player.lying = false;
+  player.activity = null;
+  player.pendingDialogue = null;
   player.pendingInteract = pending;
   return true;
+}
+
+function findAdjacentFreeTile(npc, room, isBlocked) {
+  const deltas = [{ x: 0, y: 1 }, { x: 0, y: -1 }, { x: 1, y: 0 }, { x: -1, y: 0 }];
+  const candidates = [];
+  for (const d of deltas) {
+    const x = npc.x + d.x;
+    const y = npc.y + d.y;
+    if (x < 0 || y < 0 || x >= room.width || y >= room.height) continue;
+    if (isBlocked(x, y)) continue;
+    const dist = Math.abs(x - player.x) + Math.abs(y - player.y);
+    candidates.push({ x, y, dist });
+  }
+  candidates.sort((a, b) => a.dist - b.dist);
+  // Prefer the closest candidate that is actually reachable from the player's
+  // current tile; a geometrically-closest tile can be sealed off (e.g. a desk's
+  // only free flank being the NPC's own standing tile).
+  for (const c of candidates) {
+    if (c.x === player.x && c.y === player.y) return c;
+    if (findPath(room.width, room.height, isBlocked, { x: player.x, y: player.y }, { x: c.x, y: c.y })) return c;
+  }
+  return candidates[0] || null;
+}
+
+function startNpcDialogue(npcId) {
+  const npc = npcRuntimes.find((n) => n.id === npcId);
+  if (!npc || npc.room !== state.player.room) return false;
+  if (ui.activeDialogue && ui.activeDialogue.npcId === npcId) return true;
+  const room = currentRoomDef();
+  const roomRuntime = currentRoomRuntime();
+  const occ = occupantTilesExcluding('player', null);
+  const blocked = isBlockedFactory(room, roomRuntime, occ);
+  const adj = findAdjacentFreeTile(npc, room, blocked);
+  if (!adj || (adj.x === player.x && adj.y === player.y)) {
+    openNpcDialogue(npc);
+    return true;
+  }
+  const result = walkMoverTo(player, adj.x, adj.y, room, blocked, { nearestFallback: false });
+  if (!result.ok) {
+    openNpcDialogue(npc);
+    return true;
+  }
+  player.sitting = null;
+  player.lying = false;
+  player.activity = null;
+  player.pendingInteract = null;
+  player.pendingDialogue = npcId;
+  return true;
+}
+
+function openNpcDialogue(npc) {
+  const now = performance.now();
+  ui.activeDialogue = { npcId: npc.id };
+  npc.pausedUntil = now + 20000;
+  npc.walking = false;
+  npc.path = null;
+  npc.targetX = null;
+  npc.targetY = null;
+  npc.dir = directionBetween({ x: npc.x, y: npc.y }, { x: player.x, y: player.y });
+  player.dir = directionBetween({ x: player.x, y: player.y }, { x: npc.x, y: npc.y });
+  persistPlayerPos();
+
+  const bar = document.getElementById('npcDialogueBar');
+  bar.classList.remove('hidden');
+  document.getElementById('npcDlgAvatar').textContent = npc.def.isReceptionist ? '🛎️' : '🙂';
+  document.getElementById('npcDlgName').textContent = npc.def.name;
+  document.getElementById('npcDlgRole').textContent = npc.def.role || (npc.def.isReceptionist ? 'Hotel Receptionist' : 'Hotel Guest');
+  const line = pickRandom(npc.def.greetLines) || pickRandom(npc.def.ambientLines) || 'Hello there!';
+  document.getElementById('npcDlgText').textContent = line;
+
+  const optsEl = document.getElementById('npcDlgOptions');
+  const topics = npc.def.dialogueTopics || [];
+  optsEl.innerHTML = topics.map((t, i) => `<button class="pixel-btn npc-dlg-opt" data-topic="${i}">${t.label}</button>`).join('');
+  optsEl.querySelectorAll('[data-topic]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const topic = topics[Number(btn.dataset.topic)];
+      document.getElementById('npcDlgText').textContent = topic.reply;
+      audio.playSfx('chat');
+      if (topic.id === 'checkin') {
+        onQuestProgress(setQuestProgress(state, 'greet', Math.max(1, greetedNpcs.size)));
+      }
+    });
+  });
+  audio.playSfx('chat');
+  pushChatLine(npc.def.name, line);
+  if (!greetedNpcs.has(npc.id)) {
+    greetedNpcs.add(npc.id);
+    state.stats.greetedNpcs = Array.from(greetedNpcs);
+    onQuestProgress(setQuestProgress(state, 'greet', greetedNpcs.size));
+  }
+}
+
+function closeNpcDialogue() {
+  if (ui.activeDialogue) {
+    const npc = npcRuntimes.find((n) => n.id === ui.activeDialogue.npcId);
+    if (npc) npc.pausedUntil = performance.now();
+  }
+  ui.activeDialogue = null;
+  document.getElementById('npcDialogueBar').classList.add('hidden');
+}
+
+function tickActiveDialogue(now) {
+  if (!ui.activeDialogue) return;
+  const npc = npcRuntimes.find((n) => n.id === ui.activeDialogue.npcId);
+  if (!npc || npc.room !== state.player.room || npc.pausedUntil <= now) {
+    closeNpcDialogue();
+    return;
+  }
+  const dist = Math.abs(npc.x - player.x) + Math.abs(npc.y - player.y);
+  if (dist > 2) closeNpcDialogue();
 }
 
 function onPlayerArrive() {
   const room = currentRoomDef();
   const cell = room.grid[player.y][player.x];
+  if (player.pendingDialogue) {
+    const npcId = player.pendingDialogue;
+    player.pendingDialogue = null;
+    const npc = npcRuntimes.find((n) => n.id === npcId);
+    if (npc) openNpcDialogue(npc);
+    return;
+  }
   if (player.pendingInteract) {
     const pending = player.pendingInteract;
     player.pendingInteract = null;
@@ -359,8 +504,12 @@ function switchRoom(roomId, toTile) {
   player.lying = false;
   player.activity = null;
   player.pendingInteract = null;
+  player.pendingDialogue = null;
   player.bubbleText = null;
   player.bubbleUntil = 0;
+  player.targetX = null;
+  player.targetY = null;
+  closeNpcDialogue();
   state.player.sitting = null;
   state.player.activity = null;
   persistPlayerPos();
@@ -371,7 +520,8 @@ function switchRoom(roomId, toTile) {
     onQuestProgress(advanceQuestsByType(state, 'visit_gym', 1));
   }
   updateRoomLabel();
-  audio.setRoomMood(roomId, ui.phase);
+  recenterCamera(player.x, player.y, ui.camera.zoom);
+  audio.setRoomMood(roomId, ui.phase, targetDef.floor || 1);
   refreshAudioUi();
   refreshRoomTab();
   refreshElevatorPanel();
@@ -495,12 +645,16 @@ function tickNpcs(now) {
     if (n.room !== state.player.room) continue;
     const room = ROOMS[n.room];
     const roomRuntime = state.rooms[n.room];
-    updateMover(n, now, () => {
-      if (n.pendingInteract) {
-        const pending = n.pendingInteract;
-        n.pendingInteract = null;
-        applyInteractionArrival(n, pending, false);
-      }
+    const liveBlocked = isBlockedFactory(room, roomRuntime, occupantTilesExcluding('npc', n.id));
+    advanceMover(n, now, {
+      width: room.width, height: room.height, isBlocked: liveBlocked, stepMs: STEP_MS,
+      onArrive: () => {
+        if (n.pendingInteract) {
+          const pending = n.pendingInteract;
+          n.pendingInteract = null;
+          applyInteractionArrival(n, pending, false);
+        }
+      },
     });
     tickNpc(n, now, {
       tryWander: (npc) => {
@@ -578,6 +732,7 @@ function buildEntities(now = performance.now()) {
   const pOff = entityPhaseOffset('player');
   const pAction = !player.walking && player.activity ? player.activity.kind : null;
   list.push({
+    id: 'player',
     x: player.renderX, y: player.renderY, dir: player.dir, frame: player.frame, walking: player.walking,
     sitting: !!player.sitting, lying: !!player.lying,
     blink: ((now + pOff * 1.3) % 3800) < 150,
@@ -592,6 +747,7 @@ function buildEntities(now = performance.now()) {
     const nOff = entityPhaseOffset(n.id);
     const nAction = !n.walking && n.activity ? n.activity.kind : null;
     list.push({
+      id: n.id,
       x: n.renderX, y: n.renderY, dir: n.dir, frame: n.frame, walking: n.walking,
       sitting: !!n.sitting, lying: !!n.lying,
       blink: ((now + nOff * 1.3) % 3800) < 150,
@@ -614,7 +770,12 @@ function frame(now) {
   if (ui.startTime === null) ui.startTime = now;
   syncCanvasSize();
   tickNpcs(now);
-  updateMover(player, now, onPlayerArrive);
+  const room0 = currentRoomDef();
+  const playerBlocked = isBlockedFactory(room0, currentRoomRuntime(), occupantTilesExcluding('player', null));
+  advanceMover(player, now, {
+    width: room0.width, height: room0.height, isBlocked: playerBlocked, stepMs: STEP_MS, onArrive: onPlayerArrive,
+  });
+  tickActiveDialogue(now);
 
   if (ui.elevatorAnim && now - ui.elevatorAnim.start > ui.elevatorAnim.duration) {
     ui.elevatorAnim = null;
@@ -623,7 +784,8 @@ function frame(now) {
   const room = currentRoomDef();
   const roomRuntime = currentRoomRuntime();
   ui.phase = (0.5 + (now - ui.startTime) / DAY_CYCLE_MS) % 1;
-  audio.setRoomMood(state.player.room, ui.phase);
+  audio.setRoomMood(state.player.room, ui.phase, room.floor || 1);
+  refreshMusicPlayerThrottled(now);
 
   let ghost = null;
   if (ui.placing && ui.hoverTile) {
@@ -646,6 +808,7 @@ function frame(now) {
     dpr: ui.dpr,
     now,
     elevatorAnim: ui.elevatorAnim,
+    camera: ui.camera,
   });
 
   requestAnimationFrame(frame);
@@ -659,28 +822,108 @@ function getCanvasPos(evt) {
   return { x: p.clientX - rect.left, y: p.clientY - rect.top };
 }
 
-function pickTile(evt) {
-  const { x, y } = getCanvasPos(evt);
+function pickTileAt(x, y) {
   const room = currentRoomDef();
   const { originX, originY } = computeOrigin(room, ui.cssW, ui.cssH);
-  const tile = screenToTile(x, y, originX, originY);
+  const tile = screenToTile(x, y, originX, originY, ui.camera, ui.cssW, ui.cssH);
   if (tile.x < 0 || tile.y < 0 || tile.x >= room.width || tile.y >= room.height) return null;
   return tile;
 }
 
+function pickTile(evt) {
+  const { x, y } = getCanvasPos(evt);
+  return pickTileAt(x, y);
+}
+
 canvas.addEventListener('mousemove', (evt) => {
+  if (ui.dragging) {
+    const { x, y } = getCanvasPos(evt);
+    const dx = x - ui.dragLast.x;
+    const dy = y - ui.dragLast.y;
+    if (Math.abs(dx) > 2 || Math.abs(dy) > 2) ui.dragMoved = true;
+    if (ui.dragMoved) {
+      ui.camera.panX += dx;
+      ui.camera.panY += dy;
+      ui.dragLast = { x, y };
+    }
+    return;
+  }
   ui.hoverTile = pickTile(evt);
 });
 canvas.addEventListener('mouseleave', () => { ui.hoverTile = null; });
 
+canvas.addEventListener('mousedown', (evt) => {
+  if (evt.button !== 0) return;
+  ui.dragging = true;
+  ui.dragMoved = false;
+  ui.dragLast = getCanvasPos(evt);
+});
+window.addEventListener('mouseup', () => { ui.dragging = false; });
+
+canvas.addEventListener('wheel', (evt) => {
+  evt.preventDefault();
+  const { x, y } = getCanvasPos(evt);
+  const delta = evt.deltaY > 0 ? -0.1 : 0.1;
+  setZoomAtPoint(ui.camera.zoom + delta, x, y);
+}, { passive: false });
+
+// Pinch-to-zoom (two-finger touch)
+function touchDist(evt) {
+  const [a, b] = evt.touches;
+  return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+}
+canvas.addEventListener('touchstart', (evt) => {
+  if (evt.touches.length === 2) {
+    ui.pinchDist = touchDist(evt);
+  } else if (evt.touches.length === 1) {
+    ui.dragging = true;
+    ui.dragMoved = false;
+    ui.dragLast = getCanvasPos(evt);
+  }
+}, { passive: true });
+canvas.addEventListener('touchmove', (evt) => {
+  if (evt.touches.length === 2 && ui.pinchDist) {
+    const dist = touchDist(evt);
+    const rect = canvas.getBoundingClientRect();
+    const cx = (evt.touches[0].clientX + evt.touches[1].clientX) / 2 - rect.left;
+    const cy = (evt.touches[0].clientY + evt.touches[1].clientY) / 2 - rect.top;
+    setZoomAtPoint(ui.camera.zoom * (dist / ui.pinchDist), cx, cy);
+    ui.pinchDist = dist;
+    evt.preventDefault();
+  } else if (evt.touches.length === 1 && ui.dragging) {
+    const { x, y } = getCanvasPos(evt);
+    const dx = x - ui.dragLast.x;
+    const dy = y - ui.dragLast.y;
+    if (Math.abs(dx) > 2 || Math.abs(dy) > 2) ui.dragMoved = true;
+    if (ui.dragMoved) {
+      ui.camera.panX += dx;
+      ui.camera.panY += dy;
+      ui.dragLast = { x, y };
+      evt.preventDefault();
+    }
+  }
+}, { passive: false });
+canvas.addEventListener('touchend', () => { ui.pinchDist = null; ui.dragging = false; });
+
 canvas.addEventListener('click', (evt) => {
-  const tile = pickTile(evt);
-  if (!tile) return;
-  audio.playSfx('click');
+  if (ui.dragMoved) { ui.dragMoved = false; return; }
+  const { x: cx, y: cy } = getCanvasPos(evt);
   if (ui.placing) {
+    const tile = pickTileAt(cx, cy);
+    if (!tile) return;
+    audio.playSfx('click');
     confirmPlacement(tile);
     return;
   }
+  const hit = hitTestNpc(cx, cy);
+  if (hit && hit.kind === 'npc') {
+    audio.playSfx('click');
+    startNpcDialogue(hit.id);
+    return;
+  }
+  const tile = pickTileAt(cx, cy);
+  if (!tile) return;
+  audio.playSfx('click');
   const room = currentRoomDef();
   const roomRuntime = currentRoomRuntime();
   const furn = interactiveFurnitureAt(room, roomRuntime, tile.x, tile.y);
@@ -703,6 +946,10 @@ function startPlacing({ instanceId, itemId, moveInstanceId }) {
   ui.placing = { instanceId, itemId, rot: 0, moveInstanceId: moveInstanceId || null };
   document.getElementById('placingBar').classList.remove('hidden');
   document.getElementById('placingLabel').textContent = `Placing ${getCatalogueItem(itemId).name} — click a tile`;
+  const iconEl = document.getElementById('placingIcon');
+  const iconUrl = getItemIconDataUrl(itemId, 40, ui.dpr || 1);
+  if (iconUrl) { iconEl.src = iconUrl; iconEl.classList.remove('hidden'); }
+  else iconEl.classList.add('hidden');
 }
 
 function cancelPlacing() {
@@ -751,14 +998,23 @@ function rotatePlacing() {
 
 document.getElementById('btnRotate').addEventListener('click', rotatePlacing);
 document.getElementById('btnCancelPlace').addEventListener('click', cancelPlacing);
+document.getElementById('btnZoomIn').addEventListener('click', () => stepZoom(0.15));
+document.getElementById('btnZoomOut').addEventListener('click', () => stepZoom(-0.15));
+document.getElementById('btnZoomReset').addEventListener('click', resetZoom);
+document.getElementById('btnCenterPlayer').addEventListener('click', () => { recenterCamera(player.x, player.y, ui.camera.zoom); persistZoom(); });
+document.getElementById('btnNpcDlgClose').addEventListener('click', closeNpcDialogue);
 
 window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     if (!document.getElementById('helpOverlay').classList.contains('hidden')) hideHelp();
     else if (!document.getElementById('elevatorPanel').classList.contains('hidden')) document.getElementById('elevatorPanel').classList.add('hidden');
+    else if (ui.activeDialogue) closeNpcDialogue();
     else cancelPlacing();
   }
   else if (e.key.toLowerCase() === 'r' && ui.placing) rotatePlacing();
+  else if ((e.key === '+' || e.key === '=') && !isTypingTarget(e)) stepZoom(0.15);
+  else if (e.key === '-' && !isTypingTarget(e)) stepZoom(-0.15);
+  else if (e.key === '0' && !isTypingTarget(e)) resetZoom();
   else if (e.key.toLowerCase() === 'e' && !isTypingTarget(e)) togglePanel('elevatorPanel');
   else if (e.key.toLowerCase() === 'i' && !isTypingTarget(e)) togglePanel('inventoryPanel');
   else if (e.key.toLowerCase() === 'q' && !isTypingTarget(e)) togglePanel('questPanel');
@@ -846,12 +1102,19 @@ function refreshElevatorPanel() {
   });
 }
 
+function itemIconImg(item) {
+  const url = getItemIconDataUrl(item.id, 48, ui.dpr || 1);
+  return url
+    ? `<img class="item-icon" src="${url}" alt="${item.name}" />`
+    : `<div class="item-swatch" style="background:${swatchColor(item)}"></div>`;
+}
+
 function refreshShopTab() {
   const el = document.getElementById('shopTab');
   const items = availableCatalogue(state);
   el.innerHTML = items.map((item) => `
     <div class="shop-item">
-      <div class="item-swatch" style="background:${swatchColor(item)}"></div>
+      ${itemIconImg(item)}
       <div class="item-info">
         <div class="item-name">${item.name}</div>
         ${item.description ? `<div class="item-desc">${item.description}</div>` : ''}
@@ -892,7 +1155,7 @@ function refreshBagTab() {
     const item = getCatalogueItem(inv.itemId);
     return `
     <div class="bag-item">
-      <div class="item-swatch" style="background:${swatchColor(item)}"></div>
+      ${itemIconImg(item)}
       <div class="item-info">
         <div class="item-name">${item.name}</div>
         ${item.description ? `<div class="item-desc">${item.description}</div>` : ''}
@@ -922,7 +1185,7 @@ function refreshRoomTab() {
     const item = getCatalogueItem(p.itemId);
     return `
     <div class="room-item">
-      <div class="item-swatch" style="background:${swatchColor(item)}"></div>
+      ${itemIconImg(item)}
       <div class="item-info">
         <div class="item-name">${item.name}</div>
         ${item.description ? `<div class="item-desc">${item.description}</div>` : ''}
@@ -974,8 +1237,67 @@ function syncSettingsState() {
   if (typeof state.settings.sfxMuted !== 'boolean') state.settings.sfxMuted = !!state.settings.muted;
   if (typeof state.settings.musicVolume !== 'number') state.settings.musicVolume = 0.55;
   if (typeof state.settings.sfxVolume !== 'number') state.settings.sfxVolume = 0.7;
+  if (typeof state.settings.masterVolume !== 'number') state.settings.masterVolume = 0.85;
+  if (typeof state.settings.ambienceVolume !== 'number') state.settings.ambienceVolume = 0.65;
+  if (typeof state.settings.ambienceMuted !== 'boolean') state.settings.ambienceMuted = false;
+  if (typeof state.settings.autoFollowRoom !== 'boolean') state.settings.autoFollowRoom = true;
   state.settings.muted = !!(state.settings.musicMuted && state.settings.sfxMuted);
 }
+
+let lastMusicPlayerRefresh = 0;
+function refreshMusicPlayerThrottled(now) {
+  if (now - lastMusicPlayerRefresh < 220) return;
+  lastMusicPlayerRefresh = now;
+  refreshMusicPlayer();
+}
+
+function refreshMusicPlayer() {
+  const info = audio.getMoodInfo();
+  const title = document.getElementById('mpTitle');
+  const subtitle = document.getElementById('mpSubtitle');
+  if (title) title.textContent = info.label;
+  if (subtitle) subtitle.textContent = `${currentRoomDef().name} • ${info.genre}`;
+  const playBtn = document.getElementById('mpPlayPause');
+  if (playBtn) playBtn.textContent = info.playing ? '⏸' : '▶';
+  const autoBtn = document.getElementById('mpAutoFollow');
+  if (autoBtn) {
+    autoBtn.classList.toggle('active', info.autoFollowRoom);
+    autoBtn.textContent = info.autoFollowRoom ? 'Auto: Room' : 'Manual';
+  }
+  const fill = document.getElementById('mpProgressFill');
+  if (fill) fill.style.width = `${Math.round((info.stepProgress || 0) * 100)}%`;
+  const vol = document.getElementById('mpVolume');
+  if (vol) vol.value = String(Math.round(state.settings.musicVolume * 100));
+  const player = document.getElementById('musicPlayer');
+  if (player) player.classList.toggle('playing', info.playing);
+}
+
+document.getElementById('mpPlayPause')?.addEventListener('click', () => { audio.togglePlayPause(); refreshMusicPlayer(); });
+document.getElementById('mpPrev')?.addEventListener('click', () => { audio.prevTrack(); refreshMusicPlayer(); });
+document.getElementById('mpNext')?.addEventListener('click', () => { audio.nextTrack(); refreshMusicPlayer(); });
+document.getElementById('mpAutoFollow')?.addEventListener('click', () => {
+  const nowAuto = !audio.getMoodInfo().autoFollowRoom;
+  audio.setAutoFollowRoom(nowAuto);
+  state.settings.autoFollowRoom = nowAuto;
+  saveState(window.localStorage, state);
+  refreshMusicPlayer();
+});
+document.getElementById('mpVolume')?.addEventListener('input', (e) => {
+  const v = Math.max(0, Math.min(1, Number(e.target.value) / 100));
+  state.settings.musicVolume = v;
+  state.settings.musicMuted = v === 0;
+  state.settings.muted = !!(state.settings.musicMuted && state.settings.sfxMuted);
+  audio.setMusicMuted(state.settings.musicMuted);
+  audio.setMusicVolume(v);
+  refreshAudioUi();
+  refreshMusicPlayer();
+  saveState(window.localStorage, state);
+});
+document.getElementById('mpCollapse')?.addEventListener('click', () => {
+  const body = document.getElementById('mpBody');
+  const collapsed = body.classList.toggle('hidden');
+  document.getElementById('mpCollapse').textContent = collapsed ? '▲' : '▼';
+});
 
 function refreshAudioUi() {
   syncSettingsState();
@@ -998,9 +1320,21 @@ function refreshAudioUi() {
   if (musicSlider) musicSlider.value = String(Math.round(state.settings.musicVolume * 100));
   const sfxSlider = document.getElementById('sfxVolume');
   if (sfxSlider) sfxSlider.value = String(Math.round(state.settings.sfxVolume * 100));
+  const masterSlider = document.getElementById('masterVolume');
+  if (masterSlider) masterSlider.value = String(Math.round(state.settings.masterVolume * 100));
+  const ambienceSlider = document.getElementById('ambienceVolume');
+  if (ambienceSlider) ambienceSlider.value = String(Math.round(state.settings.ambienceVolume * 100));
+
+  const aMuted = state.settings.masterVolume <= 0;
+  const amMuted = state.settings.ambienceMuted || state.settings.ambienceVolume <= 0;
+  const masterBtn = document.getElementById('btnPanelMasterMute');
+  if (masterBtn) masterBtn.textContent = aMuted ? 'Muted' : 'On';
+  const ambienceBtn = document.getElementById('btnPanelAmbienceMute');
+  if (ambienceBtn) ambienceBtn.textContent = amMuted ? 'Muted' : 'On';
 
   const moodEl = document.getElementById('audioMoodLabel');
   if (moodEl) moodEl.textContent = audio.getMoodInfo().label;
+  refreshMusicPlayer();
 }
 
 function toggleMusicMute() {
@@ -1061,6 +1395,34 @@ document.getElementById('sfxVolume')?.addEventListener('input', (e) => {
   refreshAudioUi();
   saveState(window.localStorage, state);
 });
+document.getElementById('masterVolume')?.addEventListener('input', (e) => {
+  const v = Math.max(0, Math.min(1, Number(e.target.value) / 100));
+  state.settings.masterVolume = v;
+  audio.setMasterVolume(v);
+  refreshAudioUi();
+  saveState(window.localStorage, state);
+});
+document.getElementById('ambienceVolume')?.addEventListener('input', (e) => {
+  const v = Math.max(0, Math.min(1, Number(e.target.value) / 100));
+  state.settings.ambienceVolume = v;
+  state.settings.ambienceMuted = v === 0;
+  audio.setAmbienceMuted(state.settings.ambienceMuted);
+  audio.setAmbienceVolume(v);
+  refreshAudioUi();
+  saveState(window.localStorage, state);
+});
+document.getElementById('btnPanelMasterMute')?.addEventListener('click', () => {
+  state.settings.masterVolume = state.settings.masterVolume > 0 ? 0 : 0.85;
+  audio.setMasterVolume(state.settings.masterVolume);
+  refreshAudioUi();
+  saveState(window.localStorage, state);
+});
+document.getElementById('btnPanelAmbienceMute')?.addEventListener('click', () => {
+  state.settings.ambienceMuted = !state.settings.ambienceMuted;
+  audio.setAmbienceMuted(state.settings.ambienceMuted);
+  refreshAudioUi();
+  saveState(window.localStorage, state);
+});
 
 function manualSave() {
   persistPlayerPos();
@@ -1091,8 +1453,11 @@ function init() {
   refreshCoins();
   updateRoomLabel();
   refreshElevatorPanel();
+  recenterCamera(player.x, player.y, ui.camera.zoom);
+  updateZoomLabel();
   audio.configure(state.settings);
-  audio.setRoomMood(state.player.room, ui.phase);
+  audio.setAutoFollowRoom(state.settings.autoFollowRoom);
+  audio.setRoomMood(state.player.room, ui.phase, currentRoomDef().floor || 1);
   refreshAudioUi();
   if (!window.localStorage.getItem(HELP_SEEN_KEY)) showHelp();
   requestAnimationFrame(frame);
@@ -1223,4 +1588,29 @@ window.__pixelHotel = {
     ];
   },
   getCanvas: () => canvas,
+  getCamera: () => ({ ...ui.camera }),
+  setZoom: (z) => { setZoomAtPoint(z, ui.cssW / 2, ui.cssH / 2); },
+  resetZoom: () => resetZoom(),
+  screenToTile: (x, y) => pickTileAt(x, y),
+  tileToScreen: (x, y) => {
+    const room = currentRoomDef();
+    const { originX, originY } = computeOrigin(room, ui.cssW, ui.cssH);
+    const world = tileToScreen(x, y, originX, originY);
+    return worldToScreen(world.sx, world.sy, ui.camera, ui.cssW, ui.cssH);
+  },
+  clickNpc: (npcId) => startNpcDialogue(npcId),
+  closeDialogue: () => closeNpcDialogue(),
+  getDialogueState: () => ({
+    open: !!ui.activeDialogue,
+    npcId: ui.activeDialogue?.npcId || null,
+    text: document.getElementById('npcDlgText')?.textContent || '',
+  }),
+  getMusicPlayerState: () => ({
+    title: document.getElementById('mpTitle')?.textContent || '',
+    subtitle: document.getElementById('mpSubtitle')?.textContent || '',
+    playing: !audio.musicMuted && audio.playing !== false,
+    autoFollowRoom: audio.autoFollowRoom,
+    info: audio.getMoodInfo(),
+  }),
+  getItemIcon: (itemId) => getItemIconDataUrl(itemId, 48, 1),
 };

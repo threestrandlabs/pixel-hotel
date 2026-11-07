@@ -67,6 +67,14 @@ export const LOOKS = {
     skin: '#ffd8b4', hair: '#e8b854', hairStyle: 'long', eye: '#2b2230', brow: '#b0842c', mouth: 'smile',
     shirt: '#78c466', under: '#fff4d4', outfit: 'cardigan', flower: true, pants: '#4a6b48', shoe: '#7c5434',
   },
+  celeste: { // head receptionist: royal navy blazer with gold lapels & buttons, neat bob
+    skin: '#ffe0c2', hair: '#382230', hairStyle: 'bob', eye: '#2b2230', brow: '#2a1824', mouth: 'smile', lashes: true,
+    shirt: '#2e4478', gold: '#ffd268', cuff: '#ffd268', outfit: 'bellhop', pants: '#1e2c50', shoe: '#1c1824',
+  },
+  receptionist: {
+    skin: '#ffe0c2', hair: '#382230', hairStyle: 'bob', eye: '#2b2230', brow: '#2a1824', mouth: 'smile', lashes: true,
+    shirt: '#2e4478', gold: '#ffd268', cuff: '#ffd268', outfit: 'bellhop', pants: '#1e2c50', shoe: '#1c1824',
+  },
 };
 
 // ---------- model ----------

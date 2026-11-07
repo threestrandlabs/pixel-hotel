@@ -36,6 +36,22 @@ export function oppositeDir(dir) {
   return { down: 'up', up: 'down', left: 'right', right: 'left' }[dir] || 'down';
 }
 
+export function isFurnitureWalkable(itemOrId) {
+  const item = typeof itemOrId === 'string' ? getCatalogueItem(itemOrId) : itemOrId;
+  if (!item) return false;
+  return Boolean(item.walkable || item.flat);
+}
+
+export function isTileBlockedByFurniture(placed = [], x, y) {
+  for (const p of placed) {
+    const item = getCatalogueItem(p.itemId);
+    if (!item || isFurnitureWalkable(item)) continue;
+    const cells = footprintCells(p.x, p.y, item.footprint, p.rot || 0);
+    if (cells.some((c) => c.x === x && c.y === y)) return true;
+  }
+  return false;
+}
+
 /**
  * Returns occupyable slot tiles for a placed item (seats, beds, yoga mats, treadmills, pools).
  */
@@ -119,14 +135,70 @@ export function findApproachTile(room, placedItem, isBlocked, fromPos, occupants
     for (const s of slots) {
       if (occupants.some((o) => o.x === s.x && o.y === s.y)) continue;
       if (reservations.some((r) => r.x === s.x && r.y === s.y)) continue;
-      const allowSlot = (x, y) => (x === s.x && y === s.y ? false : isBlocked(x, y));
-      const path = findPath(room.width, room.height, allowSlot, fromPos, { x: s.x, y: s.y });
-      if (path) {
-        let kind = s.kind;
-        if (kind === 'sit' && room.placed && isDiningSeat(room.placed, placedItem, s)) {
-          kind = 'eat';
+      let kind = s.kind;
+      if (kind === 'sit' && room.placed && isDiningSeat(room.placed, placedItem, s)) {
+        kind = 'eat';
+      }
+      if (fromPos.x === s.x && fromPos.y === s.y) {
+        return {
+          x: s.x,
+          y: s.y,
+          tile: { x: s.x, y: s.y },
+          approachTile: { x: s.x, y: s.y },
+          dir: s.dir,
+          kind,
+          path: [{ x: s.x, y: s.y }],
+          directSlot: true,
+        };
+      }
+      if (isFurnitureWalkable(item)) {
+        const allowSlot = (x, y) => (x === s.x && y === s.y ? false : isBlocked(x, y));
+        const path = findPath(room.width, room.height, allowSlot, fromPos, { x: s.x, y: s.y });
+        if (path) {
+          const approachTile = path.length >= 2 ? path[path.length - 2] : { x: s.x, y: s.y };
+          return { x: s.x, y: s.y, tile: { x: s.x, y: s.y }, approachTile, dir: s.dir, kind, path, directSlot: true };
         }
-        return { x: s.x, y: s.y, tile: { x: s.x, y: s.y }, dir: s.dir, kind, path, directSlot: true };
+        continue;
+      }
+
+      // Non-walkable seats/beds/treadmills: path to an adjacent unblocked floor tile first, then step onto the slot
+      const adjDeltas = [
+        { dx: 0, dy: 1, side: 'down' },
+        { dx: 1, dy: 0, side: 'right' },
+        { dx: 0, dy: -1, side: 'up' },
+        { dx: -1, dy: 0, side: 'left' },
+      ];
+      const frontDir = seatDirFromRot(placedItem.rot || 0);
+      const adjCandidates = [];
+      for (const d of adjDeltas) {
+        const ax = s.x + d.dx;
+        const ay = s.y + d.dy;
+        if (ax < 0 || ay < 0 || ax >= room.width || ay >= room.height) continue;
+        if ((ax !== fromPos.x || ay !== fromPos.y) && isBlocked(ax, ay)) continue;
+        const pathToAdj = findPath(room.width, room.height, isBlocked, fromPos, { x: ax, y: ay });
+        if (pathToAdj) {
+          const isFront = d.side === frontDir ? 0 : 1;
+          adjCandidates.push({
+            ax,
+            ay,
+            path: [...pathToAdj, { x: s.x, y: s.y }],
+            score: isFront * 3 + pathToAdj.length,
+          });
+        }
+      }
+      adjCandidates.sort((a, b) => a.score - b.score);
+      if (adjCandidates.length > 0) {
+        const best = adjCandidates[0];
+        return {
+          x: s.x,
+          y: s.y,
+          tile: { x: s.x, y: s.y },
+          approachTile: { x: best.ax, y: best.ay },
+          dir: s.dir,
+          kind,
+          path: best.path,
+          directSlot: true,
+        };
       }
     }
     return null;
@@ -162,6 +234,7 @@ export function findApproachTile(room, placedItem, isBlocked, fromPos, occupants
           x: ax,
           y: ay,
           tile: { x: ax, y: ay },
+          approachTile: { x: ax, y: ay },
           dir: d.faceDir,
           kind: item.interaction || 'use',
           path,
@@ -183,12 +256,9 @@ export function hasDoorArrivalRoute(room, placed = room.placed || []) {
     if (x < 0 || y < 0 || x >= room.width || y >= room.height) return true;
     const c = room.grid[y][x];
     if (c === TILE.WALL || c === TILE.WINDOW || c === TILE.VOID) return true;
-    return placed.some((p) => {
-      const item = getCatalogueItem(p.itemId);
-      return item && !item.seat && !item.flat && item.interaction !== 'treadmill' &&
-        footprintCells(p.x, p.y, item.footprint, p.rot || 0).some((fc) => fc.x === x && fc.y === y);
-    });
+    return isTileBlockedByFurniture(placed, x, y);
   };
+  if (room.spawn && isBlocked(room.spawn.x, room.spawn.y)) return false;
   for (const d of room.doors || []) {
     const landing = d.y === 0 ? { x: d.x, y: 1 } : { x: 1, y: d.y };
     if (isBlocked(landing.x, landing.y)) return false;
@@ -199,7 +269,7 @@ export function hasDoorArrivalRoute(room, placed = room.placed || []) {
 }
 
 /**
- * @param {object} room - { width, height, grid, placed: [{instanceId,itemId,x,y,rot}] }
+ * @param {object} room - { width, height, grid, placed: [{instanceId,itemId,x,y,rot}], doors?, spawn? }
  * @param {object} item - catalogue item
  * @param {number} x
  * @param {number} y
@@ -210,6 +280,7 @@ export function hasDoorArrivalRoute(room, placed = room.placed || []) {
  */
 export function canPlaceAt(room, item, x, y, rot, occupantTiles = [], excludeInstanceId = null) {
   const cells = footprintCells(x, y, item.footprint, rot);
+  const itemWalkable = isFurnitureWalkable(item);
   for (const c of cells) {
     if (c.x < 0 || c.y < 0 || c.x >= room.width || c.y >= room.height) {
       return { ok: false, reason: 'out_of_bounds' };
@@ -218,22 +289,52 @@ export function canPlaceAt(room, item, x, y, rot, occupantTiles = [], excludeIns
     if (cell === TILE.WALL || cell === TILE.DOOR || cell === TILE.WINDOW || cell === TILE.VOID) {
       return { ok: false, reason: 'blocked_tile' };
     }
-    if (!item.flat && c.y === 1 && room.grid[0] && room.grid[0][c.x] === TILE.DOOR) {
+    if (!itemWalkable && c.y === 1 && room.grid[0] && room.grid[0][c.x] === TILE.DOOR) {
       return { ok: false, reason: 'door_clearance' };
     }
-    if (occupantTiles.some((o) => o.x === c.x && o.y === c.y)) {
+    if (!itemWalkable && occupantTiles.some((o) => o.x === c.x && o.y === c.y)) {
       return { ok: false, reason: 'occupied' };
     }
     for (const p of room.placed) {
       if (p.instanceId === excludeInstanceId) continue;
       const other = getCatalogueItem(p.itemId);
+      if (!other) continue;
       if (!!other.flat !== !!item.flat) continue; // rugs lie under furniture
+      if (!!other.overhead !== !!item.overhead) continue; // overhead chandeliers hang above rugs
       const otherCells = footprintCells(p.x, p.y, other.footprint, p.rot);
       if (otherCells.some((oc) => oc.x === c.x && oc.y === c.y)) {
         return { ok: false, reason: 'furniture_overlap' };
       }
     }
   }
+
+  // Prevent non-walkable placements that block doors/spawn or trap the player
+  if (!itemWalkable && (room.doors?.length || room.spawn)) {
+    const nextPlaced = [
+      ...room.placed.filter((p) => p.instanceId !== excludeInstanceId),
+      { instanceId: excludeInstanceId || '__preview__', itemId: item.id, x, y, rot },
+    ];
+    if (room.doors?.length && room.spawn && !hasDoorArrivalRoute(room, nextPlaced)) {
+      return { ok: false, reason: 'blocks_door_route' };
+    }
+    const anchor = room.spawn || (room.doors?.[0] ? { x: room.doors[0].x, y: 1 } : null);
+    if (anchor && occupantTiles.length > 0) {
+      const blockedAfter = (tx, ty) => {
+        if (tx < 0 || ty < 0 || tx >= room.width || ty >= room.height) return true;
+        const tc = room.grid[ty][tx];
+        if (tc === TILE.WALL || tc === TILE.WINDOW || tc === TILE.VOID) return true;
+        return isTileBlockedByFurniture(nextPlaced, tx, ty);
+      };
+      const playerOcc = occupantTiles[0];
+      if (playerOcc && !blockedAfter(playerOcc.x, playerOcc.y) && !blockedAfter(anchor.x, anchor.y)) {
+        const escapePath = findPath(room.width, room.height, blockedAfter, playerOcc, anchor);
+        if (!escapePath) {
+          return { ok: false, reason: 'traps_player' };
+        }
+      }
+    }
+  }
+
   return { ok: true, cells };
 }
 

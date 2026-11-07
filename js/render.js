@@ -16,11 +16,21 @@ export const TOP_PADDING = 54;
 
 const canvasCache = new Map();
 
+// Baked sprite canvases are rasterised at `dpr` density in room/world space. The
+// caller may be drawing under a camera transform (device-pixel-ratio * zoom, plus
+// pan) — we must honour that same transform here too, or sprites drift out of sync
+// with vector-drawn content (shadows, vehicles, buildings) that already respects it.
 function blitDeviceAligned(ctx, sourceCanvas, cssX, cssY, dpr) {
+  const t = ctx.getTransform();
+  const dx = Math.round(t.a * cssX + t.e);
+  const dy = Math.round(t.d * cssY + t.f);
+  const zoomScale = t.a / dpr;
+  const dw = Math.round(sourceCanvas.width * zoomScale);
+  const dh = Math.round(sourceCanvas.height * zoomScale);
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(sourceCanvas, Math.round(cssX * dpr), Math.round(cssY * dpr));
+  ctx.drawImage(sourceCanvas, dx, dy, dw, dh);
   ctx.restore();
 }
 
@@ -126,12 +136,75 @@ export function tileToScreen(x, y, originX, originY) {
   };
 }
 
-export function screenToTile(mx, my, originX, originY) {
-  const a = (mx - originX) / (TILE_W / 2);
-  const b = (my - originY) / (TILE_H / 2);
+export const DEFAULT_ZOOM = 1.85;
+export const MIN_ZOOM = 0.55;
+export const MAX_ZOOM = 2.5;
+
+export function clampZoom(z) {
+  const num = typeof z === 'number' && !isNaN(z) ? z : DEFAULT_ZOOM;
+  return Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Math.round(num * 100) / 100));
+}
+
+export function worldToScreen(wx, wy, camera = null, width = 0, height = 0) {
+  if (!camera) return { sx: wx, sy: wy };
+  const zoom = camera.zoom ?? 1;
+  const panX = camera.panX ?? 0;
+  const panY = camera.panY ?? 0;
+  const cx = width > 0 ? width / 2 : 0;
+  const cy = height > 0 ? height / 2 : 0;
+  return {
+    sx: (wx - cx) * zoom + cx + panX,
+    sy: (wy - cy) * zoom + cy + panY,
+  };
+}
+
+export function screenToWorld(sx, sy, camera = null, width = 0, height = 0) {
+  if (!camera) return { wx: sx, wy: sy };
+  const zoom = camera.zoom ?? 1;
+  const panX = camera.panX ?? 0;
+  const panY = camera.panY ?? 0;
+  const cx = width > 0 ? width / 2 : 0;
+  const cy = height > 0 ? height / 2 : 0;
+  return {
+    wx: (sx - cx - panX) / zoom + cx,
+    wy: (sy - cy - panY) / zoom + cy,
+  };
+}
+
+export function screenToTile(mx, my, originX, originY, camera = null, width = 0, height = 0) {
+  let wx = mx;
+  let wy = my;
+  if (camera && width && height) {
+    const w = screenToWorld(mx, my, camera, width, height);
+    wx = w.wx;
+    wy = w.wy;
+  }
+  const a = (wx - originX) / (TILE_W / 2);
+  const b = (wy - originY) / (TILE_H / 2);
   const x = (a + b) / 2;
   const y = (b - a) / 2;
   return { x: Math.round(x), y: Math.round(y) };
+}
+
+export function centerCameraOnTile(tx, ty, room, width, height, zoom = DEFAULT_ZOOM) {
+  const { originX, originY } = computeOrigin(room, width, height);
+  const { sx, sy } = tileToScreen(tx, ty, originX, originY);
+  const clampedZoom = clampZoom(zoom);
+  const panX = Math.round(- (sx - width / 2) * clampedZoom);
+  const panY = Math.round((height * 0.52 - height / 2) - (sy - height / 2) * clampedZoom);
+  return { zoom: clampedZoom, panX, panY };
+}
+
+export function zoomAtPoint(camera, newZoom, cursorX, cursorY, width, height) {
+  const oldZoom = camera?.zoom ?? 1;
+  const clamped = clampZoom(newZoom);
+  const panX = camera?.panX ?? 0;
+  const panY = camera?.panY ?? 0;
+  const wx = (cursorX - width / 2 - panX) / oldZoom + width / 2;
+  const wy = (cursorY - height / 2 - panY) / oldZoom + height / 2;
+  const newPanX = Math.round(cursorX - width / 2 - (wx - width / 2) * clamped);
+  const newPanY = Math.round(cursorY - height / 2 - (wy - height / 2) * clamped);
+  return { zoom: clamped, panX: newPanX, panY: newPanY };
 }
 
 export function computeOrigin(room, canvasWidth, canvasHeight) {
@@ -180,16 +253,21 @@ function hexToRgb(hex) {
 // ---------- Shared Isometric City & Ground Backdrop (Cached Offscreen) ----------
 
 export const SLAB_H = 16;
-export const STORY_H = 44;
+export const STORY_H = 56;
+
+export function storiesBelowFloor(floor = 1) {
+  return Math.max(0, Math.min(10, Math.floor(floor) - 1));
+}
 
 export function computeGroundDy(floor = 1) {
-  return SLAB_H + 6 + (Math.max(1, floor) - 1) * STORY_H;
+  const f = Math.max(1, floor);
+  return SLAB_H + (f - 1) * STORY_H;
 }
 
 export function computeCityGroundDy(floor = 1) {
   const f = Math.max(1, floor);
   if (f <= 5) return computeGroundDy(f);
-  return computeGroundDy(5) + (f - 5) * 26;
+  return computeGroundDy(5) + (f - 5) * 32;
 }
 
 export function projectIsoCityPoint(u, v, z, originX, groundOriginY) {
@@ -406,15 +484,13 @@ export function buildIsoCityLayout(room = { id: 'lobby', width: 12, height: 9, f
           continue;
         }
 
-        // Determine building height (in vertical screen pixels) with rich urban variety
+        // Neighbour building height in consistent storey units (3-30 storeys, STORY_H = 56px)
         const isBackRing = (bi <= 0 && bj <= 0);
-        const minStories = isBackRing ? 3 : 2;
-        const maxStories = isBackRing ? 7 : 6;
+        const minStories = isBackRing ? 6 : 3;
+        const maxStories = isBackRing ? 30 : 16;
         const rawStories = minStories + Math.floor(rand() * (maxStories - minStories + 1));
-        const storyPx = 22;
-        const baseScreenY = P((pu0 + pu1) / 2, (pv0 + pv1) / 2, 0)[1];
-        const maxAllowedStories = Math.max(2, Math.floor((baseScreenY - 52) / storyPx));
-        const stories = Math.min(rawStories, maxAllowedStories);
+        const storyPx = STORY_H;
+        const stories = Math.max(3, Math.min(30, rawStories));
         const heightZ = stories * storyPx;
         const pal = palettes[Math.floor(rand() * palettes.length)];
         const roofStyle = Math.floor(rand() * 3); // 0: penthouse+spire, 1: HVAC+skylight, 2: sky-garden
@@ -427,8 +503,8 @@ export function buildIsoCityLayout(room = { id: 'lobby', width: 12, height: 9, f
         const vCols = Math.max(2, Math.floor(vSpan * 1.4));
 
         for (let st = 0; st < stories; st++) {
-          const z0 = 3 + 6 + st * storyPx;
-          const z1 = z0 + 13;
+          const z0 = 3 + 8 + st * storyPx;
+          const z1 = z0 + 26;
           for (let c = 0; c < uCols; c++) {
             const wu0 = pu0 + 0.35 + (c / uCols) * (uSpan - 0.7);
             const wu1 = wu0 + ((uSpan - 0.7) / uCols) * 0.62;
@@ -500,6 +576,227 @@ export function buildIsoCityLayout(room = { id: 'lobby', width: 12, height: 9, f
 let skylineCache = { key: '', canvas: null, beacons: [] };
 let cutawayCache = { key: '', canvas: null };
 
+// ---------- Animated City Vehicles (Cars, Taxis, Buses, Scooters) ----------
+
+const VEHICLE_TYPES = {
+  car: { length: 1.3, width: 0.55, height: 8, speed: 0.0032 },
+  taxi: { length: 1.3, width: 0.55, height: 8, speed: 0.0033 },
+  bus: { length: 2.7, width: 0.72, height: 13, speed: 0.0024 },
+  scooter: { length: 0.7, width: 0.35, height: 6, speed: 0.0038 },
+};
+
+const CAR_COLORS = ['#3f72af', '#c0392b', '#27ae60', '#e0e0e0', '#2c3e50', '#8e44ad', '#d35400'];
+
+export function computeCityVehicles(layout, now = 0, phase = 0.5) {
+  if (!layout?.roads) return [];
+  const { day } = dayNightColors(phase);
+  const lightsOn = day < 0.75;
+  const vehicles = [];
+
+  const cycle = (now % 12000) / 1000;
+  const vGreen = cycle < 5.5;
+  const uGreen = cycle >= 6.0 && cycle < 11.5;
+
+  const configs = [
+    { id: 'v0', axis: 'v', rIdx: -2, lane: 1, type: 'car', color: CAR_COLORS[0], offset: 0 },
+    { id: 'v1', axis: 'v', rIdx: -2, lane: -1, type: 'bus', color: '#c0392b', offset: 25 },
+    { id: 'v2', axis: 'v', rIdx: -1, lane: 1, type: 'taxi', color: '#f1c40f', offset: 12 },
+    { id: 'v3', axis: 'v', rIdx: -1, lane: -1, type: 'scooter', color: '#e74c3c', offset: 35 },
+    { id: 'v4', axis: 'v', rIdx: 0, lane: 1, type: 'car', color: CAR_COLORS[1], offset: 48 },
+    { id: 'v5', axis: 'v', rIdx: 0, lane: -1, type: 'taxi', color: '#f1c40f', offset: 6 },
+    { id: 'v6', axis: 'v', rIdx: 1, lane: 1, type: 'bus', color: '#2980b9', offset: 18 },
+    { id: 'v7', axis: 'v', rIdx: 1, lane: -1, type: 'car', color: CAR_COLORS[2], offset: 42 },
+
+    { id: 'u0', axis: 'u', rIdx: -2, lane: 1, type: 'car', color: CAR_COLORS[3], offset: 5 },
+    { id: 'u1', axis: 'u', rIdx: -2, lane: -1, type: 'taxi', color: '#f1c40f', offset: 28 },
+    { id: 'u2', axis: 'u', rIdx: -1, lane: 1, type: 'bus', color: '#27ae60', offset: 16 },
+    { id: 'u3', axis: 'u', rIdx: -1, lane: -1, type: 'car', color: CAR_COLORS[4], offset: 45 },
+    { id: 'u4', axis: 'u', rIdx: 0, lane: 1, type: 'scooter', color: '#34495e', offset: 8 },
+    { id: 'u5', axis: 'u', rIdx: 0, lane: -1, type: 'car', color: CAR_COLORS[5], offset: 33 },
+    { id: 'u6', axis: 'u', rIdx: 1, lane: 1, type: 'taxi', color: '#f1c40f', offset: 22 },
+    { id: 'u7', axis: 'u', rIdx: 1, lane: -1, type: 'bus', color: '#d35400', offset: 52 },
+  ];
+
+  const roadLength = 76;
+  const roadStart = -36;
+
+  for (const cfg of configs) {
+    const road = layout.roads.find((r) => r.axis === cfg.axis && r.idx === cfg.rIdx);
+    if (!road) continue;
+
+    const vDef = VEHICLE_TYPES[cfg.type] || VEHICLE_TYPES.car;
+    const isV = cfg.axis === 'v';
+    const isGreen = isV ? vGreen : uGreen;
+
+    let rawDist = ((now * vDef.speed + cfg.offset) % roadLength);
+    let coord = cfg.lane > 0 ? (roadStart + rawDist) : (roadStart + roadLength - rawDist);
+
+    const crossings = layout.crossings.filter((c) => (isV ? (c.axis === 'u') : (c.axis === 'v')));
+    let stopping = false;
+
+    if (!isGreen) {
+      for (const cross of crossings) {
+        const crossPos = isV ? cross.v : cross.u;
+        const distToCross = cfg.lane > 0 ? (crossPos - coord) : (coord - crossPos);
+        if (distToCross > 0.2 && distToCross < 2.5) {
+          const stopLine = cfg.lane > 0 ? (crossPos - 0.75) : (crossPos + 0.75);
+          coord = stopLine;
+          stopping = true;
+          break;
+        }
+      }
+    }
+
+    const mid = isV ? (road.u0 + road.u1) / 2 : (road.v0 + road.v1) / 2;
+    const laneOffset = cfg.lane > 0 ? 0.38 : -0.38;
+
+    let u, v, heading;
+    if (isV) {
+      u = mid + laneOffset;
+      v = coord;
+      heading = cfg.lane > 0 ? '+v' : '-v';
+    } else {
+      u = coord;
+      v = mid - laneOffset;
+      heading = cfg.lane > 0 ? '+u' : '-u';
+    }
+
+    const pt = projectIsoCityPoint(u, v, 0, layout.originX, layout.groundOriginY);
+
+    vehicles.push({
+      id: cfg.id,
+      axis: cfg.axis,
+      lane: cfg.lane,
+      type: cfg.type,
+      color: cfg.color,
+      u,
+      v,
+      screenX: pt[0],
+      screenY: pt[1],
+      heading,
+      stopping,
+      lightsOn,
+      length: vDef.length,
+      width: vDef.width,
+      height: vDef.height,
+    });
+  }
+
+  vehicles.sort((a, b) => (a.u + a.v) - (b.u + b.v));
+  return vehicles;
+}
+
+export function drawCityVehicles(ctx, layout, vehicles, phase = 0.5, dpr = 1) {
+  if (!vehicles || vehicles.length === 0) return;
+  const P = (u, v, z = 0) => projectIsoCityPoint(u, v, z, layout.originX, layout.groundOriginY);
+  const { day } = dayNightColors(phase);
+
+  for (const veh of vehicles) {
+    const { u, v, heading, type, color, lightsOn, stopping, length, width, height } = veh;
+    const isV = veh.axis === 'v';
+
+    let u0, v0, u1, v1;
+    if (isV) {
+      u0 = u - width / 2;
+      u1 = u + width / 2;
+      v0 = v - length / 2;
+      v1 = v + length / 2;
+    } else {
+      u0 = u - length / 2;
+      u1 = u + length / 2;
+      v0 = v - width / 2;
+      v1 = v + width / 2;
+    }
+
+    // Shadow on asphalt
+    fillPoly(ctx, [P(u0 - 0.08, v0 - 0.08, 0.2), P(u1 + 0.08, v0 - 0.08, 0.2), P(u1 + 0.08, v1 + 0.08, 0.2), P(u0 - 0.08, v1 + 0.08, 0.2)], 'rgba(15, 12, 24, 0.38)');
+
+    // Headlight cones at night
+    if (lightsOn) {
+      ctx.save();
+      let conePts = null;
+      if (heading === '+v') {
+        conePts = [P(u0 + 0.05, v1, 1), P(u1 - 0.05, v1, 1), P(u1 + 0.55, v1 + 2.8, 0), P(u0 - 0.55, v1 + 2.8, 0)];
+      } else if (heading === '-v') {
+        conePts = [P(u1 - 0.05, v0, 1), P(u0 + 0.05, v0, 1), P(u0 - 0.55, v0 - 2.8, 0), P(u1 + 0.55, v0 - 2.8, 0)];
+      } else if (heading === '+u') {
+        conePts = [P(u1, v0 + 0.05, 1), P(u1, v1 - 0.05, 1), P(u1 + 2.8, v1 + 0.55, 0), P(u1 + 2.8, v0 - 0.55, 0)];
+      } else {
+        conePts = [P(u0, v1 - 0.05, 1), P(u0, v0 + 0.05, 1), P(u0 - 2.8, v0 - 0.55, 0), P(u0 - 2.8, v1 + 0.55, 0)];
+      }
+      if (conePts) fillPoly(ctx, conePts, 'rgba(255, 246, 175, 0.2)');
+      ctx.restore();
+    }
+
+    // Base body prism
+    const bodyCol = color;
+    const bodyLeft = shadeColor(bodyCol, -0.16);
+    const bodyRight = shadeColor(bodyCol, -0.32);
+    const bodyTop = shadeColor(bodyCol, 0.08);
+    const zBase = 1;
+    const zBody = zBase + Math.min(height, 5.5);
+
+    drawIsoPrism(ctx, P, u0, v0, u1, v1, zBase, zBody, bodyLeft, bodyRight, bodyTop);
+
+    // Upper cabin / windows for car / taxi / bus
+    if (type !== 'scooter') {
+      const zCabTop = zBase + height;
+      const cabPadU = isV ? 0.06 : 0.22;
+      const cabPadV = isV ? 0.22 : 0.06;
+      const cabU0 = u0 + cabPadU;
+      const cabU1 = u1 - cabPadU;
+      const cabV0 = v0 + cabPadV;
+      const cabV1 = v1 - cabPadV;
+
+      const cabGlass = day > 0.6 ? '#6cb0d8' : '#2c3e54';
+      drawIsoPrism(ctx, P, cabU0, cabV0, cabU1, cabV1, zBody, zCabTop, shadeColor(cabGlass, -0.15), shadeColor(cabGlass, -0.28), bodyTop);
+
+      if (type === 'taxi') {
+        const sU0 = u - 0.1, sU1 = u + 0.1;
+        const sV0 = v - 0.1, sV1 = v + 0.1;
+        drawIsoPrism(ctx, P, sU0, sV0, sU1, sV1, zCabTop, zCabTop + 2.8, '#f5f5f5', '#dcdcdc', '#ffffff');
+      }
+    } else {
+      const rHead = P(u, v, zBody + 5);
+      ctx.fillStyle = '#f39c12';
+      ctx.beginPath();
+      ctx.arc(rHead[0], rHead[1], 2.4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Headlights and Taillights
+    if (lightsOn) {
+      ctx.save();
+      const headCol = '#fff9a8';
+      const tailCol = stopping ? '#ff1e1e' : '#e74c3c';
+
+      let frontPt1, frontPt2, rearPt1, rearPt2;
+      if (heading === '+v') {
+        frontPt1 = P(u0 + 0.08, v1, 3.5); frontPt2 = P(u1 - 0.08, v1, 3.5);
+        rearPt1 = P(u0 + 0.08, v0, 3.5); rearPt2 = P(u1 - 0.08, v0, 3.5);
+      } else if (heading === '-v') {
+        frontPt1 = P(u1 - 0.08, v0, 3.5); frontPt2 = P(u0 + 0.08, v0, 3.5);
+        rearPt1 = P(u1 - 0.08, v1, 3.5); rearPt2 = P(u0 + 0.08, v1, 3.5);
+      } else if (heading === '+u') {
+        frontPt1 = P(u1, v0 + 0.08, 3.5); frontPt2 = P(u1, v1 - 0.08, 3.5);
+        rearPt1 = P(u0, v0 + 0.08, 3.5); rearPt2 = P(u0, v1 - 0.08, 3.5);
+      } else {
+        frontPt1 = P(u0, v1 - 0.08, 3.5); frontPt2 = P(u0, v0 + 0.08, 3.5);
+        rearPt1 = P(u1, v1 - 0.08, 3.5); rearPt2 = P(u1, v0 + 0.08, 3.5);
+      }
+
+      ctx.fillStyle = headCol;
+      ctx.beginPath(); ctx.arc(frontPt1[0], frontPt1[1], 1.6, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(frontPt2[0], frontPt2[1], 1.6, 0, Math.PI * 2); ctx.fill();
+
+      ctx.fillStyle = tailCol;
+      ctx.beginPath(); ctx.arc(rearPt1[0], rearPt1[1], stopping ? 2.0 : 1.4, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(rearPt2[0], rearPt2[1], stopping ? 2.0 : 1.4, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+  }
+}
+
 export function drawBackground(ctx, width, height, phase, floor = 1, dpr = 1, now = 0, room = null) {
   const phaseBucket = Math.round(phase * 48) % 48;
   const rW = room?.width || 12;
@@ -517,6 +814,19 @@ export function drawBackground(ctx, width, height, phase, floor = 1, dpr = 1, no
   }
 
   blitDeviceAligned(ctx, skylineCache.canvas, 0, 0, dpr);
+
+  // Live animated city vehicles on isometric road corridors. Clipped to the same
+  // ground-plane band as the roads/buildings so a vehicle far down a road (near the
+  // vanishing point) can't be projected above the horizon and float over the sky/buildings.
+  const roomSpec = room || { id: 'lobby', width: 12, height: 9, floor };
+  const layout = buildIsoCityLayout(roomSpec, width, height, phase);
+  const vehicles = computeCityVehicles(layout, now, phase);
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, layout.horizonY, width, height - layout.horizonY);
+  ctx.clip();
+  drawCityVehicles(ctx, layout, vehicles, phase, dpr);
+  ctx.restore();
 
   // Live blinking red aircraft warning beacons on tall isometric skyscraper spires
   const blinkOn = Math.floor(now / 650) % 2 === 0;
@@ -939,7 +1249,7 @@ function drawTowerCutawayUnder(ctx, room, originX, originY, height, phase) {
 
   // Silhouette-accurate lower tower shaft, neighbouring floor windows, and concrete slab per non-VOID boundary tile
   const underSlabCol = shadeColor(floorBaseColor(room), -0.25);
-  const storiesBelow = Math.min(8, floorNo - 1);
+  const storiesBelow = storiesBelowFloor(floorNo);
   for (let y = 1; y < room.height; y++) {
     for (let x = 1; x < room.width; x++) {
       if (!isFloorTile(x, y)) continue;
@@ -962,7 +1272,7 @@ function drawTowerCutawayUnder(ctx, room, originX, originY, height, phase) {
           const y1 = wPt[1] + (sPt[1] - wPt[1]) * 0.8 + dy0;
           const isLit = ((x * 7 + story * 13 + floorNo) % 5) !== 0;
           const winCol = day > 0.65 ? (isLit ? '#9ad0f4' : '#4a6484') : (isLit ? '#ffd884' : '#242238');
-          fillPoly(ctx, [[x0, y0], [x1, y1], [x1, y1 + 20], [x0, y0 + 20]], winCol);
+          fillPoly(ctx, [[x0, y0], [x1, y1], [x1, y1 + 26], [x0, y0 + 26]], winCol);
         }
         fillPoly(ctx, [wPt, sPt, [sPt[0], sPt[1] + SLAB_H], [wPt[0], wPt[1] + SLAB_H]], '#787486');
         ctx.fillStyle = '#3a3646';
@@ -981,7 +1291,7 @@ function drawTowerCutawayUnder(ctx, room, originX, originY, height, phase) {
           const y1 = sPt[1] + (ePt[1] - sPt[1]) * 0.8 + dy0;
           const isLit = ((y * 11 + story * 5 + floorNo) % 4) !== 0;
           const winCol = day > 0.65 ? (isLit ? '#78b0d8' : '#384e68') : (isLit ? '#f0be68' : '#1b182c');
-          fillPoly(ctx, [[x0, y0], [x1, y1], [x1, y1 + 20], [x0, y0 + 20]], winCol);
+          fillPoly(ctx, [[x0, y0], [x1, y1], [x1, y1 + 26], [x0, y0 + 26]], winCol);
         }
         fillPoly(ctx, [sPt, ePt, [ePt[0], ePt[1] + SLAB_H], [sPt[0], sPt[1] + SLAB_H]], '#565264');
         ctx.fillStyle = '#2a2636';
@@ -1241,20 +1551,105 @@ export function drawDiamondOverlay(ctx, sx, sy, color, alpha) {
   ctx.restore();
 }
 
+export const entityScreenBounds = new Map();
+
+export function hitTestNpc(screenX, screenY) {
+  for (const b of entityScreenBounds.values()) {
+    if (screenX >= b.x0 && screenX <= b.x1 && screenY >= b.y0 && screenY <= b.y1) {
+      return b.entity;
+    }
+  }
+  return null;
+}
+
+const itemIconCache = new Map();
+
+export function renderItemIcon(itemId, size = 52, dpr = 1, makeCanvas = null) {
+  const cacheKey = `${itemId}:${size}@${dpr}`;
+  if (itemIconCache.has(cacheKey)) return itemIconCache.get(cacheKey);
+
+  const targetW = Math.max(1, Math.round(size * dpr));
+  const targetH = Math.max(1, Math.round(size * dpr));
+  const canvas = makeCanvas
+    ? makeCanvas(targetW, targetH)
+    : (typeof document !== 'undefined' ? document.createElement('canvas') : null);
+  if (!canvas) return null;
+  canvas.width = targetW;
+  canvas.height = targetH;
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+
+  try {
+    const fCanvas = furnitureCanvas(itemId, 0, dpr);
+    if (fCanvas && fCanvas.width > 0 && fCanvas.height > 0) {
+      const pad = Math.round(3 * dpr);
+      const availW = targetW - pad * 2;
+      const availH = targetH - pad * 2;
+      const scale = Math.min(availW / fCanvas.width, availH / fCanvas.height, 1.25);
+      const dw = Math.round(fCanvas.width * scale);
+      const dh = Math.round(fCanvas.height * scale);
+      const dx = Math.round((targetW - dw) / 2);
+      const dy = Math.round((targetH - dh) / 2);
+      ctx.drawImage(fCanvas, dx, dy, dw, dh);
+      itemIconCache.set(cacheKey, canvas);
+      return canvas;
+    }
+  } catch (err) {
+    // fallback below
+  }
+
+  const item = getCatalogueItem(itemId);
+  const color = item?.color || '#ffd27a';
+  const midX = targetW / 2;
+  const midY = targetH / 2;
+  const s = Math.round(14 * dpr);
+  fillPoly(ctx, [[midX, midY - s], [midX + s, midY - s / 2], [midX, midY], [midX - s, midY - s / 2]], color);
+  fillPoly(ctx, [[midX - s, midY - s / 2], [midX, midY], [midX, midY + s], [midX - s, midY + s / 2]], shadeColor(color, -0.15));
+  fillPoly(ctx, [[midX, midY], [midX + s, midY - s / 2], [midX + s, midY + s / 2], [midX, midY + s]], shadeColor(color, -0.3));
+
+  itemIconCache.set(cacheKey, canvas);
+  return canvas;
+}
+
+export function getItemIconDataUrl(itemId, size = 52, dpr = 1) {
+  const canvas = renderItemIcon(itemId, size, dpr);
+  return canvas?.toDataURL ? canvas.toDataURL() : '';
+}
+
 export function renderRoom(ctx, opts) {
   const {
     room, placedFurniture, entities, hoverTile, ghost, phase,
-    width, height, dpr = 1, now = 0, elevatorAnim = null,
+    width, height, dpr = 1, now = 0, elevatorAnim = null, camera = null,
   } = opts;
+
+  entityScreenBounds.clear();
+
+  const zoom = camera?.zoom ?? 1;
+  const panX = camera?.panX ?? 0;
+  const panY = camera?.panY ?? 0;
 
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.imageSmoothingEnabled = false;
+
+  // 1. Draw sky gradient across entire viewport so no seams show during pan/zoom
+  const { skyTop, skyMid, skyBottom, day, tintAlpha } = dayNightColors(phase);
+  const skyGrad = ctx.createLinearGradient(0, 0, 0, height);
+  skyGrad.addColorStop(0, skyTop);
+  skyGrad.addColorStop(0.58, skyMid);
+  skyGrad.addColorStop(1, skyBottom);
+  ctx.fillStyle = skyGrad;
+  ctx.fillRect(0, 0, width, height);
+
+  // 2. Camera-transformed World Context (city backdrop, vehicles, cutaway, room, furniture, characters)
+  ctx.save();
+  ctx.translate(width / 2 + panX, height / 2 + panY);
+  ctx.scale(zoom, zoom);
+  ctx.translate(-width / 2, -height / 2);
 
   drawBackground(ctx, width, height, phase, room.floor || 1, dpr, now, room);
   const { originX, originY } = computeOrigin(room, width, height);
   const floorColor = floorBaseColor(room);
   const wallColor = wallBaseColor(room);
-  const { day } = dayNightColors(phase);
   const wb = Math.round(day * 8) / 8;
   const sky = { top: lerpColor('#1a2250', '#8fd0ff', wb), bottom: lerpColor('#ffd27a', '#fff6c9', wb) };
 
@@ -1350,10 +1745,16 @@ export function renderRoom(ctx, opts) {
   // Upper concrete ceiling slab / parapet over the top of the walls
   drawTowerCutawayOver(ctx, room, originX, originY);
 
-  // Pass 3: depth-sorted furniture + entities
+  // Pass 3: depth-sorted furniture + entities (with overhead items rendered above)
   const drawables = [];
+  const overheadDrawables = [];
   for (const f of placedFurniture) {
-    if (getCatalogueItem(f.itemId)?.flat) continue;
+    const item = getCatalogueItem(f.itemId);
+    if (item?.flat) continue;
+    if (item?.overhead) {
+      overheadDrawables.push(f);
+      continue;
+    }
     const frontX = f.x + (f.footprint.w - 1);
     const frontY = f.y + (f.footprint.h - 1);
     drawables.push({ depth: frontX + frontY, type: 'furniture', data: f });
@@ -1372,13 +1773,32 @@ export function renderRoom(ctx, opts) {
       const e = d.data;
       const { sx, sy } = tileToScreen(e.x, e.y, originX, originY);
       const bbox = drawCharacter(ctx, e, sx, sy, dpr);
-      if (e.nameTag) nameTargets.push({ x: bbox.x, y: bbox.footY, name: e.nameTag });
-      if (e.bubbleText) bubbleTargets.push({ x: bbox.x + bbox.w / 2, y: bbox.y, text: e.bubbleText });
+      const sPt = worldToScreen(bbox.x, bbox.y, camera, width, height);
+      const hw = Math.round(20 * zoom);
+      const hh = Math.round((bbox.h || 52) * zoom);
+      entityScreenBounds.set(e.id, {
+        id: e.id,
+        x0: sPt.sx - hw,
+        y0: sPt.sy,
+        x1: sPt.sx + hw,
+        y1: sPt.sy + hh,
+        entity: e,
+      });
+      const footScreen = worldToScreen(bbox.x, bbox.footY, camera, width, height);
+      if (e.nameTag) nameTargets.push({ x: footScreen.sx, y: footScreen.sy, name: e.nameTag });
+      if (e.bubbleText) {
+        const headScreen = worldToScreen(bbox.x + bbox.w / 2, bbox.y, camera, width, height);
+        bubbleTargets.push({ x: headScreen.sx, y: headScreen.sy, text: e.bubbleText });
+      }
     }
   }
 
+  // Draw overhead items (e.g. chandelier) above characters and furniture
+  for (const f of overheadDrawables) {
+    drawFurniture(ctx, f, originX, originY, dpr);
+  }
+
   // Night lighting tint over the tower & room + localized warm emissive light pools
-  const { tintAlpha } = dayNightColors(phase);
   if (tintAlpha > 0.02) {
     ctx.save();
     ctx.globalAlpha = tintAlpha;
@@ -1410,6 +1830,9 @@ export function renderRoom(ctx, opts) {
     }
     ctx.restore();
   }
+
+  // Restore camera transform so UI text, speech bubbles and dialog overlays render in native screen pixels
+  ctx.restore();
 
   for (const n of nameTargets) drawNameTag(ctx, n.x, n.y, n.name);
 

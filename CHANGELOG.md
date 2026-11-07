@@ -4,6 +4,35 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.7.0] - 2026-11-07
+
+### Added
+
+- **Grand Lobby Expansion (`js/data.js`)**:
+  - Expanded Floor 1 into a much larger 16×12 double-height Grand Lobby with a marble checkerboard floor, 4 Corinthian marble pillars, an Imperial Crystal Chandelier, a sweeping grand mezzanine staircase, lounge seating (sofa, armchairs, cafe table), an Atrium Marble Fountain, flower planters, a luggage trolley, a Concierge Podium, and a 3-tile Reception Desk staffed by **Celeste**, the Head Receptionist, who greets the player, answers hotel-facilities/check-in questions through dialogue topics, and kicks off the starter Welcome Quest.
+- **True-to-Storey Isometric City Scale (`js/render.js`)**: Reworked `computeGroundDy`/`computeCityGroundDy`/`storiesBelowFloor` and the isometric city layout so every room floor corresponds to exactly one storey of window rows — the lobby shows a ground-level street with no storeys below, Floor 4 shows 3 storeys below, and neighbouring city buildings (3–30 storeys) use the same storey unit, giving the tower and its neighbours consistent, believable proportions.
+- **Animated Isometric Traffic & Procedural Traffic Ambience (`js/render.js`, `js/audio.js`)**:
+  - Added `computeCityVehicles`/`drawCityVehicles`: animated cars, taxis, buses, and scooters that follow the isometric road lanes in the correct direction, stop at pedestrian crossings, and switch on headlights/taillights at night.
+  - Added procedural Web Audio traffic ambience (engine hum, occasional horn, bus brake hiss) tied to the SFX volume/mute toggle and automatically quieter on higher floors and inside rooms than at street level.
+- **Zoom & Pan Controls (`js/render.js`, `js/main.js`, `index.html`, `css/style.css`)**: Mouse wheel, trackpad pinch, on-screen **−** / **+** / **1:1** buttons, and `+`/`-`/`0` keyboard shortcuts zoom toward the cursor and clamp between 55%–250%; click-drag pans the camera and a recentre action snaps back to the player. The new default zoom (≈185%) matches the reference close-up framing, is crisp at every zoom level under HiDPI, is persisted in settings, and pointer→tile hit-testing (`tileToScreen`/`screenToTile`) stays correct at every zoom and pan offset.
+- **Object Collision & Advanced A\* Pathfinding (`js/pathfinding.js`, `js/inventory.js`, `js/main.js`)**:
+  - Every furniture item now declares a footprint and a `walkable` flag; blocking items (sofas, tables, counters, plants, lamps, machines, beds, desks…) block their tiles while rugs, floor mats, door mats, and yoga mats stay walkable. Seats and beds are reached via a free adjacent tile before sitting/lying.
+  - Rewrote pathfinding as a pure, DOM-free A\* (`findPath`) with a binary-heap open list, octile heuristic, 8-directional movement with strict no-corner-cutting, line-of-sight path smoothing/string-pulling, straight-path tie-breaking, and nearest-reachable-tile fallback (`findNearestReachableTile`) when a clicked tile is blocked.
+  - Added seamless mid-step re-targeting (`retargetMover`/`advanceMover`): a new click while walking continues the current interpolated step and re-plans from the tile being entered instead of snapping back or replaying a tile, duplicate clicks on the same target are ignored, and rapid repeated clicks no longer cause stutter/back-and-forth movement.
+  - Added tile reservation (`reservedTilesExcluding`) so the player and NPCs dynamically re-plan around each other instead of colliding, and placement validation that prevents furniture from trapping the player or blocking a door/elevator tile.
+  - Bumped `SAVE_VERSION` with a migration that reconciles overlapping placed items from older saves against the new collision rules.
+- **Wandering, Pathfinding NPCs & Click-to-Talk Dialogue (`js/npc.js`, `js/main.js`)**:
+  - NPCs now wander between points of interest and furniture using the same A\* pathfinding as the player, pause naturally, and avoid the player and each other via tile reservation; the receptionist stays stationary behind her desk.
+  - Clicking/tapping any NPC (wandering guests or the receptionist) walks the player to a free tile adjacent to them (picking an actually *reachable* adjacent tile, not just the nearest one, so a desk/NPC's own tile can no longer trap the approach), opens a speech-bubble dialogue panel with greeting/topic lines, and the NPC resumes wandering after a pause or when the player walks away. Hit-testing uses each NPC's on-screen sprite bounds at the current zoom so NPC clicks never fall through to a floor walk.
+- **Compact Bottom-Left Music Player (`index.html`, `css/style.css`, `js/main.js`, `js/audio.js`)**: A collapsible widget showing the current track title and room/mood, play/pause, prev/next track cycling, an "Auto: follow room" toggle (on by default), a small animated equaliser/progress bar, and a volume slider linked to the Music volume.
+- **Settings Panel with Master/Music/SFX/Ambience Mixing & Per-Room Tracks (`js/audio.js`, `index.html`)**: A gear-button settings panel with Master, Music, SFX, and Ambience (traffic) volume sliders (0–100%, live preview, persisted), raised default music loudness via gain staging and a light compressor/limiter, and a distinct procedural track per room/floor (lobby jazz lounge, cafe bossa, restaurant smooth jazz, gym upbeat electronic, pool & spa ambient, arcade chiptune, library soft piano, My Room lo-fi, sky garden acoustic, rooftop sunset/night house) with smooth crossfades between rooms and night variants.
+- **Procedurally Rendered Item Icons (`js/render.js`)**: Every catalogue item now renders its own voxel/sprite model into a cached, HiDPI-crisp, transparent, auto-fit thumbnail (`getItemIconDataUrl`/`renderItemIcon`) used across the Shop, My Items, In This Room tabs, and placement preview, replacing the old flat colour squares, with a fallback for any item whose model can't render.
+
+### Fixed
+
+- Fixed a `ReferenceError: tileToScreen is not defined` crash (missing import in `js/main.js`) that broke the exposed `window.__pixelHotel.tileToScreen` debug/test hook and left the pointer→tile round-trip test unable to run; `tileToScreen` results are now additionally passed through `worldToScreen` so they match the zoom/pan-aware coordinates `screenToTile` expects.
+- Fixed `tests/smoke.spec.mjs` hanging indefinitely on any mid-test failure: the Playwright `browser` handle was never closed on an error path, keeping the Node process alive forever. The browser is now always closed in a `finally` block, and a 90s watchdog timer forces an exit as a last resort.
+
 ## [0.6.0] - 2026-11-07
 
 ### Added

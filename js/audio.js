@@ -1,12 +1,18 @@
-// Original procedural Web Audio gentle lounge/lofi looping music & soft enveloped SFX.
+// Original procedural Web Audio multi-room soundtrack, traffic ambience & soft SFX.
 // Zero external audio files or network calls. AudioContext is created only after a user gesture.
 
-export const MOOD_PROFILES = {
+export const ROOM_TRACKS = {
   lobby: {
     id: 'lobby',
+    roomId: 'lobby',
+    title: 'Velvet Grand Atrium',
+    genre: 'Lobby Jazz Lounge',
     label: 'Velvet Lounge',
-    stepMs: 195,
-    cutoff: 1050,
+    stepMs: 190,
+    cutoff: 1420,
+    chordWave: 'triangle',
+    leadWave: 'sine',
+    bassWave: 'triangle',
     chords: [
       [174.61, 220.0, 261.63, 329.63], // Fmaj7
       [164.81, 196.0, 246.94, 293.66], // Em7
@@ -17,11 +23,59 @@ export const MOOD_PROFILES = {
     bells: [523.25, 0, 659.25, 587.33, 0, 440.0, 523.25, 0],
     drumPattern: ['k', 'h', 's', 'h', 'k', 'k', 's', 'h'],
   },
+  cafe: {
+    id: 'cafe',
+    roomId: 'cafe',
+    title: 'Espresso Bossa Breeze',
+    genre: 'Cafe Bossa Nova',
+    label: 'Starlight Bossa',
+    stepMs: 172,
+    cutoff: 1550,
+    chordWave: 'sine',
+    leadWave: 'triangle',
+    bassWave: 'sine',
+    chords: [
+      [196.0, 246.94, 293.66, 369.99], // Gmaj7
+      [185.0, 220.0, 261.63, 329.63],  // F#m7b5
+      [146.83, 185.0, 246.94, 311.13], // B7b9
+      [164.81, 196.0, 246.94, 293.66], // Em7
+    ],
+    bass: [98.0, 0, 146.83, 98.0, 92.5, 0, 123.47, 82.41],
+    bells: [587.33, 739.99, 0, 659.25, 587.33, 0, 493.88, 587.33],
+    drumPattern: ['k', 'h', 's', 'k', 'h', 's', 'k', 'h'],
+  },
+  restaurant: {
+    id: 'restaurant',
+    roomId: 'restaurant',
+    title: 'Candlelight Skyline Sax',
+    genre: 'Restaurant Smooth Jazz',
+    label: 'Skyline Smooth Jazz',
+    stepMs: 205,
+    cutoff: 1320,
+    chordWave: 'sine',
+    leadWave: 'sawtooth',
+    bassWave: 'triangle',
+    chords: [
+      [155.56, 196.0, 233.08, 293.66], // Ebmaj7
+      [130.81, 155.56, 196.0, 233.08], // Cm7
+      [174.61, 207.65, 261.63, 311.13], // Fm7
+      [116.54, 146.83, 174.61, 207.65], // Bb7
+    ],
+    bass: [77.78, 0, 98.0, 65.41, 87.31, 0, 58.27, 87.31],
+    bells: [466.16, 587.33, 523.25, 0, 392.0, 466.16, 0, 523.25],
+    drumPattern: ['k', 'h', 's', 'h', '.', 'k', 's', 'h'],
+  },
   gym: {
     id: 'gym',
+    roomId: 'gym',
+    title: 'Pulse Synth Overdrive',
+    genre: 'Gym Upbeat Electronic',
     label: 'Pulse Synth Groove',
-    stepMs: 150,
-    cutoff: 1380,
+    stepMs: 140,
+    cutoff: 1920,
+    chordWave: 'sawtooth',
+    leadWave: 'sawtooth',
+    bassWave: 'square',
     chords: [
       [220.0, 261.63, 329.63, 392.0],  // Am7
       [196.0, 246.94, 293.66, 329.63], // G6
@@ -29,14 +83,20 @@ export const MOOD_PROFILES = {
       [164.81, 220.0, 246.94, 293.66], // E7sus4
     ],
     bass: [110.0, 110.0, 98.0, 110.0, 87.31, 87.31, 82.41, 98.0],
-    bells: [440.0, 523.25, 659.25, 0, 392.0, 523.25, 587.33, 0],
+    bells: [440.0, 523.25, 659.25, 523.25, 392.0, 523.25, 587.33, 659.25],
     drumPattern: ['k', 'h', 's', 'h', 'k', 'h', 's', 'h'],
   },
-  spa: {
-    id: 'spa',
+  pool: {
+    id: 'pool',
+    roomId: 'pool',
+    title: 'Azure Thermal Reflections',
+    genre: 'Pool & Spa Ambient',
     label: 'Azure Spa Drift',
     stepMs: 240,
-    cutoff: 820,
+    cutoff: 940,
+    chordWave: 'sine',
+    leadWave: 'sine',
+    bassWave: 'sine',
     chords: [
       [146.83, 185.0, 220.0, 277.18],  // Dmaj7
       [123.47, 146.83, 185.0, 220.0],  // Bm7
@@ -44,57 +104,190 @@ export const MOOD_PROFILES = {
       [146.83, 164.81, 220.0, 277.18], // A6sus4
     ],
     bass: [73.42, 0, 61.74, 0, 98.0, 0, 82.41, 0],
-    bells: [587.33, 0, 0, 739.99, 0, 659.25, 0, 0],
+    bells: [587.33, 0, 0, 739.99, 0, 659.25, 0, 880.0],
     drumPattern: ['k', '.', 'h', '.', '.', 'h', 's', '.'],
   },
-  night: {
-    id: 'night',
-    label: 'Midnight Lofi',
+  arcade: {
+    id: 'arcade',
+    roomId: 'arcade',
+    title: 'Cosmic Bellhop Turbo',
+    genre: 'Arcade Chiptune',
+    label: 'Neon Arcade Pulse',
+    stepMs: 138,
+    cutoff: 2350,
+    chordWave: 'square',
+    leadWave: 'square',
+    bassWave: 'triangle',
+    chords: [
+      [261.63, 311.13, 392.0, 466.16], // Cm7
+      [207.65, 261.63, 311.13, 392.0], // Abmaj7
+      [155.56, 196.0, 233.08, 311.13], // Ebmaj7
+      [233.08, 293.66, 349.23, 466.16], // Bb
+    ],
+    bass: [130.81, 130.81, 103.83, 103.83, 77.78, 116.54, 116.54, 98.0],
+    bells: [523.25, 622.25, 783.99, 622.25, 523.25, 466.16, 587.33, 783.99],
+    drumPattern: ['k', 'h', 's', 'h', 'k', 'k', 's', 'h'],
+  },
+  library: {
+    id: 'library',
+    roomId: 'library',
+    title: 'Folio & Rainlight',
+    genre: 'Library Soft Piano',
+    label: 'Quiet Piano Study',
     stepMs: 225,
-    cutoff: 740,
+    cutoff: 1120,
+    chordWave: 'triangle',
+    leadWave: 'triangle',
+    bassWave: 'sine',
+    chords: [
+      [207.65, 261.63, 311.13, 392.0], // Abmaj7
+      [174.61, 207.65, 261.63, 311.13], // Fm7
+      [138.59, 174.61, 207.65, 261.63], // Dbmaj7
+      [155.56, 196.0, 233.08, 277.18], // Eb7
+    ],
+    bass: [103.83, 0, 87.31, 0, 69.3, 0, 77.78, 0],
+    bells: [523.25, 622.25, 415.3, 0, 523.25, 0, 466.16, 392.0],
+    drumPattern: ['k', '.', 'h', '.', '.', '.', 'h', '.'],
+  },
+  myroom: {
+    id: 'myroom',
+    roomId: 'myroom',
+    title: 'Suite 801 Cushioned Tape',
+    genre: 'My Room Lo-Fi',
+    label: 'Suite Lo-Fi',
+    stepMs: 210,
+    cutoff: 1060,
+    chordWave: 'triangle',
+    leadWave: 'sine',
+    bassWave: 'triangle',
     chords: [
       [146.83, 174.61, 220.0, 261.63], // Dm7
       [196.0, 246.94, 293.66, 349.23], // G7
       [130.81, 164.81, 196.0, 246.94], // Cmaj7
       [164.81, 207.65, 246.94, 293.66], // E7
     ],
-    bass: [73.42, 0, 98.0, 0, 65.41, 0, 82.41, 0],
-    bells: [523.25, 0, 493.88, 0, 392.0, 0, 440.0, 0],
-    drumPattern: ['k', '.', 'h', '.', 's', '.', 'h', '.'],
+    bass: [73.42, 0, 98.0, 73.42, 65.41, 0, 82.41, 65.41],
+    bells: [523.25, 0, 493.88, 440.0, 392.0, 0, 440.0, 523.25],
+    drumPattern: ['k', 'h', 's', 'h', '.', 'k', 's', 'h'],
+  },
+  garden: {
+    id: 'garden',
+    roomId: 'garden',
+    title: 'Sakura Canopy Pluck',
+    genre: 'Sky Garden Acoustic',
+    label: 'Botanical Breeze',
+    stepMs: 195,
+    cutoff: 1520,
+    chordWave: 'sine',
+    leadWave: 'triangle',
+    bassWave: 'triangle',
+    chords: [
+      [130.81, 164.81, 196.0, 293.66], // Cadd9
+      [196.0, 246.94, 293.66, 392.0],  // G
+      [220.0, 261.63, 329.63, 392.0],  // Am7
+      [174.61, 220.0, 261.63, 329.63], // Fmaj7
+    ],
+    bass: [65.41, 98.0, 98.0, 110.0, 110.0, 87.31, 87.31, 98.0],
+    bells: [659.25, 587.33, 523.25, 392.0, 440.0, 523.25, 659.25, 587.33],
+    drumPattern: ['k', 'h', '.', 'h', 'k', 'h', 's', 'h'],
+  },
+  rooftop: {
+    id: 'rooftop',
+    roomId: 'rooftop',
+    title: 'Stratosphere Horizon Groove',
+    genre: 'Rooftop Sunset House',
+    label: 'Horizon Deep House',
+    stepMs: 156,
+    cutoff: 1680,
+    chordWave: 'triangle',
+    leadWave: 'sawtooth',
+    bassWave: 'sine',
+    chords: [
+      [185.0, 220.0, 277.18, 329.63],  // F#m7
+      [146.83, 185.0, 220.0, 277.18],  // Dmaj7
+      [123.47, 146.83, 185.0, 220.0],  // Bm7
+      [138.59, 185.0, 207.65, 246.94], // C#7sus4
+    ],
+    bass: [92.5, 92.5, 73.42, 73.42, 61.74, 61.74, 69.3, 82.41],
+    bells: [554.37, 0, 493.88, 440.0, 0, 369.99, 440.0, 493.88],
+    drumPattern: ['k', 'h', 'k', 'h', 'k', 'h', 's', 'h'],
+  },
+};
+
+export const TRACK_ORDER = [
+  'lobby', 'cafe', 'restaurant', 'gym', 'pool',
+  'arcade', 'library', 'myroom', 'garden', 'rooftop',
+];
+
+// Backward-compatible MOOD_PROFILES map including legacy aliases ('spa', 'night') and all 10 room tracks
+export const MOOD_PROFILES = {
+  ...ROOM_TRACKS,
+  spa: {
+    ...ROOM_TRACKS.pool,
+    id: 'spa',
+    label: 'Azure Spa Drift',
+  },
+  night: {
+    ...ROOM_TRACKS.myroom,
+    id: 'night',
+    label: 'Midnight Lofi',
+    stepMs: 225,
+    cutoff: 840,
   },
 };
 
 export function moodForRoom(roomId = 'lobby', phase = 0.5) {
   const isNight = phase < 0.22 || phase > 0.78;
-  if (roomId === 'gym' || roomId === 'arcade') return isNight ? 'Gym Night Lofi' && 'gym' : 'gym';
+  if (roomId === 'gym' || roomId === 'arcade') return 'gym';
   if (roomId === 'pool' || roomId === 'garden' || roomId === 'rooftop') return 'spa';
   if (isNight) return 'night';
   return 'lobby';
+}
+
+export function trackForRoom(roomId = 'lobby') {
+  return ROOM_TRACKS[roomId] ? roomId : 'lobby';
+}
+
+export function getTrafficAttenuation(roomId = 'lobby', floor = 1) {
+  const f = Math.max(1, Number(floor) || 1);
+  if (roomId === 'lobby' || f === 1) return 0.78;
+  if (roomId === 'rooftop') return 0.26;
+  return Math.max(0.1, Math.pow(0.74, f - 1) * 0.65);
 }
 
 export class ChiptuneAudio {
   constructor(audioContextFactory = null) {
     this._acFactory = audioContextFactory;
     this.ctx = null;
+    this.compressor = null;
     this.master = null;
     this.musicGain = null;
     this.sfxGain = null;
+    this.ambienceGain = null;
     this.noiseBuffer = null;
 
     this.gestureUnlocked = false;
     this.musicMuted = false;
     this.sfxMuted = false;
-    this.musicVolume = 0.55;
-    this.sfxVolume = 0.7;
+    this.ambienceMuted = false;
+    this.masterVolume = 0.85;
+    this.musicVolume = 0.75;
+    this.sfxVolume = 0.75;
+    this.ambienceVolume = 0.65;
 
+    this.playing = true;
+    this.autoFollowRoom = true;
     this.roomId = 'lobby';
+    this.floor = 1;
     this.phase = 0.5;
     this.mood = 'lobby';
+    this.trackId = 'lobby';
     this.isNight = false;
 
     this.step = 0;
     this.timer = null;
     this.lastFootstepAt = 0;
+    this.lastTrafficEventAt = 0;
   }
 
   get muted() {
@@ -110,6 +303,28 @@ export class ChiptuneAudio {
     return this.gestureUnlocked && !!this.ctx;
   }
 
+  _effectiveMusicTarget() {
+    if (this.musicMuted || !this.playing || this.musicVolume <= 0 || this.masterVolume <= 0) {
+      return 0.0001;
+    }
+    return Math.max(0.0001, this.musicVolume * 0.84);
+  }
+
+  _effectiveSfxTarget() {
+    if (this.sfxMuted || this.sfxVolume <= 0 || this.masterVolume <= 0) {
+      return 0.0001;
+    }
+    return Math.max(0.0001, this.sfxVolume * 0.62);
+  }
+
+  _effectiveAmbienceTarget() {
+    if (this.sfxMuted || this.ambienceMuted || this.sfxVolume <= 0 || this.ambienceVolume <= 0 || this.masterVolume <= 0) {
+      return 0.0001;
+    }
+    const atten = getTrafficAttenuation(this.roomId, this.floor);
+    return Math.max(0.0001, this.ambienceVolume * this.sfxVolume * atten * 0.45);
+  }
+
   ensureContext() {
     if (!this.gestureUnlocked) return null;
     if (!this.ctx) {
@@ -117,16 +332,32 @@ export class ChiptuneAudio {
       if (!AC) return null;
       this.ctx = new AC();
       this.master = this.ctx.createGain();
-      this.master.gain.value = 0.85;
-      this.master.connect(this.ctx.destination);
+      this.master.gain.value = Math.max(0.0001, this.masterVolume * 0.95);
+
+      if (typeof this.ctx.createDynamicsCompressor === 'function') {
+        this.compressor = this.ctx.createDynamicsCompressor();
+        if (this.compressor.threshold) this.compressor.threshold.value = -12;
+        if (this.compressor.knee) this.compressor.knee.value = 10;
+        if (this.compressor.ratio) this.compressor.ratio.value = 3.5;
+        if (this.compressor.attack) this.compressor.attack.value = 0.005;
+        if (this.compressor.release) this.compressor.release.value = 0.16;
+        this.master.connect(this.compressor);
+        this.compressor.connect(this.ctx.destination);
+      } else {
+        this.master.connect(this.ctx.destination);
+      }
 
       this.musicGain = this.ctx.createGain();
-      this.musicGain.gain.value = this.musicMuted ? 0.0001 : Math.max(0.0001, this.musicVolume * 0.28);
+      this.musicGain.gain.value = this._effectiveMusicTarget();
       this.musicGain.connect(this.master);
 
       this.sfxGain = this.ctx.createGain();
-      this.sfxGain.gain.value = this.sfxMuted ? 0.0001 : Math.max(0.0001, this.sfxVolume * 0.36);
+      this.sfxGain.gain.value = this._effectiveSfxTarget();
       this.sfxGain.connect(this.master);
+
+      this.ambienceGain = this.ctx.createGain();
+      this.ambienceGain.gain.value = this._effectiveAmbienceTarget();
+      this.ambienceGain.connect(this.master);
 
       this.noiseBuffer = this._buildNoiseBuffer();
     }
@@ -139,7 +370,7 @@ export class ChiptuneAudio {
   _buildNoiseBuffer() {
     if (!this.ctx || typeof this.ctx.createBuffer !== 'function') return null;
     const sr = this.ctx.sampleRate || 44100;
-    const len = Math.floor(sr * 0.15);
+    const len = Math.floor(sr * 0.35);
     const buf = this.ctx.createBuffer(1, len, sr);
     const data = buf.getChannelData(0);
     let s = 2463534242;
@@ -147,31 +378,27 @@ export class ChiptuneAudio {
     for (let i = 0; i < len; i++) {
       s = (s * 1664525 + 1013904223) >>> 0;
       const white = ((s & 0xffff) / 0x8000) - 1;
-      prev = prev * 0.72 + white * 0.28; // warm pink-ish noise
+      prev = prev * 0.74 + white * 0.26;
       data[i] = prev;
     }
     return buf;
   }
 
-  _syncGains() {
+  _syncGains(crossfadeSec = 0.03) {
     if (!this.ctx) return;
     const now = this.ctx.currentTime || 0;
-    if (this.musicGain) {
-      const target = this.musicMuted ? 0.0001 : Math.max(0.0001, this.musicVolume * 0.28);
-      if (this.musicGain.gain.setTargetAtTime) {
-        this.musicGain.gain.setTargetAtTime(target, now, 0.03);
+    const setG = (node, target, tau) => {
+      if (!node) return;
+      if (node.gain.setTargetAtTime) {
+        node.gain.setTargetAtTime(target, now, tau);
       } else {
-        this.musicGain.gain.value = target;
+        node.gain.value = target;
       }
-    }
-    if (this.sfxGain) {
-      const target = this.sfxMuted ? 0.0001 : Math.max(0.0001, this.sfxVolume * 0.36);
-      if (this.sfxGain.gain.setTargetAtTime) {
-        this.sfxGain.gain.setTargetAtTime(target, now, 0.02);
-      } else {
-        this.sfxGain.gain.value = target;
-      }
-    }
+    };
+    setG(this.master, Math.max(0.0001, this.masterVolume * 0.95), 0.02);
+    setG(this.musicGain, this._effectiveMusicTarget(), crossfadeSec);
+    setG(this.sfxGain, this._effectiveSfxTarget(), 0.02);
+    setG(this.ambienceGain, this._effectiveAmbienceTarget(), 0.05);
   }
 
   configure(settings = {}) {
@@ -181,26 +408,40 @@ export class ChiptuneAudio {
     if (typeof settings.sfxMuted === 'boolean') this.sfxMuted = settings.sfxMuted;
     else if (typeof settings.muted === 'boolean') this.sfxMuted = settings.muted;
 
+    if (typeof settings.ambienceMuted === 'boolean') this.ambienceMuted = settings.ambienceMuted;
+
+    if (typeof settings.masterVolume === 'number' && Number.isFinite(settings.masterVolume)) {
+      this.masterVolume = Math.max(0, Math.min(1, settings.masterVolume));
+    }
     if (typeof settings.musicVolume === 'number' && Number.isFinite(settings.musicVolume)) {
       this.musicVolume = Math.max(0, Math.min(1, settings.musicVolume));
     }
     if (typeof settings.sfxVolume === 'number' && Number.isFinite(settings.sfxVolume)) {
       this.sfxVolume = Math.max(0, Math.min(1, settings.sfxVolume));
     }
+    if (typeof settings.ambienceVolume === 'number' && Number.isFinite(settings.ambienceVolume)) {
+      this.ambienceVolume = Math.max(0, Math.min(1, settings.ambienceVolume));
+    }
+    if (typeof settings.autoFollowRoom === 'boolean') {
+      this.autoFollowRoom = settings.autoFollowRoom;
+    }
     this._syncGains();
     if (this.gestureUnlocked) {
-      if (this.musicMuted || this.musicVolume <= 0) this.stopLoop();
-      else this.startLoop();
+      if ((this.musicMuted || !this.playing || this.musicVolume <= 0) && (this.sfxMuted || this.ambienceMuted || this.ambienceVolume <= 0)) {
+        this.stopLoop();
+      } else {
+        this.startLoop();
+      }
     }
   }
 
   unlockGesture() {
     const wasUnlocked = this.gestureUnlocked;
     this.gestureUnlocked = true;
-    if (!this.musicMuted && this.musicVolume > 0) {
+    if ((!this.musicMuted && this.musicVolume > 0 && this.playing) || (!this.sfxMuted && this.sfxVolume > 0)) {
       this.ensureContext();
       this.startLoop();
-    } else if (!this.sfxMuted && this.sfxVolume > 0 && !wasUnlocked) {
+    } else if (!wasUnlocked) {
       this.ensureContext();
     }
     return this.isUnlocked();
@@ -217,7 +458,7 @@ export class ChiptuneAudio {
   setMusicMuted(muted) {
     this.musicMuted = !!muted;
     this._syncGains();
-    if (this.musicMuted || this.musicVolume <= 0) this.stopLoop();
+    if (this.musicMuted || this.musicVolume <= 0 || !this.playing) this.stopLoop();
     else if (this.gestureUnlocked) this.startLoop();
   }
 
@@ -226,10 +467,20 @@ export class ChiptuneAudio {
     this._syncGains();
   }
 
+  setAmbienceMuted(muted) {
+    this.ambienceMuted = !!muted;
+    this._syncGains();
+  }
+
+  setMasterVolume(vol) {
+    this.masterVolume = Math.max(0, Math.min(1, Number(vol) || 0));
+    this._syncGains();
+  }
+
   setMusicVolume(vol) {
     this.musicVolume = Math.max(0, Math.min(1, Number(vol) || 0));
     this._syncGains();
-    if (this.musicVolume <= 0 || this.musicMuted) this.stopLoop();
+    if (this.musicVolume <= 0 || this.musicMuted || !this.playing) this.stopLoop();
     else if (this.gestureUnlocked) this.startLoop();
   }
 
@@ -238,41 +489,139 @@ export class ChiptuneAudio {
     this._syncGains();
   }
 
-  setRoomMood(roomId, phase = this.phase) {
+  setAmbienceVolume(vol) {
+    this.ambienceVolume = Math.max(0, Math.min(1, Number(vol) || 0));
+    this._syncGains();
+  }
+
+  setPlaying(playing) {
+    this.playing = !!playing;
+    this._syncGains();
+    if (!this.playing) this.stopLoop();
+    else if (this.gestureUnlocked && !this.musicMuted && this.musicVolume > 0) this.startLoop();
+    return this.playing;
+  }
+
+  togglePlayPause() {
+    return this.setPlaying(!this.playing);
+  }
+
+  setAutoFollowRoom(autoFollow) {
+    this.autoFollowRoom = !!autoFollow;
+    if (this.autoFollowRoom) {
+      this.setTrack(trackForRoom(this.roomId), false);
+    }
+    return this.autoFollowRoom;
+  }
+
+  setTrack(trackId, manual = false) {
+    if (!ROOM_TRACKS[trackId]) return this.getTrackInfo();
+    if (manual) this.autoFollowRoom = false;
+    const changed = this.trackId !== trackId;
+    this.trackId = trackId;
+    if (changed) {
+      this._crossfadeRestartLoop();
+    }
+    return this.getTrackInfo();
+  }
+
+  nextTrack() {
+    const idx = TRACK_ORDER.indexOf(this.trackId);
+    const nextId = TRACK_ORDER[(idx + 1 + TRACK_ORDER.length) % TRACK_ORDER.length];
+    return this.setTrack(nextId, true);
+  }
+
+  prevTrack() {
+    const idx = TRACK_ORDER.indexOf(this.trackId);
+    const prevId = TRACK_ORDER[(idx - 1 + TRACK_ORDER.length) % TRACK_ORDER.length];
+    return this.setTrack(prevId, true);
+  }
+
+  _crossfadeRestartLoop() {
+    if (this.ctx && this.musicGain && this.musicGain.gain.setValueAtTime && this.musicGain.gain.linearRampToValueAtTime) {
+      const now = this.ctx.currentTime || 0;
+      const target = this._effectiveMusicTarget();
+      this.musicGain.gain.setValueAtTime(Math.max(0.0001, target * 0.25), now);
+      this.musicGain.gain.linearRampToValueAtTime(target, now + 0.18);
+    }
+    if (this.timer) {
+      this.stopLoop();
+      this.startLoop();
+    }
+  }
+
+  setRoomMood(roomId, phase = this.phase, floor = this.floor) {
+    const prevRoom = this.roomId;
     this.roomId = roomId || this.roomId;
+    this.floor = typeof floor === 'number' ? floor : this.floor;
     this.phase = typeof phase === 'number' ? phase : this.phase;
     this.isNight = this.phase < 0.22 || this.phase > 0.78;
     const nextMood = moodForRoom(this.roomId, this.phase);
-    const changed = nextMood !== this.mood;
+    const moodChanged = nextMood !== this.mood;
     this.mood = nextMood;
-    if (changed && this.timer) {
-      this.stopLoop();
-      this.startLoop();
+
+    let trackChanged = false;
+    if (this.autoFollowRoom) {
+      const targetTrack = trackForRoom(this.roomId);
+      if (targetTrack !== this.trackId) {
+        this.trackId = targetTrack;
+        trackChanged = true;
+      }
+    }
+    if (prevRoom !== this.roomId) {
+      this._syncGains(0.08);
+    }
+    if ((moodChanged || trackChanged) && this.timer) {
+      this._crossfadeRestartLoop();
     }
     return this.getMoodInfo();
   }
 
+  getTrackProfile() {
+    return ROOM_TRACKS[this.trackId] || ROOM_TRACKS[this.roomId] || ROOM_TRACKS.lobby;
+  }
+
   getMoodInfo() {
-    const profile = MOOD_PROFILES[this.mood] || MOOD_PROFILES.lobby;
+    const track = this.getTrackProfile();
+    const moodProfile = MOOD_PROFILES[this.mood] || track;
     return {
       mood: this.mood,
-      label: this.isNight && this.mood !== 'night' ? `${profile.label} (Night)` : profile.label,
+      trackId: track.id,
+      title: track.title,
+      genre: track.genre,
+      label: this.isNight ? `${track.title} (Night)` : track.title,
+      moodLabel: this.isNight && this.mood !== 'night' ? `${moodProfile.label} (Night)` : moodProfile.label,
       roomId: this.roomId,
       isNight: this.isNight,
-      stepMs: profile.stepMs,
-      cutoff: this.isNight ? Math.round(profile.cutoff * 0.82) : profile.cutoff,
+      playing: this.playing && !this.musicMuted && this.musicVolume > 0,
+      autoFollowRoom: this.autoFollowRoom,
+      stepMs: track.stepMs,
+      cutoff: this.isNight ? Math.round(track.cutoff * 0.82) : track.cutoff,
+      step: this.step,
+      stepProgress: (this.step % 32) / 32,
     };
   }
 
+  getTrackInfo() {
+    return this.getMoodInfo();
+  }
+
   startLoop() {
-    if (!this.gestureUnlocked || this.musicMuted || this.musicVolume <= 0) return;
+    if (!this.gestureUnlocked) return;
+    if ((this.musicMuted || this.musicVolume <= 0 || !this.playing) && (this.sfxMuted || this.ambienceMuted || this.ambienceVolume <= 0)) {
+      return;
+    }
     const ctx = this.ensureContext();
     if (!ctx || this.timer) return;
-    const profile = MOOD_PROFILES[this.mood] || MOOD_PROFILES.lobby;
-    const stepTime = profile.stepMs;
+    const track = this.getTrackProfile();
+    const stepTime = track.stepMs;
     this.timer = setInterval(() => {
-      if (this.musicMuted || this.musicVolume <= 0) return;
-      this._tickMusicStep();
+      if (!this.musicMuted && this.musicVolume > 0 && this.playing && this.masterVolume > 0) {
+        this._tickMusicStep();
+      }
+      if (!this.sfxMuted && !this.ambienceMuted && this.ambienceVolume > 0 && this.sfxVolume > 0 && this.masterVolume > 0) {
+        this._tickTrafficAmbience();
+      }
       this.step++;
     }, stepTime);
   }
@@ -296,48 +645,94 @@ export class ChiptuneAudio {
 
   _tickMusicStep() {
     if (!this.ctx || !this.musicGain) return;
-    const profile = MOOD_PROFILES[this.mood] || MOOD_PROFILES.lobby;
+    const profile = this.getTrackProfile();
     const subStep = this.step % 8;
     const barIdx = Math.floor(this.step / 8) % profile.chords.length;
     const stepSec = profile.stepMs / 1000;
     const cutoff = this.isNight ? profile.cutoff * 0.82 : profile.cutoff;
 
-    // 1. Warm Rhodes / Lounge Chords on beat 0 and gentle re-voicing on beat 4
+    // 1. Rich Multi-Voice Chords on beat 0 and re-voicing on beat 4
     if (subStep === 0 || subStep === 4) {
       const chord = profile.chords[barIdx];
       const dur = stepSec * (subStep === 0 ? 3.8 : 3.4);
-      const vel = subStep === 0 ? 0.065 : 0.042;
-      this._playWarmChord(chord, dur, cutoff, vel);
+      const vel = subStep === 0 ? 0.145 : 0.105;
+      this._playWarmChord(chord, dur, cutoff, vel, profile.chordWave || 'triangle');
     }
 
-    // 2. Warm Lofi Sub/Triangle Bassline
+    // 2. Groovy Bassline
     const bassFreq = profile.bass[subStep % profile.bass.length];
     if (bassFreq > 0) {
-      this._playWarmVoice(bassFreq, stepSec * 1.4, 'triangle', 260, 0.085, 0.025);
+      this._playWarmVoice(bassFreq, stepSec * 1.45, profile.bassWave || 'triangle', 340, 0.185, 0.02);
     }
 
-    // 3. Gentle Bell / Rhodes Pluck Melody
+    // 3. Lead / Bell / Arpeggio Melody
     const bellFreq = profile.bells[subStep % profile.bells.length];
-    if (bellFreq > 0 && ((this.step + barIdx) % 2 === 0)) {
+    if (bellFreq > 0) {
       const freq = this.isNight ? bellFreq * 0.5 : bellFreq;
-      this._playWarmVoice(freq, stepSec * 1.9, 'sine', cutoff * 1.2, 0.036, 0.03);
+      this._playWarmVoice(freq, stepSec * 1.85, profile.leadWave || 'sine', cutoff * 1.25, 0.11, 0.02);
     }
 
-    // 4. Soft Brushed Drums
+    // 4. Crisp Brushed & Groove Percussion
     const drum = profile.drumPattern[subStep % profile.drumPattern.length];
-    if (drum === 'k') this._playSoftKick();
-    else if (drum === 's') this._playSoftBrush(0.065, 1600, 0.026);
-    else if (drum === 'h') this._playSoftBrush(0.035, 3400, 0.015);
+    if (drum === 'k') this._playSoftKick(0.165);
+    else if (drum === 's') this._playSoftBrush(0.07, 1750, 0.068);
+    else if (drum === 'h') this._playSoftBrush(0.038, 3600, 0.042);
   }
 
-  _playWarmChord(freqs, duration, cutoff, peakGain = 0.055) {
+  _tickTrafficAmbience() {
+    if (!this.ctx || (!this.ambienceGain && !this.sfxGain)) return;
+    const dest = this.ambienceGain || this.sfxGain;
+    const atten = getTrafficAttenuation(this.roomId, this.floor);
+    if (atten <= 0.02) return;
+
+    // Periodic low street tire/engine hum pulse every 4 steps
+    if (this.step % 4 === 0 && this.noiseBuffer) {
+      this._playSoftBrush(0.42, 240, 0.035 * atten, dest);
+    }
+    // Occasional distant car horn or bus brake hiss
+    if (this.step % 24 === 12) {
+      this.playTrafficHorn(atten);
+    } else if (this.step % 32 === 20) {
+      this.playBusBrakeHiss(atten);
+    }
+  }
+
+  playTrafficHorn(atten = getTrafficAttenuation(this.roomId, this.floor)) {
+    if (!this.gestureUnlocked || this.sfxMuted || this.ambienceMuted || this.sfxVolume <= 0 || this.ambienceVolume <= 0) {
+      return false;
+    }
+    const ctx = this.ensureContext();
+    const dest = this.ambienceGain || this.sfxGain;
+    if (!ctx || !dest) return false;
+    const now = ctx.currentTime || 0;
+    const gain = Math.max(0.008, 0.055 * atten);
+    // Classic urban dual-tone car horn (F#4 + A4)
+    this._scheduleTone(369.99, now, 0.14, 'sawtooth', 920, gain, dest);
+    this._scheduleTone(440.0, now, 0.14, 'triangle', 920, gain, dest);
+    this._scheduleTone(369.99, now + 0.18, 0.22, 'sawtooth', 920, gain * 0.9, dest);
+    this._scheduleTone(440.0, now + 0.18, 0.22, 'triangle', 920, gain * 0.9, dest);
+    return true;
+  }
+
+  playBusBrakeHiss(atten = getTrafficAttenuation(this.roomId, this.floor)) {
+    if (!this.gestureUnlocked || this.sfxMuted || this.ambienceMuted || this.sfxVolume <= 0 || this.ambienceVolume <= 0) {
+      return false;
+    }
+    const ctx = this.ensureContext();
+    const dest = this.ambienceGain || this.sfxGain;
+    if (!ctx || !dest || !this.noiseBuffer) return false;
+    this._playSoftBrush(0.28, 2100, Math.max(0.006, 0.045 * atten), dest);
+    return true;
+  }
+
+  _playWarmChord(freqs, duration, cutoff, peakGain = 0.13, wave = 'triangle') {
     if (!this.ctx || !this.musicGain) return;
     const ctx = this.ctx;
     const now = ctx.currentTime;
-    const filter = this._createLowpass(cutoff, 0.6);
+    const filter = this._createLowpass(cutoff, 0.65);
     const bus = ctx.createGain();
     bus.gain.setValueAtTime(0.0001, now);
-    bus.gain.linearRampToValueAtTime(peakGain, now + 0.065);
+    bus.gain.linearRampToValueAtTime(peakGain, now + 0.05);
     bus.gain.exponentialRampToValueAtTime(0.0001, now + duration);
 
     if (filter) {
@@ -349,7 +744,7 @@ export class ChiptuneAudio {
 
     for (let i = 0; i < freqs.length; i++) {
       const osc = ctx.createOscillator();
-      osc.type = i % 2 === 0 ? 'sine' : 'triangle';
+      osc.type = i % 2 === 0 ? 'sine' : wave;
       osc.frequency.setValueAtTime(freqs[i], now);
       if (osc.detune) osc.detune.value = (i - 1.5) * 4;
       osc.connect(bus);
@@ -358,7 +753,7 @@ export class ChiptuneAudio {
     }
   }
 
-  _playWarmVoice(freq, duration, type = 'sine', cutoff = 900, peakGain = 0.06, attack = 0.02, dest = this.musicGain) {
+  _playWarmVoice(freq, duration, type = 'sine', cutoff = 1100, peakGain = 0.12, attack = 0.018, dest = this.musicGain) {
     if (!this.ctx || !dest) return;
     const ctx = this.ctx;
     const now = ctx.currentTime;
@@ -371,7 +766,7 @@ export class ChiptuneAudio {
     gain.gain.linearRampToValueAtTime(peakGain, now + attack);
     gain.gain.exponentialRampToValueAtTime(0.0001, now + Math.max(attack + 0.02, duration));
 
-    const filter = this._createLowpass(cutoff, 0.5);
+    const filter = this._createLowpass(cutoff, 0.55);
     if (filter) {
       osc.connect(filter);
       filter.connect(gain);
@@ -383,27 +778,27 @@ export class ChiptuneAudio {
     osc.stop(now + duration + 0.03);
   }
 
-  _playSoftKick() {
+  _playSoftKick(peak = 0.16) {
     if (!this.ctx || !this.musicGain) return;
     const ctx = this.ctx;
     const now = ctx.currentTime;
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.type = 'sine';
-    osc.frequency.setValueAtTime(108, now);
-    osc.frequency.exponentialRampToValueAtTime(42, now + 0.09);
+    osc.frequency.setValueAtTime(115, now);
+    osc.frequency.exponentialRampToValueAtTime(42, now + 0.095);
 
     gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.linearRampToValueAtTime(0.09, now + 0.008);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.12);
+    gain.gain.linearRampToValueAtTime(peak, now + 0.007);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.13);
 
     osc.connect(gain);
     gain.connect(this.musicGain);
     osc.start(now);
-    osc.stop(now + 0.14);
+    osc.stop(now + 0.15);
   }
 
-  _playSoftBrush(duration = 0.045, centerFreq = 2600, peakGain = 0.02, dest = this.musicGain) {
+  _playSoftBrush(duration = 0.045, centerFreq = 2600, peakGain = 0.045, dest = this.musicGain) {
     if (!this.ctx || !dest || !this.noiseBuffer) return;
     const ctx = this.ctx;
     const now = ctx.currentTime;
@@ -429,11 +824,11 @@ export class ChiptuneAudio {
 
   playNote(freq, duration) {
     if (!this.ctx) return;
-    this._playWarmVoice(freq, duration, 'triangle', 1100, 0.12, 0.015, this.sfxGain || this.master);
+    this._playWarmVoice(freq, duration, 'triangle', 1200, 0.16, 0.015, this.sfxGain || this.master);
   }
 
   playSfx(kind = 'click') {
-    if (!this.gestureUnlocked || this.sfxMuted || this.sfxVolume <= 0) return false;
+    if (!this.gestureUnlocked || this.sfxMuted || this.sfxVolume <= 0 || this.masterVolume <= 0) return false;
     const ctx = this.ensureContext();
     if (!ctx || !this.sfxGain) return false;
     const now = ctx.currentTime;
@@ -442,44 +837,50 @@ export class ChiptuneAudio {
       const ms = Date.now();
       if (ms - this.lastFootstepAt < 110) return false;
       this.lastFootstepAt = ms;
-      this._sweepTone(155, 88, 0.042, 'triangle', 420, 0.055);
+      this._sweepTone(155, 88, 0.042, 'triangle', 440, 0.075);
       return true;
     }
     if (kind === 'click') {
-      this._sweepTone(520, 370, 0.048, 'sine', 1100, 0.09);
+      this._sweepTone(540, 380, 0.048, 'sine', 1200, 0.11);
       return true;
     }
     if (kind === 'chat') {
-      this._sweepTone(420, 560, 0.06, 'sine', 1200, 0.085);
+      this._sweepTone(430, 580, 0.065, 'sine', 1300, 0.11);
       return true;
     }
     if (kind === 'place') {
-      this._sweepTone(210, 315, 0.09, 'triangle', 760, 0.12);
+      this._sweepTone(220, 330, 0.09, 'triangle', 820, 0.14);
       return true;
     }
     if (kind === 'coin') {
-      this._scheduleTone(987.77, now, 0.09, 'sine', 2100, 0.11);
-      this._scheduleTone(1318.51, now + 0.055, 0.16, 'triangle', 2200, 0.11);
+      this._scheduleTone(987.77, now, 0.09, 'sine', 2200, 0.14);
+      this._scheduleTone(1318.51, now + 0.055, 0.16, 'triangle', 2300, 0.14);
       return true;
     }
     if (kind === 'elevator') {
-      this._scheduleTone(783.99, now, 0.18, 'sine', 1500, 0.11);
-      this._scheduleTone(659.25, now + 0.14, 0.28, 'triangle', 1350, 0.11);
+      this._scheduleTone(783.99, now, 0.18, 'sine', 1550, 0.14);
+      this._scheduleTone(659.25, now + 0.14, 0.28, 'triangle', 1400, 0.14);
       return true;
+    }
+    if (kind === 'horn') {
+      return this.playTrafficHorn();
+    }
+    if (kind === 'brake') {
+      return this.playBusBrakeHiss();
     }
     if (kind === 'quest') {
       const notes = [523.25, 659.25, 783.99, 987.77];
       notes.forEach((f, i) => {
-        this._scheduleTone(f, now + i * 0.06, 0.24, i % 2 ? 'triangle' : 'sine', 1850, 0.1);
+        this._scheduleTone(f, now + i * 0.06, 0.24, i % 2 ? 'triangle' : 'sine', 1900, 0.13);
       });
       return true;
     }
-    this._sweepTone(440, 392, 0.065, 'sine', 1000, 0.08);
+    this._sweepTone(440, 392, 0.065, 'sine', 1050, 0.1);
     return true;
   }
 
-  _sweepTone(f0, f1, dur, type, cutoff, peak) {
-    if (!this.ctx || !this.sfxGain) return;
+  _sweepTone(f0, f1, dur, type, cutoff, peak, dest = this.sfxGain) {
+    if (!this.ctx || !dest) return;
     const ctx = this.ctx;
     const now = ctx.currentTime;
     const osc = ctx.createOscillator();
@@ -499,13 +900,13 @@ export class ChiptuneAudio {
     } else {
       osc.connect(gain);
     }
-    gain.connect(this.sfxGain);
+    gain.connect(dest);
     osc.start(now);
     osc.stop(now + dur + 0.02);
   }
 
-  _scheduleTone(freq, startTime, dur, type, cutoff, peak) {
-    if (!this.ctx || !this.sfxGain) return;
+  _scheduleTone(freq, startTime, dur, type, cutoff, peak, dest = this.sfxGain) {
+    if (!this.ctx || !dest) return;
     const ctx = this.ctx;
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
@@ -523,7 +924,7 @@ export class ChiptuneAudio {
     } else {
       osc.connect(gain);
     }
-    gain.connect(this.sfxGain);
+    gain.connect(dest);
     osc.start(startTime);
     osc.stop(startTime + dur + 0.02);
   }

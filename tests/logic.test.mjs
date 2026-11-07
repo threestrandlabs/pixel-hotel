@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { findPath } from '../js/pathfinding.js';
+import {
+  findPath, retargetMover, advanceMover, createMoverState, canStep, smoothPath,
+} from '../js/pathfinding.js';
 import {
   buyItem, placeItem, pickupItem, moveItem, canPlaceAt, footprintCells, rotatedFootprint,
   availableCatalogue, interactionSlots, findFreeInteractionSlot, findApproachTile,
@@ -12,12 +14,14 @@ import {
 } from '../js/quests.js';
 import { createDefaultState, loadState, saveState, resetState, SAVE_KEY } from '../js/save.js';
 import { getCatalogueItem, TILE, SAVE_VERSION, ROOMS, NPCS, CATALOGUE } from '../js/data.js';
-import { respondToMessage } from '../js/npc.js';
+import { respondToMessage, findWanderTarget, createNpcRuntime, tickNpc } from '../js/npc.js';
 import { LOOKS, renderCharacter, buildParts } from '../js/voxel.js';
 import { buildWindowSegment, FURNITURE_BUILDERS } from '../js/sprites.js';
 import {
   tileToScreen, computeOrigin, computeGroundDy, computeCityGroundDy,
-  projectIsoCityPoint, buildIsoCityLayout,
+  projectIsoCityPoint, buildIsoCityLayout, computeCityVehicles,
+  clampZoom, zoomAtPoint, centerCameraOnTile, screenToTile, worldToScreen,
+  DEFAULT_ZOOM, MIN_ZOOM, MAX_ZOOM,
 } from '../js/render.js';
 import { ChiptuneAudio, MOOD_PROFILES, moodForRoom } from '../js/audio.js';
 
@@ -751,14 +755,14 @@ test('v0.5.0 rooms: irregular VOID cutouts, zone tiles, door landing clearance, 
   };
   const stool = getCatalogueItem('stool');
   const rug = getCatalogueItem('rug');
-  assert.equal(canPlaceAt(lobbyRoom, stool, 10, 7, 0).reason, 'blocked_tile', 'cannot place on TILE.VOID cutout');
+  assert.equal(canPlaceAt(lobbyRoom, stool, 14, 10, 0).reason, 'blocked_tile', 'cannot place on TILE.VOID cutout');
   // Lobby elevator door is at (4, 0), so (4, 1) is the door landing apron
   assert.equal(canPlaceAt(lobbyRoom, stool, 4, 1, 0).reason, 'door_clearance', 'cannot place solid item on door apron');
   assert.equal(canPlaceAt(lobbyRoom, rug, 4, 1, 0).ok, true, 'flat rug allowed on door apron');
 });
 
-test('v0.5.0 migration: v2 save migrates to v3, pruning items on VOID cutouts and rescuing player position if on VOID', () => {
-  assert.equal(SAVE_VERSION, 3);
+test('v0.5.0 migration: v2 save migrates to v4, pruning items on VOID cutouts and rescuing player position if on VOID', () => {
+  assert.equal(SAVE_VERSION, 4);
   const v2Save = {
     version: 2,
     coins: 500,
@@ -768,16 +772,16 @@ test('v0.5.0 migration: v2 save migrates to v3, pruning items on VOID cutouts an
       lobby: {
         placed: [
           { instanceId: 'valid_stool', itemId: 'stool', x: 2, y: 2, rot: 0 },
-          { instanceId: 'void_stool', itemId: 'stool', x: 10, y: 7, rot: 0 }, // (10,7) is VOID in lobby
+          { instanceId: 'void_stool', itemId: 'stool', x: 14, y: 10, rot: 0 }, // (14,10) is VOID in Grand Lobby
         ],
       },
     },
     quests: {},
-    player: { room: 'lobby', x: 10, y: 7, dir: 'down', sitting: null },
+    player: { room: 'lobby', x: 14, y: 10, dir: 'down', sitting: null },
   };
   const storage = makeFakeStorage({ [SAVE_KEY]: JSON.stringify(v2Save) });
   const loaded = loadState(storage);
-  assert.equal(loaded.version, 3);
+  assert.equal(loaded.version, 4);
   assert.equal(loaded.rooms.lobby.placed.length, 1);
   assert.equal(loaded.rooms.lobby.placed[0].instanceId, 'valid_stool');
   assert.deepEqual({ x: loaded.player.x, y: loaded.player.y }, ROOMS.lobby.spawn);
@@ -1082,4 +1086,214 @@ test('v0.6.0 persistence: separate musicMuted, sfxMuted, musicVolume, and sfxVol
   assert.equal(loaded.settings.musicVolume, 0.35);
   assert.equal(loaded.settings.sfxVolume, 0.85);
   assert.equal(loaded.settings.muted, false);
+});
+
+// ======================= v0.7.0 advanced pathfinding & seamless movement =======================
+
+test('v0.7.0 movement: rapid repeated clicks on the same tile mid-step cause no back-and-forth replay', () => {
+  const isBlocked = () => false;
+  const mover = createMoverState(0, 0, 'down');
+  let r = retargetMover(mover, 5, 0, 0, { width: 10, height: 10, isBlocked, stepMs: 240 });
+  assert.equal(r.ok, true);
+  const fromBefore = { x: mover.fromX, y: mover.fromY };
+  const toBefore = { x: mover.toX, y: mover.toY };
+  // Click the exact same target tile again mid-step: must not restart or move the anchor.
+  r = retargetMover(mover, 5, 0, 60, { width: 10, height: 10, isBlocked, stepMs: 240 });
+  assert.equal(r.ignoredDuplicate, true, 'duplicate click on same target tile is ignored');
+  assert.deepEqual({ x: mover.fromX, y: mover.fromY }, fromBefore, 'step anchor does not reset on duplicate click');
+  assert.deepEqual({ x: mover.toX, y: mover.toY }, toBefore, 'current step target does not reset on duplicate click');
+});
+
+test('v0.7.0 movement: re-targeting mid-step continues the current interpolated step instead of snapping back', () => {
+  const isBlocked = () => false;
+  const mover = createMoverState(0, 0, 'down');
+  retargetMover(mover, 5, 0, 0, { width: 10, height: 10, isBlocked, stepMs: 240 });
+  const toBefore = { x: mover.toX, y: mover.toY };
+  const stepStartBefore = mover.stepStart;
+  // Click a brand-new target mid-step: the in-flight step (fromX,fromY)->(toX,toY) must be preserved.
+  const r = retargetMover(mover, 0, 5, 80, { width: 10, height: 10, isBlocked, stepMs: 240 });
+  assert.equal(r.ok, true);
+  assert.deepEqual({ x: mover.toX, y: mover.toY }, toBefore, 'in-flight step target is not replaced mid-step');
+  assert.equal(mover.stepStart, stepStartBefore, 'step start time is not reset mid-step');
+  assert.equal(mover.targetX, 0);
+  assert.equal(mover.targetY, 5, 're-plan happens from the tile being entered, toward the new goal');
+});
+
+test('v0.7.0 pathfinding: paths never cross blockers or cut diagonal corners', () => {
+  const W = 8, H = 8;
+  const blocked = new Set(['3,3', '4,3']);
+  const isBlocked = (x, y) => blocked.has(`${x},${y}`);
+  const path = findPath(W, H, isBlocked, { x: 2, y: 2 }, { x: 5, y: 5 }, { smooth: false });
+  assert.ok(path, 'path exists around the blockers');
+  for (const p of path) assert.equal(isBlocked(p.x, p.y), false, `path must not cross blocked tile ${p.x},${p.y}`);
+  for (let i = 1; i < path.length; i++) {
+    const a = path[i - 1], b = path[i];
+    const dx = b.x - a.x, dy = b.y - a.y;
+    if (dx !== 0 && dy !== 0) {
+      assert.equal(isBlocked(a.x + dx, a.y), false, 'no cutting a corner past a blocker (horizontal neighbour)');
+      assert.equal(isBlocked(a.x, a.y + dy), false, 'no cutting a corner past a blocker (vertical neighbour)');
+    }
+  }
+});
+
+test('v0.7.0 pathfinding: line-of-sight smoothing never introduces a corner cut or a blocked waypoint', () => {
+  const blocked = new Set(['2,1', '2,2', '2,3']);
+  const isBlocked = (x, y) => blocked.has(`${x},${y}`);
+  const raw = findPath(10, 10, isBlocked, { x: 0, y: 2 }, { x: 5, y: 2 }, { smooth: false });
+  assert.ok(raw);
+  const smoothed = smoothPath(raw, isBlocked, { resample: true });
+  for (const p of smoothed) assert.equal(isBlocked(p.x, p.y), false);
+  for (let i = 1; i < smoothed.length; i++) {
+    const a = smoothed[i - 1], b = smoothed[i];
+    assert.ok(Math.abs(b.x - a.x) <= 1 && Math.abs(b.y - a.y) <= 1, 'resampled smoothed path stays 1-tile-step');
+  }
+});
+
+test('v0.7.0 movement: advanceMover dynamically re-plans around a tile that becomes blocked by a moving NPC', () => {
+  const dynamicallyBlocked = new Set();
+  const isBlocked = (x, y) => dynamicallyBlocked.has(`${x},${y}`);
+  const mover = createMoverState(0, 0, 'down');
+  retargetMover(mover, 5, 0, 0, { width: 10, height: 10, isBlocked, stepMs: 100 });
+  // An NPC walks into a tile a couple of steps further down the path (not the
+  // already-committed in-flight step), so the boundary check must catch it in time.
+  dynamicallyBlocked.add('3,0');
+  let replanned = false;
+  advanceMover(mover, 250, {
+    width: 10, height: 10, isBlocked, stepMs: 100, onReplan: () => { replanned = true; },
+  });
+  assert.equal(replanned, true, 'advanceMover detects the newly blocked tile ahead and re-plans');
+  assert.equal(isBlocked(mover.toX, mover.toY), false, 'the mover never commits to stepping onto the newly blocked tile');
+  assert.equal(mover.targetX, 5);
+  assert.equal(mover.targetY, 0, 'the re-planned route still heads to the original goal');
+});
+
+test('v0.7.0 npc: stationary receptionist never wanders, and findWanderTarget never returns a blocked or reserved tile', () => {
+  const celeste = NPCS.find((n) => n.id === 'celeste');
+  assert.ok(celeste, 'Celeste the receptionist exists');
+  assert.equal(celeste.isReceptionist, true);
+  assert.equal(celeste.stationary, true);
+  assert.ok(Array.isArray(celeste.dialogueTopics) && celeste.dialogueTopics.length > 0, 'receptionist has dialogue topics');
+
+  const runtime = { ...createNpcRuntime(celeste), def: celeste };
+  const target = findWanderTarget(runtime, 16, 12, () => false);
+  assert.equal(target, null, 'stationary NPC never produces a wander target');
+
+  const mochi = NPCS.find((n) => n.id === 'mochi');
+  const mochiRuntime = { ...createNpcRuntime(mochi), def: mochi };
+  const reserved = [{ x: 5, y: 8 }, { x: 3, y: 8 }, { x: 7, y: 4 }, { x: 3, y: 3 }];
+  for (let i = 0; i < 20; i++) {
+    const t = findWanderTarget(mochiRuntime, 16, 12, () => false, Math.random, reserved);
+    if (t) {
+      assert.ok(!reserved.some((r) => r.x === t.targetTile.x && r.y === t.targetTile.y), 'wander target avoids reserved tiles');
+    }
+  }
+});
+
+test('v0.7.0 npc: tickNpc actually starts a walking step (not just assigning a path) when a wander target is found', () => {
+  const mochi = NPCS.find((n) => n.id === 'mochi');
+  const npc = { ...createNpcRuntime(mochi), def: mochi, nextWanderAt: 0 };
+  tickNpc(npc, 1000, {
+    tryWander: () => ({ path: [{ x: npc.x, y: npc.y }, { x: npc.x + 1, y: npc.y }] }),
+    pickAmbientLine: () => null,
+  });
+  assert.equal(npc.walking, true, 'npc.walking becomes true immediately once a wander path is assigned');
+  assert.ok(npc.path && npc.path.length > 1);
+  assert.notEqual(npc.toX, npc.fromX === npc.toX ? null : npc.fromX, 'a concrete step is queued');
+});
+
+// ======================= v0.7.0 zoom, camera & pointer mapping =======================
+
+test('v0.7.0 zoom: clampZoom bounds the zoom level and DEFAULT_ZOOM sits within range', () => {
+  assert.ok(DEFAULT_ZOOM >= MIN_ZOOM && DEFAULT_ZOOM <= MAX_ZOOM);
+  assert.equal(clampZoom(0.01), MIN_ZOOM);
+  assert.equal(clampZoom(99), MAX_ZOOM);
+  assert.equal(clampZoom(Number.NaN), DEFAULT_ZOOM);
+});
+
+test('v0.7.0 zoom: pointer-to-tile mapping round-trips correctly at multiple zoom levels and pans', () => {
+  const room = ROOMS.lobby;
+  const width = 960, height = 600;
+  const { originX, originY } = computeOrigin(room, width, height);
+  for (const zoom of [MIN_ZOOM, 1.0, DEFAULT_ZOOM, MAX_ZOOM]) {
+    const camera = centerCameraOnTile(6, 4, room, width, height, zoom);
+    const { sx, sy } = worldToScreen(...Object.values(tileToScreen(6, 4, originX, originY)), camera, width, height);
+    const tile = screenToTile(sx, sy, originX, originY, camera, width, height);
+    assert.equal(tile.x, 6, `x round-trips at zoom ${zoom}`);
+    assert.equal(tile.y, 4, `y round-trips at zoom ${zoom}`);
+  }
+});
+
+test('v0.7.0 zoom: zoomAtPoint keeps the world point under the cursor fixed on screen', () => {
+  const camera = { zoom: 1, panX: 0, panY: 0 };
+  const cursorX = 300, cursorY = 200;
+  const zoomed = zoomAtPoint(camera, 2, cursorX, cursorY, 960, 600);
+  const back = zoomAtPoint(zoomed, 1, cursorX, cursorY, 960, 600);
+  assert.ok(Math.abs(back.panX - camera.panX) <= 1);
+  assert.ok(Math.abs(back.panY - camera.panY) <= 1);
+});
+
+test('v0.7.0 persistence: zoom level persists through saveState/loadState and stays clamped', () => {
+  const storage = makeFakeStorage();
+  const state = createDefaultState();
+  state.settings.zoom = 2.2;
+  saveState(storage, state);
+  const loaded = loadState(storage);
+  assert.equal(loaded.settings.zoom, 2.2);
+
+  const storage2 = makeFakeStorage();
+  const state2 = createDefaultState();
+  state2.settings.zoom = 99;
+  saveState(storage2, state2);
+  const loaded2 = loadState(storage2);
+  assert.ok(loaded2.settings.zoom <= MAX_ZOOM, 'out-of-range saved zoom is clamped on load');
+});
+
+test('v0.7.0 persistence: master and ambience volume settings round-trip', () => {
+  const storage = makeFakeStorage();
+  const state = createDefaultState();
+  state.settings.masterVolume = 0.42;
+  state.settings.ambienceVolume = 0.33;
+  state.settings.ambienceMuted = true;
+  state.settings.autoFollowRoom = false;
+  saveState(storage, state);
+  const loaded = loadState(storage);
+  assert.equal(loaded.settings.masterVolume, 0.42);
+  assert.equal(loaded.settings.ambienceVolume, 0.33);
+  assert.equal(loaded.settings.ambienceMuted, true);
+  assert.equal(loaded.settings.autoFollowRoom, false);
+});
+
+// ======================= v0.7.0 vehicles & per-room music =======================
+
+test('v0.7.0 vehicles: cars, taxis, buses, and scooters render on the isometric roads with headlights at night', () => {
+  const layout = buildIsoCityLayout(ROOMS.lobby, 960, 600, 0.5);
+  const dayVehicles = computeCityVehicles(layout, 0, 0.5);
+  assert.ok(dayVehicles.length >= 8, 'multiple vehicles populate the roads');
+  const types = new Set(dayVehicles.map((v) => v.type));
+  for (const t of ['car', 'taxi', 'bus', 'scooter']) assert.ok(types.has(t), `expected a ${t} among vehicles`);
+  for (const v of dayVehicles) assert.equal(v.lightsOn, false, 'lights off in daylight');
+
+  const nightVehicles = computeCityVehicles(layout, 0, 0.0);
+  assert.ok(nightVehicles.every((v) => v.lightsOn === true), 'headlights/taillights on at night');
+});
+
+test('v0.7.0 audio: every hotel room/floor resolves to its own distinct procedural track', () => {
+  const trackIds = new Set();
+  for (const roomId of Object.keys(ROOMS)) {
+    const synth = new ChiptuneAudio();
+    synth.gestureUnlocked = true;
+    synth.setRoomMood(roomId, 0.5, ROOMS[roomId].floor || 1);
+    trackIds.add(synth.trackId);
+  }
+  assert.ok(trackIds.size >= 8, 'at least 8 distinct per-room/floor tracks are selectable');
+});
+
+test('v0.7.0 audio: traffic ambience is quieter on higher floors and inside than at street level', () => {
+  const synth = new ChiptuneAudio();
+  synth.gestureUnlocked = true;
+  synth.setRoomMood('lobby', 0.5, 1);
+  const streetAtten = synth._effectiveAmbienceTarget();
+  synth.setRoomMood('library', 0.5, 7);
+  const highFloorAtten = synth._effectiveAmbienceTarget();
+  assert.ok(highFloorAtten < streetAtten, 'traffic ambience attenuates on higher floors');
 });

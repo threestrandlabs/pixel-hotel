@@ -8,7 +8,7 @@ export const TILE = {
   VOID: 4,
 };
 
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 
 // Grid is row-major: grid[y][x]
 export function makeRoomGrid(w, h, { doors = [], windows = [], cutouts = [] } = {}) {
@@ -47,19 +47,20 @@ export const ROOMS = {
     floor: 1,
     icon: '🛎️',
     wing: 'Ground & Dining',
-    shape: 'atrium-step',
-    floorColor: '#e9c48f',
-    wallColor: '#e3a27a',
-    width: 12,
-    height: 9,
-    cutouts: [{ x0: 10, y0: 7, x1: 11, y1: 8 }],
-    zoneTiles: { x0: 4, y0: 1, x1: 6, y1: 3, color: '#f3d7aa' },
-    grid: makeRoomGrid(12, 9, {
+    shape: 'grand-atrium',
+    doubleHeight: true,
+    floorColor: '#ede3d0',
+    wallColor: '#d89b72',
+    width: 16,
+    height: 12,
+    cutouts: [{ x0: 14, y0: 10, x1: 15, y1: 11 }],
+    zoneTiles: { x0: 4, y0: 3, x1: 11, y1: 8, color: '#f7efe0', marble: true },
+    grid: makeRoomGrid(16, 12, {
       doors: [{ x: 6, y: 0 }, { x: 4, y: 0 }],
-      windows: [{ x: 2, y: 0 }, { x: 9, y: 0 }, { x: 0, y: 3 }, { x: 0, y: 6 }],
-      cutouts: [{ x0: 10, y0: 7, x1: 11, y1: 8 }],
+      windows: [{ x: 2, y: 0 }, { x: 9, y: 0 }, { x: 13, y: 0 }, { x: 0, y: 3 }, { x: 0, y: 6 }, { x: 0, y: 9 }],
+      cutouts: [{ x0: 14, y0: 10, x1: 15, y1: 11 }],
     }),
-    spawn: { x: 6, y: 2 },
+    spawn: { x: 6, y: 4 },
     doors: [
       { x: 6, y: 0, to: 'rooftop', toTile: { x: 4, y: 5 } },
       { x: 4, y: 0, to: 'myroom', toTile: { x: 4, y: 2 }, elevator: true },
@@ -396,10 +397,21 @@ export const CATALOGUE = [
   { id: 'cafe_table', name: 'Marble Cafe Table', price: 30, category: 'decor', footprint: { w: 1, h: 1 }, seat: false, interaction: 'eat', spriteKey: 'cafeTable', unlockRequires: null, description: 'Round brass-pedestal bistro table topped with latte art and a warm croissant.' },
   { id: 'pool_table', name: 'Championship Billiards', price: 85, category: 'decor', footprint: { w: 2, h: 1 }, seat: false, interaction: 'use', spriteKey: 'poolTable', unlockRequires: null, description: 'Carved mahogany billiards table with emerald baize felt, cues and racked balls.' },
   { id: 'computer_desk', name: 'Workstation Desk & PC', price: 60, category: 'decor', footprint: { w: 2, h: 1 }, seat: false, interaction: 'use', emissive: { color: '#7ad8ff', radius: 46, intensity: 0.28 }, spriteKey: 'computerDesk', unlockRequires: null, description: 'Executive timber desk equipped with dual-monitor pixel workstation and task lamp.' },
-  { id: 'sky_tree', name: 'Ornamental Sakura Tree', price: 55, category: 'decor', footprint: { w: 1, h: 1 }, seat: false, spriteKey: 'skyTree', unlockRequires: null, description: 'Sculpted stone planter supporting a blooming pink sakura canopy.' },
-  { id: 'garden_bench', name: 'Teak Garden Bench', price: 40, category: 'seat', footprint: { w: 2, h: 1 }, seat: true, interaction: 'sit', seatOffsets: [{ dx: 0, dy: 0 }, { dx: 1, dy: 0 }], spriteKey: 'gardenBench', unlockRequires: null, description: 'Slatted teakwood conservatory bench with scrolled wrought-iron armrests.' },
-  { id: 'flower_planter', name: 'Botanical Hedgerow', price: 35, category: 'decor', footprint: { w: 2, h: 1 }, seat: false, spriteKey: 'flowerPlanter', unlockRequires: null, description: 'Limestone trough planter bursting with hydrangeas, ferns and golden marigolds.' },
-];
+  { id: 'sky_tree', name: 'Ornamental Sakura Tree', price: 55, category: 'decor', footprint: { w: 1, h: 1 }, seat: false, walkable: false, spriteKey: 'skyTree', unlockRequires: null, description: 'Sculpted stone planter supporting a blooming pink sakura canopy.' },
+  { id: 'garden_bench', name: 'Teak Garden Bench', price: 40, category: 'seat', footprint: { w: 2, h: 1 }, seat: true, walkable: false, interaction: 'sit', seatOffsets: [{ dx: 0, dy: 0 }, { dx: 1, dy: 0 }], spriteKey: 'gardenBench', unlockRequires: null, description: 'Slatted teakwood conservatory bench with scrolled wrought-iron armrests.' },
+  { id: 'flower_planter', name: 'Botanical Hedgerow', price: 35, category: 'decor', footprint: { w: 2, h: 1 }, seat: false, walkable: false, spriteKey: 'flowerPlanter', unlockRequires: null, description: 'Limestone trough planter bursting with hydrangeas, ferns and golden marigolds.' },
+  // Original v0.7.0 Grand Lobby Architectural Collection
+  { id: 'marble_pillar', name: 'Grand Corinthian Pillar', price: 65, category: 'decor', footprint: { w: 1, h: 1 }, seat: false, walkable: false, spriteKey: 'marblePillar', unlockRequires: null, description: 'Fluted cream marble architectural column with gilded brass base and capital.' },
+  { id: 'chandelier', name: 'Imperial Crystal Chandelier', price: 95, category: 'decor', footprint: { w: 2, h: 2 }, seat: false, flat: true, walkable: true, overhead: true, emissive: { color: '#ffe29a', radius: 92, intensity: 0.52 }, spriteKey: 'chandelier', unlockRequires: null, description: 'Multi-tiered gilded brass and crystal atrium chandelier with floor medallion.' },
+  { id: 'grand_staircase', name: 'Grand Mezzanine Staircase', price: 90, category: 'decor', footprint: { w: 2, h: 2 }, seat: false, walkable: false, interaction: 'use', spriteKey: 'grandStaircase', unlockRequires: null, description: 'Sweeping marble staircase with royal-crimson carpet runner and brass balustrades.' },
+  { id: 'lobby_fountain', name: 'Atrium Marble Fountain', price: 85, category: 'decor', footprint: { w: 2, h: 2 }, seat: false, walkable: false, interaction: 'use', emissive: { color: '#7ce8ff', radius: 64, intensity: 0.35 }, spriteKey: 'lobbyFountain', unlockRequires: null, description: 'Tiered sculpted marble atrium fountain with cascading turquoise water.' },
+  { id: 'luggage_trolley', name: 'Brass Bellhop Trolley', price: 45, category: 'decor', footprint: { w: 1, h: 1 }, seat: false, walkable: false, interaction: 'use', spriteKey: 'luggageTrolley', unlockRequires: null, description: 'Polished brass bellhop luggage cart loaded with stitched leather suitcases.' },
+  { id: 'concierge_desk', name: 'Concierge Podium', price: 60, category: 'decor', footprint: { w: 2, h: 1 }, seat: false, walkable: false, interaction: 'use', spriteKey: 'conciergeDesk', unlockRequires: null, description: 'Carved walnut and brass concierge desk with guest ledger and golden key rack.' },
+  { id: 'lobby_runner', name: 'Royal Velvet Runner', price: 40, category: 'decor', footprint: { w: 2, h: 3 }, seat: false, flat: true, walkable: true, spriteKey: 'lobbyRunner', unlockRequires: null, description: 'Plush royal-crimson and gold-bordered grand lobby carpet runner.' },
+].map((item) => ({
+  ...item,
+  walkable: typeof item.walkable === 'boolean' ? item.walkable : Boolean(item.flat),
+}));
 
 export function getCatalogueItem(id) {
   return CATALOGUE.find((c) => c.id === id) || null;
@@ -410,19 +422,28 @@ export function getCatalogueItem(id) {
 // rot: 0 faces down, 1 right, 2 up, 3 left (seats); 2-wide items turn 1x2 on odd rot.
 export const SEED_FURNITURE = {
   lobby: [
-    { itemId: 'reception_desk', x: 8, y: 2, rot: 0 },
-    { itemId: 'stool', x: 9, y: 3, rot: 0 },
+    { itemId: 'reception_desk', x: 9, y: 2, rot: 0 },
+    { itemId: 'concierge_desk', x: 1, y: 2, rot: 0 },
+    { itemId: 'grand_staircase', x: 13, y: 1, rot: 0 },
+    { itemId: 'marble_pillar', x: 3, y: 4, rot: 0 },
+    { itemId: 'marble_pillar', x: 12, y: 4, rot: 0 },
+    { itemId: 'marble_pillar', x: 3, y: 9, rot: 0 },
+    { itemId: 'marble_pillar', x: 12, y: 9, rot: 0 },
+    { itemId: 'chandelier', x: 7, y: 5, rot: 0 },
+    { itemId: 'lobby_runner', x: 5, y: 2, rot: 0 },
+    { itemId: 'lobby_fountain', x: 9, y: 6, rot: 0 },
+    { itemId: 'rug', x: 4, y: 6, rot: 0 },
+    { itemId: 'sofa', x: 4, y: 5, rot: 0 },
+    { itemId: 'armchair', x: 2, y: 6, rot: 1 },
+    { itemId: 'armchair', x: 6, y: 7, rot: 3 },
+    { itemId: 'cafe_table', x: 4, y: 7, rot: 0 },
+    { itemId: 'lamp', x: 6, y: 5, rot: 0 },
+    { itemId: 'luggage_trolley', x: 2, y: 8, rot: 0 },
     { itemId: 'bookshelf', x: 1, y: 4, rot: 1 },
-    { itemId: 'rug', x: 3, y: 4, rot: 0 },
-    { itemId: 'sofa', x: 3, y: 3, rot: 0 },
-    { itemId: 'armchair', x: 2, y: 5, rot: 1 },
-    { itemId: 'armchair', x: 5, y: 5, rot: 3 },
-    { itemId: 'lamp', x: 5, y: 3, rot: 0 },
-    { itemId: 'lamp', x: 1, y: 7, rot: 0 },
-    { itemId: 'plant', x: 5, y: 1, rot: 0 },
-    { itemId: 'plant', x: 7, y: 1, rot: 0 },
-    { itemId: 'plant', x: 1, y: 1, rot: 0 },
-    { itemId: 'plant', x: 11, y: 6, rot: 0 },
+    { itemId: 'flower_planter', x: 5, y: 10, rot: 0 },
+    { itemId: 'flower_planter', x: 9, y: 10, rot: 0 },
+    { itemId: 'plant', x: 8, y: 1, rot: 0 },
+    { itemId: 'plant', x: 14, y: 5, rot: 0 },
   ],
   cafe: [
     { itemId: 'espresso_bar', x: 7, y: 1, rot: 0 },
@@ -528,27 +549,79 @@ export const SEED_FURNITURE = {
 // keyword-triggered responses.
 export const NPCS = [
   {
+    id: 'celeste',
+    name: 'Celeste',
+    role: 'Head Receptionist',
+    isReceptionist: true,
+    stationary: true,
+    color: '#2e4478',
+    personality: 'gracious head receptionist',
+    room: 'lobby',
+    home: { x: 10, y: 1 },
+    greetLines: [
+      'Welcome to Pixel Hotel! Your keycard for Suite 801 on Floor 8 is ready at the front desk.',
+      'Good day! Welcome to the Grand Lobby — how may I make your stay extraordinary?',
+    ],
+    ambientLines: [
+      'Checking in? Step up to the reception desk anytime!',
+      'Our 10-storey tower features a Cafe, Restaurant, Gym, Spa Pool, Arcade, Library, and Rooftop!',
+      'Your personal suite is waiting on Floor 8 — take the elevator anytime!',
+    ],
+    dialogueTopics: [
+      {
+        id: 'checkin',
+        label: '🛎️ Check In (Starter Quest)',
+        reply: 'Welcome aboard! You are officially checked into Suite 801 on Floor 8. Here is your starter Welcome Quest bonus!',
+      },
+      {
+        id: 'facilities',
+        label: '🏨 Hotel Facilities Guide',
+        reply: 'F2 is Starlight Cafe, F3 Skyline Restaurant, F4 Pulse Gym, F5 Pool & Spa, F6 Arcade, F7 Library, F8 Your Suite, F9 Sky Garden, and F10 Rooftop!',
+      },
+      {
+        id: 'quest',
+        label: '📜 Quest Tips',
+        reply: 'Chat with 3 guests, visit our facility floors by Elevator (E), relax on the Rooftop Sofa, and decorate your Floor 8 suite for coins!',
+      },
+    ],
+    keywords: {
+      hello: [
+        'Welcome to Pixel Hotel! Your suite on Floor 8 is freshly prepared.',
+        'Good day! Delighted to welcome you to our Grand Lobby.',
+      ],
+      checkin: ['You are all checked in for Floor 8 (My Room)! Enjoy our complimentary welcome reward.'],
+      check: ['You are all checked in for Floor 8 (My Room)! Enjoy your stay.'],
+      facilities: ['Press E for the Elevator: Cafe (F2), Restaurant (F3), Gym (F4), Pool (F5), Arcade (F6), Library (F7), My Room (F8), Garden (F9), Rooftop (F10)!'],
+      room: ['Your private suite is on Floor 8 — click "My Room" in the top bar or take the elevator!'],
+      elevator: ['The brushed-brass elevator doors are just to my right at the north wall, or press E!'],
+      quest: ['Try greeting three guests, visiting the Gym on Floor 4, or decorating your suite on Floor 8!'],
+      help: ['Click any floor tile to walk, click furniture to sit or use it, or click any guest to chat!'],
+      bye: ['Have a wonderful stay at Pixel Hotel!'],
+    },
+  },
+  {
     id: 'mochi',
     name: 'Mochi',
     color: '#ff9fc7',
     personality: 'cheerful bellhop',
     room: 'lobby',
-    home: { x: 4, y: 4 },
+    home: { x: 5, y: 8 },
+    pointsOfInterest: [{ x: 3, y: 8 }, { x: 5, y: 8 }, { x: 7, y: 4 }, { x: 3, y: 3 }],
     greetLines: ["Hiya! Welcome to the hotel!", "Oh hello there, friend!"],
     ambientLines: [
       'Did you know the elevator hums in F major?',
-      'I polished every brass button twice today!',
-      'Press E anytime to ride the tower elevator to your suite!',
+      'I polished the grand chandelier and every brass luggage trolley twice today!',
+      'Have you checked in with Celeste at the reception desk yet?',
     ],
     keywords: {
       hello: ["Hiya! Welcome to the hotel!", 'So nice to see a new face!'],
-      quest: ['Try chatting with a few other guests — that always brightens their day!'],
+      quest: ['Speak with Celeste at the reception desk for check-in, and say hello to our guests!'],
       coins: ['Coins jingle nicest in a full pocket, don\'t you think?'],
       room: ['Take the elevator up to Floor 8 to see your private suite!'],
       elevator: ['Use the Elevator button or press E to visit any of our 10 floors!'],
       bye: ['Safe travels! Come back soon!'],
       help: ['Click a tile to walk, click a seat to sit, or press E for the elevator!'],
-      dance: ['I wish I could dance, but my feet are stuck polishing floors!'],
+      dance: ['I wish I could dance, but my feet are busy wheeling luggage trolleys!'],
     },
   },
   {
@@ -557,11 +630,12 @@ export const NPCS = [
     color: '#8fa6c7',
     personality: 'grumpy old guest',
     room: 'lobby',
-    home: { x: 9, y: 5 },
+    home: { x: 11, y: 8 },
+    pointsOfInterest: [{ x: 11, y: 8 }, { x: 8, y: 8 }, { x: 11, y: 5 }, { x: 7, y: 9 }],
     greetLines: ['Eh? Oh. Hello, I suppose.', "Hmph. Didn't see you there."],
     ambientLines: [
       "Back in my day we didn't need pixels to have fun.",
-      'This lobby carpet has seen better decades.',
+      'I must admit, the new marble atrium and fountain are rather grand.',
       "Ten floors in this tower now, and I still prefer the lobby.",
     ],
     keywords: {
@@ -571,7 +645,7 @@ export const NPCS = [
       room: ['The rooftop is too breezy for my joints.'],
       bye: ['Finally. Off you go then.'],
       help: ["Figure it out yourself — oh fine, click tiles to walk."],
-      weather: ['Look out at the city skyline if you want weather.'],
+      weather: ['Look out at the street traffic and skyline if you want weather.'],
     },
   },
   {
@@ -778,6 +852,14 @@ export const NPCS = [
 ];
 
 export const QUESTS = [
+  {
+    id: 'quest_checkin',
+    title: 'Grand Lobby Check-In',
+    description: 'Speak with Receptionist Celeste at the Grand Lobby front desk.',
+    type: 'checkin',
+    target: 1,
+    reward: { coins: 35, unlock: null },
+  },
   {
     id: 'quest_greet',
     title: 'Friendly Face',

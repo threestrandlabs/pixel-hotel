@@ -29,22 +29,32 @@ Then open **http://localhost:8080** in a modern desktop or mobile browser.
 
 | Action | How |
 | --- | --- |
-| Walk | Click a floor tile — your avatar pathfinds there automatically |
+| Walk | Click a floor tile — your avatar pathfinds there with A*, respecting furniture collision, and never cuts corners around blockers |
+| Talk to an NPC | Click/tap any guest or the receptionist — you'll walk to a free adjacent tile and a dialogue panel opens with their lines/topics |
 | Sit / Lie / Use Amenities | Click a chair, sofa, bed, yoga mat, treadmill, lap pool, dining chair, or counter — you'll pathfind to a free slot or safe approach tile and perform a matching animation (`sit`, `lie`, `treadmill`, `swim`, `eat`, `use`) |
 | Chat | Type in the chat box and press Enter / Send; nearby guests reply |
 | Switch rooms | Walk onto a doorway tile, or open the **🛗 Elevator** (`E`) to travel to any of the 10 floors |
 | Visit My Room | Click **🔑 My Room** or select **Floor 8 — My Room** in the Elevator Directory |
-| Buy / place furniture | Open **Items**, buy from the Shop tab, then **Place** it and click a tile (ghost preview shows green/red for valid/invalid) |
+| Buy / place furniture | Open **Items**, buy from the Shop tab, then **Place** it and click a tile (ghost preview shows green/red for valid/invalid; items render their own voxel icon instead of a flat square) |
 | Move / pick up furniture | Open **Items → In This Room**, use **Move** or **Pick up** |
 | Rotate while placing | `R` or the Rotate button |
 | Cancel placing | `Esc` or the Cancel button |
+| Zoom / pan | Mouse wheel / pinch, the **−** / **+** / **1:1** buttons, or `+`/`-`/`0`; click-drag to pan |
+| Music player | Bottom-left widget: play/pause, prev/next track, "Auto: follow room" toggle, volume slider |
+| Audio & mixing settings | Gear button opens Master / Music / SFX / Ambience volume sliders |
 
 ### Keyboard shortcuts
 
-`E` elevator directory · `I` inventory · `Q` quests · `M` mute/unmute music · `H` help · `S` manual save · `R` rotate (while placing) · `Esc` cancel/close
+`E` elevator directory · `I` inventory · `Q` quests · `M` mute/unmute music · `H` help · `S` manual save · `R` rotate (while placing) · `+`/`-`/`0` zoom in/out/reset · `Esc` cancel/close
 
 ## Features
 
+- **Grand Lobby (`v0.7.0`)**: A much larger, double-height Floor 1 with a marble floor, Corinthian pillars, an Imperial Crystal Chandelier, a grand mezzanine staircase, lounge seating, an atrium fountain, planters, a luggage trolley, a concierge podium, and a reception desk staffed by Celeste, the Head Receptionist, who greets you, answers hotel-facilities questions, and starts the Welcome Quest.
+- **Consistent Storey Scale, City Traffic & Zoom Controls (`v0.7.0`)**: The tower and every neighbouring city building now share one true storey unit, so a 1-storey lobby no longer looks the same height as a 4-storey neighbour. Animated cars, taxis, buses, and scooters drive the isometric roads in-lane, stop at crossings, and light up at night, with procedural engine-hum/horn/brake-hiss traffic ambience that fades with floor height. Wheel/pinch/button/keyboard zoom (clamped 55%–250%, default ≈185%) zooms toward the cursor, pans by drag, and keeps pointer→tile hit-testing correct at every zoom level.
+- **Object Collision & Advanced A\* Pathfinding (`v0.7.0`)**: Every piece of furniture has a footprint and a walkable flag — rugs/mats stay walkable, everything else blocks tiles. Pathfinding is a pure A\* with a binary-heap open list, octile heuristic, no corner-cutting, line-of-sight path smoothing, and nearest-reachable-tile fallback; re-clicking mid-walk re-plans seamlessly from the tile being entered instead of stuttering, and NPCs reserve tiles so they and the player never collide.
+- **Wandering NPCs & Click-to-Talk Dialogue (`v0.7.0`)**: Guests wander between points of interest using the same pathfinding, pausing naturally and avoiding each other and the player. Clicking any NPC walks you to a free adjacent tile and opens a speech-bubble dialogue panel with greeting/topic lines.
+- **Bottom-Left Music Player & Full Audio Mixer (`v0.7.0`)**: A collapsible widget shows the current track/room, play/pause, prev/next, an "Auto: follow room" toggle, and a volume slider. A settings panel adds Master/Music/SFX/Ambience sliders, and every room/floor has its own distinct procedural track with crossfades and night variants.
+- **Procedural Item Icons (`v0.7.0`)**: Every catalogue item renders its own cached, HiDPI voxel/sprite thumbnail in the Shop, My Items, and placement preview instead of a flat colour square.
 - **Crisp Native-DPR Isometric Rendering**: `<canvas>` backing store automatically matches `CSS box × devicePixelRatio` via `ResizeObserver`, with DPR-scaled sprite/voxel caches blitted 1:1 to device pixels and crisp `system-ui` canvas/UI typography.
 - **Shared Isometric City & Street Grid (`v0.6.0`)**: Rather than a flat 2D backdrop behind an isometric tower, the surrounding city shares the exact 2:1 isometric ground plane and `(u, v)` axes (`±26.565°`) of the hotel tower. Features isometric avenues, lane dashes, pedestrian zebra crossings, raised sidewalks with kerbs, street trees, glowing streetlamps, landscaped park/fountain plazas, and depth-sorted 3D isometric city blocks/buildings of varied heights with angled facade windows, rooftop penthouses/skylights/gardens, distance haze, and floor-dependent elevation (street-level plaza on lower floors vs neighbouring isometric rooftops on high floors). Both the isometric city backdrop and the lower tower cutaway shaft are cached to offscreen canvases for 60fps performance.
 - **Procedural Web Audio Lounge/Lofi Music & Soft Enveloped SFX (`v0.6.0`)**: Warm multi-voice Rhodes/lounge chords, triangle sub-bass, and brushed lofi percussion routed through low-pass `BiquadFilterNode`s, with automatic area/time moods (**Velvet Lounge** for Lobby/Dining/Suite, **Pulse Synth Groove** for Gym/Arcade, **Azure Spa Drift** for Pool/Garden/Rooftop, and **Midnight Lofi** at night). Includes soft filtered/enveloped SFX for UI clicks, footsteps, coin chimes, furniture placement, quest completion, chat, and two-tone elevator bells, plus separate persisted Music and SFX mute/volume controls that defer `AudioContext` creation until a user gesture.
@@ -128,7 +138,11 @@ directly under Node.
 
 For debugging/tests, the running page exposes `window.__pixelHotel` with
 `getState()`, `walkTo(x,y)`, `sendChat(text)`, `buy(itemId)`,
-`placeAt(instanceId,x,y,rot)`, `save()`, `reset()`, and `getCanvas()`.
+`placeAt(instanceId,x,y,rot)`, `save()`, `reset()`, `getCanvas()`,
+`getCamera()`, `setZoom(z)`, `resetZoom()`, `tileToScreen(x,y)`,
+`screenToTile(x,y)`, `clickNpc(npcId)`, `closeDialogue()`,
+`getDialogueState()`, `getMusicPlayerState()`, `getAudioState()`, and
+`getItemIcon(itemId)`.
 
 ## Tests
 

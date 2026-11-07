@@ -29,7 +29,54 @@
   <main id="gameArea">
     <canvas id="gameCanvas" width="960" height="600"></canvas>
     <div id="toast" class="hidden"></div>
+    <div id="zoomControls">
+      <button id="btnZoomOut" class="pixel-btn" title="Zoom Out (-)">−</button>
+      <span id="zoomLevel">185%</span>
+      <button id="btnZoomIn" class="pixel-btn" title="Zoom In (+)">+</button>
+      <button id="btnZoomReset" class="pixel-btn" title="Reset Zoom (0)">1:1</button>
+      <button id="btnCenterPlayer" class="pixel-btn" title="Recenter Camera on Player">🎯</button>
+    </div>
+    <div id="musicPlayer" class="music-player">
+      <div class="mp-bar">
+        <div class="mp-meta">
+          <div id="mpTitle" class="mp-title">Velvet Grand Atrium</div>
+          <div id="mpSubtitle" class="mp-subtitle">Lobby Jazz Lounge</div>
+        </div>
+        <div id="mpEq" class="mp-eq" aria-hidden="true">
+          <span class="mp-eq-bar"></span>
+          <span class="mp-eq-bar"></span>
+          <span class="mp-eq-bar"></span>
+          <span class="mp-eq-bar"></span>
+        </div>
+        <button id="mpCollapse" class="pixel-btn mp-collapse-btn" title="Collapse / Expand Player">▼</button>
+      </div>
+      <div id="mpBody" class="mp-body">
+        <div class="mp-progress">
+          <div id="mpProgressFill" class="mp-progress-fill"></div>
+        </div>
+        <div class="mp-controls">
+          <button id="mpPrev" class="pixel-btn" title="Previous Track">⏮</button>
+          <button id="mpPlayPause" class="pixel-btn mp-play" title="Play / Pause">⏸</button>
+          <button id="mpNext" class="pixel-btn" title="Next Track">⏭</button>
+          <button id="mpAutoFollow" class="pixel-btn mp-toggle active" title="Follow Room Audio">Auto: Room</button>
+          <input id="mpVolume" type="range" min="0" max="100" step="5" value="75" title="Music Volume" />
+        </div>
+      </div>
+    </div>
+    <div id="npcDialogueBar" class="npc-dialogue-bar hidden">
+      <div class="npc-dlg-header">
+        <span id="npcDlgAvatar" class="npc-dlg-avatar">🛎️</span>
+        <div class="npc-dlg-meta">
+          <span id="npcDlgName" class="npc-dlg-name">Celeste</span>
+          <span id="npcDlgRole" class="npc-dlg-role">Hotel Receptionist</span>
+        </div>
+        <button id="btnNpcDlgClose" class="pixel-btn npc-dlg-close" title="Close Dialogue">✕</button>
+      </div>
+      <div id="npcDlgText" class="npc-dlg-text">Welcome to Pixel Hotel! How may I assist you today?</div>
+      <div id="npcDlgOptions" class="npc-dlg-options"></div>
+    </div>
     <div id="placingBar" class="hidden">
+      <img id="placingIcon" class="item-icon placing-icon hidden" src="" alt="" />
       <span id="placingLabel">Placing item...</span>
       <button id="btnRotate" class="pixel-btn">⟳ Rotate (R)</button>
       <button id="btnCancelPlace" class="pixel-btn">✕ Cancel (Esc)</button>
@@ -77,27 +124,41 @@
 
   <aside id="audioPanel" class="panel hidden">
     <div class="panel-header">
-      <span>🎚️ Lounge Audio &amp; SFX</span>
+      <span>🎚️ Audio Mixer &amp; Settings</span>
       <button class="panel-close" data-close="audioPanel">✕</button>
     </div>
     <div class="tab-content audio-controls">
       <div class="audio-mood-row">
-        <span class="audio-mood-title">Area Mood:</span>
+        <span class="audio-mood-title">Current Track:</span>
         <span id="audioMoodLabel" class="audio-mood-badge">Velvet Lounge</span>
       </div>
       <div class="audio-channel">
         <div class="audio-channel-header">
-          <label for="musicVolume">🎵 Lounge Music</label>
-          <button id="btnPanelMusicMute" class="pixel-btn">On</button>
+          <label for="masterVolume">🔊 Master Volume</label>
+          <button id="btnPanelMasterMute" class="pixel-btn">On</button>
         </div>
-        <input id="musicVolume" type="range" min="0" max="100" step="5" value="55" />
+        <input id="masterVolume" type="range" min="0" max="100" step="5" value="85" />
       </div>
       <div class="audio-channel">
         <div class="audio-channel-header">
-          <label for="sfxVolume">🔔 Soft SFX</label>
+          <label for="musicVolume">🎵 Music Volume</label>
+          <button id="btnPanelMusicMute" class="pixel-btn">On</button>
+        </div>
+        <input id="musicVolume" type="range" min="0" max="100" step="5" value="75" />
+      </div>
+      <div class="audio-channel">
+        <div class="audio-channel-header">
+          <label for="sfxVolume">🔔 SFX Volume</label>
           <button id="btnPanelSfxMute" class="pixel-btn">On</button>
         </div>
-        <input id="sfxVolume" type="range" min="0" max="100" step="5" value="70" />
+        <input id="sfxVolume" type="range" min="0" max="100" step="5" value="75" />
+      </div>
+      <div class="audio-channel">
+        <div class="audio-channel-header">
+          <label for="ambienceVolume">🚗 Ambience &amp; Traffic</label>
+          <button id="btnPanelAmbienceMute" class="pixel-btn">On</button>
+        </div>
+        <input id="ambienceVolume" type="range" min="0" max="100" step="5" value="65" />
       </div>
     </div>
   </aside>
