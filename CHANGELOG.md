@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.3.1] - 2026-11-07
+
+### Added
+
+- GitHub Actions deploy to GitHub Pages (tests run first; only index.html, css and js are published).
+- Gitleaks secret scanning in CI and as a pre-commit hook; reviewed false positive (save-slot key name) listed in .gitleaksignore.
+
 ## [0.3.0] - 2026-11-07
 
 ### Added

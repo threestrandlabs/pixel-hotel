@@ -6,3 +6,4 @@ playwright-report/
 *.log
 claude_run*.log
 .DS_Store
+.env*
