@@ -8,8 +8,9 @@ no frameworks, no network calls.
 This is an original homage to the cosy retro "virtual hotel" genre of the late
 90s/2000s. It is **not affiliated with, endorsed by, or associated with Habbo,
 Sulake, Nexon, or any other company** — every name, character, room, item and
-line of dialogue here is original, and all art/audio is generated procedurally
-in code (see **Assets & Attribution** below).
+line of dialogue here is original, all pixel art/voxel rendering is generated
+procedurally in code, and the floor soundtrack is original music by James
+(see **Assets & Attribution** below).
 
 ## Running it
 
@@ -40,7 +41,7 @@ Then open **http://localhost:8080** in a modern desktop or mobile browser.
 | Rotate while placing | `R` or the Rotate button |
 | Cancel placing | `Esc` or the Cancel button |
 | Zoom / pan | Mouse wheel / pinch, the **−** / **+** / **1:1** buttons, or `+`/`-`/`0`; click-drag to pan |
-| Music player | Bottom-left widget: play/pause, prev/next track, "Auto: follow room" toggle, volume slider |
+| Music player | Bottom-left widget: play/pause, prev/next track, "Auto: follow room" toggle, volume slider — each floor plays its own licensed track (crossfades on floor change) |
 | Audio & mixing settings | Gear button opens Master / Music / SFX / Ambience volume sliders |
 
 ### Keyboard shortcuts
@@ -53,7 +54,7 @@ Then open **http://localhost:8080** in a modern desktop or mobile browser.
 - **Consistent Storey Scale, City Traffic & Zoom Controls (`v0.7.0`)**: The tower and every neighbouring city building now share one true storey unit, so a 1-storey lobby no longer looks the same height as a 4-storey neighbour. Animated cars, taxis, buses, and scooters drive the isometric roads in-lane, stop at crossings, and light up at night, with procedural engine-hum/horn/brake-hiss traffic ambience that fades with floor height. Wheel/pinch/button/keyboard zoom (clamped 55%–250%, default ≈185%) zooms toward the cursor, pans by drag, and keeps pointer→tile hit-testing correct at every zoom level.
 - **Object Collision & Advanced A\* Pathfinding (`v0.7.0`)**: Every piece of furniture has a footprint and a walkable flag — rugs/mats stay walkable, everything else blocks tiles. Pathfinding is a pure A\* with a binary-heap open list, octile heuristic, no corner-cutting, line-of-sight path smoothing, and nearest-reachable-tile fallback; re-clicking mid-walk re-plans seamlessly from the tile being entered instead of stuttering, and NPCs reserve tiles so they and the player never collide.
 - **Wandering NPCs & Click-to-Talk Dialogue (`v0.7.0`)**: Guests wander between points of interest using the same pathfinding, pausing naturally and avoiding each other and the player. Clicking any NPC walks you to a free adjacent tile and opens a speech-bubble dialogue panel with greeting/topic lines.
-- **Bottom-Left Music Player & Full Audio Mixer (`v0.7.0`)**: A collapsible widget shows the current track/room, play/pause, prev/next, an "Auto: follow room" toggle, and a volume slider. A settings panel adds Master/Music/SFX/Ambience sliders, and every room/floor has its own distinct procedural track with crossfades and night variants.
+- **Bottom-Left Music Player & Full Audio Mixer (`v0.7.0`, floor soundtrack in `v0.7.1`)**: A collapsible widget shows the current track/room, play/pause, prev/next, an "Auto: follow room" toggle, and a volume slider. A settings panel adds Master/Music/SFX/Ambience sliders. Every floor plays its own licensed music track (Music by James), loading lazily, preloading the next floor, looping seamlessly, and crossfading between floors — all routed through the Music/Master sliders, falling back to the original procedural per-room synth track if a file ever fails to load.
 - **Procedural Item Icons (`v0.7.0`)**: Every catalogue item renders its own cached, HiDPI voxel/sprite thumbnail in the Shop, My Items, and placement preview instead of a flat colour square.
 - **Crisp Native-DPR Isometric Rendering**: `<canvas>` backing store automatically matches `CSS box × devicePixelRatio` via `ResizeObserver`, with DPR-scaled sprite/voxel caches blitted 1:1 to device pixels and crisp `system-ui` canvas/UI typography.
 - **Shared Isometric City & Street Grid (`v0.6.0`)**: Rather than a flat 2D backdrop behind an isometric tower, the surrounding city shares the exact 2:1 isometric ground plane and `(u, v)` axes (`±26.565°`) of the hotel tower. Features isometric avenues, lane dashes, pedestrian zebra crossings, raised sidewalks with kerbs, street trees, glowing streetlamps, landscaped park/fountain plazas, and depth-sorted 3D isometric city blocks/buildings of varied heights with angled facade windows, rooftop penthouses/skylights/gardens, distance haze, and floor-dependent elevation (street-level plaza on lower floors vs neighbouring isometric rooftops on high floors). Both the isometric city backdrop and the lower tower cutaway shaft are cached to offscreen canvases for 60fps performance.
@@ -128,7 +129,7 @@ js/npc.js             NPC wandering/dialogue logic (pure)
 js/voxel.js           procedural 3D voxel character models & projection (pure)
 js/sprites.js         procedural pixel-art generation & wall/window geometry
 js/render.js           isometric rendering, depth sort, lighting (canvas)
-js/audio.js            procedural WebAudio chiptune + SFX
+js/audio.js            floor MP3 soundtrack + procedural WebAudio fallback/SFX
 js/main.js             game loop, input, UI wiring, debug hooks
 ```
 
@@ -154,18 +155,24 @@ npm run test:smoke   # Playwright end-to-end smoke test (needs: npm i -D playwri
 The smoke test boots a local static server, loads the page in headless
 Chromium, and checks for console/page errors, a non-blank canvas, click-to-walk
 movement, chat, furniture purchase/placement, a room switch through a door,
-and save/reload persistence — taking screenshots into `tests/screenshots/`
-along the way.
+the per-floor MP3 soundtrack (including crossfade and fallback), and
+save/reload persistence — taking screenshots into `tests/screenshots/` along
+the way.
 
 ## Assets & Attribution
 
-Every visual and audio asset in this project is **generated procedurally in
-code** — volumetric 3D voxel character figures are modelled and projected in
+**Music by James.** Every floor's background track (`audio/music/01-grand-lobby.mp3`
+through `10-rooftop.mp3`) is original music composed and approved for use in this
+project by James; the files are shipped as-is and are never modified or re-encoded.
+
+Every other asset in this project is **generated procedurally in code** —
+volumetric 3D voxel character figures are modelled and projected in
 `js/voxel.js`, architectural tiles, furniture, and perspective wall windows
-are generated mathematically in `js/sprites.js`, and the background music/SFX
-are synthesized at runtime with the Web Audio API in `js/audio.js`. There are
-no downloaded images, fonts, sound files, or other external assets anywhere in
-this repository, and the game makes no network requests.
+are generated mathematically in `js/sprites.js`, and SFX (plus the fallback
+soundtrack used if a floor's MP3 ever fails to load) are synthesized at
+runtime with the Web Audio API in `js/audio.js`. There are no other downloaded
+images, fonts, sound files, or external assets anywhere in this repository,
+and the game makes no network requests beyond loading its own files.
 
 All character names, room names, dialogue, and item names are original
 creations for this project. Pixel Hotel is an independent homage to the cosy

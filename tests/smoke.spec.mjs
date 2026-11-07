@@ -291,6 +291,28 @@ async function main() {
     check('elevator travel to gym works', stateInGym.room === 'gym' && stateInGym.floor === 4);
     const roomLabelGym = await page.textContent('#roomName');
     check('floor indicator updates for Gym', roomLabelGym.includes('Floor 4') && roomLabelGym.includes('Gym'));
+
+    // ---- v0.7.1: gym floor plays the 04-gym.mp3 file (James's soundtrack), not the procedural fallback ----
+    await page.waitForTimeout(400);
+    const gymAudio = await page.evaluate(() => window.__pixelHotel.getAudioState().mood);
+    check('gym floor music resolves to the 04-gym.mp3 file', gymAudio.src === 'audio/music/04-gym.mp3');
+    check('gym floor music plays the file track, not the procedural fallback', gymAudio.usingFile === true && gymAudio.fallback === false);
+    check('music player shows the gym floor track title', gymAudio.label === 'Gym Pulse Fitness Electronic');
+
+    // ---- v0.7.1: switching floors crossfades to the new floor's file track ----
+    await page.evaluate(() => window.__pixelHotel.takeElevator('library'));
+    await page.waitForTimeout(400);
+    const libraryAudio = await page.evaluate(() => window.__pixelHotel.getAudioState().mood);
+    check('switching floors crossfades to the new floor\'s file', libraryAudio.src === 'audio/music/07-library.mp3' && libraryAudio.usingFile === true);
+    check('music player shows the library floor track title', libraryAudio.label === 'Library Soft Piano');
+    await page.evaluate(() => window.__pixelHotel.takeElevator('gym'));
+    await page.waitForTimeout(400);
+
+    // ---- v0.7.1: a failed music file falls back to the procedural synth track ----
+    const fallbackInfo = await page.evaluate(() => window.__pixelHotel.simulateMusicFileError('gym'));
+    check('a failing music file marks that track as fallback', fallbackInfo.fallback === true && fallbackInfo.usingFile === false);
+    check('fallback keeps the procedural synth title instead of the file label', fallbackInfo.label !== 'Gym Pulse Fitness Electronic' && fallbackInfo.label.length > 0);
+
     const tmInteract = await page.evaluate(() => window.__pixelHotel.interactWith('treadmill', true));
     const gymAfterTm = await page.evaluate(() => window.__pixelHotel.getState().player);
     check('treadmill interaction sets player activity to treadmill', tmInteract === true && gymAfterTm.activity?.kind === 'treadmill');

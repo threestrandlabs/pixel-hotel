@@ -1613,4 +1613,8 @@ window.__pixelHotel = {
     info: audio.getMoodInfo(),
   }),
   getItemIcon: (itemId) => getItemIconDataUrl(itemId, 48, 1),
+  simulateMusicFileError: (trackId) => {
+    audio._handleFileError(trackId || audio.trackId);
+    return audio.getMoodInfo();
+  },
 };

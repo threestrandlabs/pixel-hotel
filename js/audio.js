@@ -219,6 +219,21 @@ export const TRACK_ORDER = [
   'arcade', 'library', 'myroom', 'garden', 'rooftop',
 ];
 
+// James's original floor soundtrack files (one per floor, ~2min, loop=true). If a
+// file fails to load/decode/play, playback falls back to the procedural ROOM_TRACKS synth.
+export const MUSIC_FILES = {
+  lobby: { src: 'audio/music/01-grand-lobby.mp3', label: 'Grand Lobby Jazz Lounge' },
+  cafe: { src: 'audio/music/02-cafe-and-bar.mp3', label: 'Cafe and Bar Bossa Nova' },
+  restaurant: { src: 'audio/music/03-restaurant.mp3', label: 'Restaurant Smooth Jazz' },
+  gym: { src: 'audio/music/04-gym.mp3', label: 'Gym Pulse Fitness Electronic' },
+  pool: { src: 'audio/music/05-pool-and-spa.mp3', label: 'Pool and Spa Calm Ambient' },
+  arcade: { src: 'audio/music/06-arcade.mp3', label: 'Arcade Chiptune' },
+  library: { src: 'audio/music/07-library.mp3', label: 'Library Soft Piano' },
+  myroom: { src: 'audio/music/08-my-room.mp3', label: 'My Room Lofi Chill' },
+  garden: { src: 'audio/music/09-sky-garden.mp3', label: 'Sky Garden Nature Acoustic' },
+  rooftop: { src: 'audio/music/10-rooftop.mp3', label: 'Rooftop Sunset Night House' },
+};
+
 // Backward-compatible MOOD_PROFILES map including legacy aliases ('spa', 'night') and all 10 room tracks
 export const MOOD_PROFILES = {
   ...ROOM_TRACKS,
@@ -288,6 +303,13 @@ export class ChiptuneAudio {
     this.timer = null;
     this.lastFootstepAt = 0;
     this.lastTrafficEventAt = 0;
+
+    this._audioFactory = (typeof window !== 'undefined' && window.Audio) || (typeof Audio !== 'undefined' ? Audio : null);
+    this.fileNodes = {};
+    this.fileFallback = {};
+    this.activeFileTrackId = null;
+    this._fadeTimers = {};
+    this._loadTrackAssets(this.trackId);
   }
 
   get muted() {
@@ -520,6 +542,7 @@ export class ChiptuneAudio {
     const changed = this.trackId !== trackId;
     this.trackId = trackId;
     if (changed) {
+      this._loadTrackAssets(trackId);
       this._crossfadeRestartLoop();
     }
     return this.getTrackInfo();
@@ -538,16 +561,141 @@ export class ChiptuneAudio {
   }
 
   _crossfadeRestartLoop() {
-    if (this.ctx && this.musicGain && this.musicGain.gain.setValueAtTime && this.musicGain.gain.linearRampToValueAtTime) {
+    const fileHandled = this._syncFileTrack();
+    if (!fileHandled && this.ctx && this.musicGain && this.musicGain.gain.setValueAtTime && this.musicGain.gain.linearRampToValueAtTime) {
       const now = this.ctx.currentTime || 0;
       const target = this._effectiveMusicTarget();
       this.musicGain.gain.setValueAtTime(Math.max(0.0001, target * 0.25), now);
       this.musicGain.gain.linearRampToValueAtTime(target, now + 0.18);
     }
     if (this.timer) {
-      this.stopLoop();
-      this.startLoop();
+      clearInterval(this.timer);
+      this.timer = null;
+      this._startTimer();
     }
+  }
+
+  // ---------- file-backed floor soundtrack (audio/music/*.mp3), with procedural synth fallback ----------
+
+  _loadTrackAssets(trackId) {
+    this._getFileTrack(trackId);
+    const idx = TRACK_ORDER.indexOf(trackId);
+    if (idx !== -1) this._getFileTrack(TRACK_ORDER[(idx + 1) % TRACK_ORDER.length]);
+  }
+
+  _getFileTrack(trackId) {
+    const def = MUSIC_FILES[trackId];
+    if (!def || this.fileFallback[trackId]) return null;
+    let node = this.fileNodes[trackId];
+    if (node) return node;
+    if (!this._audioFactory) return null;
+    let el;
+    try {
+      el = new this._audioFactory();
+    } catch (e) {
+      this.fileFallback[trackId] = true;
+      return null;
+    }
+    el.loop = true;
+    el.preload = 'auto';
+    el.src = def.src;
+    el.addEventListener('error', () => this._handleFileError(trackId));
+    node = { el, source: null, gain: null };
+    this.fileNodes[trackId] = node;
+    return node;
+  }
+
+  _connectFileNode(trackId, node) {
+    if (node.gain) return true;
+    if (!this.ctx || !this.musicGain) return false;
+    try {
+      node.source = this.ctx.createMediaElementSource(node.el);
+      node.gain = this.ctx.createGain();
+      node.gain.gain.value = 0.0001;
+      node.source.connect(node.gain);
+      node.gain.connect(this.musicGain);
+      return true;
+    } catch (e) {
+      this._handleFileError(trackId);
+      return false;
+    }
+  }
+
+  _handleFileError(trackId) {
+    if (this.fileFallback[trackId]) return;
+    this.fileFallback[trackId] = true;
+    const node = this.fileNodes[trackId];
+    delete this.fileNodes[trackId];
+    if (node) {
+      try { node.el.pause(); } catch (e) { /* ignore */ }
+      if (node.gain) { try { node.gain.disconnect(); } catch (e) { /* ignore */ } }
+      if (node.source) { try { node.source.disconnect(); } catch (e) { /* ignore */ } }
+    }
+    if (this._fadeTimers[trackId]) {
+      clearTimeout(this._fadeTimers[trackId]);
+      delete this._fadeTimers[trackId];
+    }
+    if (this.activeFileTrackId === trackId) this.activeFileTrackId = null;
+  }
+
+  _isFileTrackActive() {
+    return this.activeFileTrackId === this.trackId && !this.fileFallback[this.trackId];
+  }
+
+  // Starts/crossfades the file track for the current trackId if music should be playing;
+  // returns true when file playback is handling the current track (so the synth stays silent).
+  _syncFileTrack() {
+    const shouldPlayMusic = this.gestureUnlocked && !this.musicMuted && this.musicVolume > 0 && this.playing && this.masterVolume > 0;
+    const fileAvailable = !!MUSIC_FILES[this.trackId] && !this.fileFallback[this.trackId];
+    if (!shouldPlayMusic || !fileAvailable) {
+      if (this.activeFileTrackId) this._fadeOutActiveFileTrack();
+      return false;
+    }
+    if (this.activeFileTrackId === this.trackId) return true;
+    return this._playFileTrack(this.trackId);
+  }
+
+  _playFileTrack(trackId) {
+    const ctx = this.ensureContext();
+    if (!ctx) return false;
+    const node = this._getFileTrack(trackId);
+    if (!node || !this._connectFileNode(trackId, node)) return false;
+    const prevId = this.activeFileTrackId;
+    const crossfade = !!(prevId && prevId !== trackId);
+    if (crossfade) this._fadeOutActiveFileTrack(1.1);
+    const fadeSec = crossfade ? 1.1 : 0.4;
+    const now = ctx.currentTime || 0;
+    const target = Math.max(0.0001, this._effectiveMusicTarget());
+    const startVal = node.gain.gain.value || 0.0001;
+    if (node.gain.gain.cancelScheduledValues) node.gain.gain.cancelScheduledValues(now);
+    node.gain.gain.setValueAtTime(startVal, now);
+    node.gain.gain.linearRampToValueAtTime(target, now + fadeSec);
+    try {
+      const playResult = node.el.play();
+      if (playResult && typeof playResult.catch === 'function') playResult.catch(() => this._handleFileError(trackId));
+    } catch (e) {
+      this._handleFileError(trackId);
+      return false;
+    }
+    this.activeFileTrackId = trackId;
+    return true;
+  }
+
+  _fadeOutActiveFileTrack(fadeSec = 0.25) {
+    const id = this.activeFileTrackId;
+    this.activeFileTrackId = null;
+    if (!id) return;
+    const node = this.fileNodes[id];
+    if (!node) return;
+    if (this.ctx && node.gain && node.gain.gain.setValueAtTime) {
+      const now = this.ctx.currentTime || 0;
+      const startVal = node.gain.gain.value || 0.0001;
+      if (node.gain.gain.cancelScheduledValues) node.gain.gain.cancelScheduledValues(now);
+      node.gain.gain.setValueAtTime(startVal, now);
+      node.gain.gain.linearRampToValueAtTime(0.0001, now + fadeSec);
+    }
+    if (this._fadeTimers[id]) clearTimeout(this._fadeTimers[id]);
+    this._fadeTimers[id] = setTimeout(() => { try { node.el.pause(); } catch (e) { /* ignore */ } }, fadeSec * 1000 + 80);
   }
 
   setRoomMood(roomId, phase = this.phase, floor = this.floor) {
@@ -566,6 +714,7 @@ export class ChiptuneAudio {
       if (targetTrack !== this.trackId) {
         this.trackId = targetTrack;
         trackChanged = true;
+        this._loadTrackAssets(targetTrack);
       }
     }
     if (prevRoom !== this.roomId) {
@@ -584,12 +733,16 @@ export class ChiptuneAudio {
   getMoodInfo() {
     const track = this.getTrackProfile();
     const moodProfile = MOOD_PROFILES[this.mood] || track;
+    const fileDef = MUSIC_FILES[track.id];
+    const fallback = !!this.fileFallback[track.id];
+    const usingFile = this._isFileTrackActive();
+    const label = (fileDef && !fallback) ? fileDef.label : (this.isNight ? `${track.title} (Night)` : track.title);
     return {
       mood: this.mood,
       trackId: track.id,
       title: track.title,
       genre: track.genre,
-      label: this.isNight ? `${track.title} (Night)` : track.title,
+      label,
       moodLabel: this.isNight && this.mood !== 'night' ? `${moodProfile.label} (Night)` : moodProfile.label,
       roomId: this.roomId,
       isNight: this.isNight,
@@ -599,6 +752,9 @@ export class ChiptuneAudio {
       cutoff: this.isNight ? Math.round(track.cutoff * 0.82) : track.cutoff,
       step: this.step,
       stepProgress: (this.step % 32) / 32,
+      usingFile,
+      fallback,
+      src: fileDef ? fileDef.src : null,
     };
   }
 
@@ -612,11 +768,17 @@ export class ChiptuneAudio {
       return;
     }
     const ctx = this.ensureContext();
-    if (!ctx || this.timer) return;
+    if (!ctx) return;
+    this._syncFileTrack();
+    if (this.timer) return;
+    this._startTimer();
+  }
+
+  _startTimer() {
     const track = this.getTrackProfile();
     const stepTime = track.stepMs;
     this.timer = setInterval(() => {
-      if (!this.musicMuted && this.musicVolume > 0 && this.playing && this.masterVolume > 0) {
+      if (!this.musicMuted && this.musicVolume > 0 && this.playing && this.masterVolume > 0 && !this._isFileTrackActive()) {
         this._tickMusicStep();
       }
       if (!this.sfxMuted && !this.ambienceMuted && this.ambienceVolume > 0 && this.sfxVolume > 0 && this.masterVolume > 0) {
@@ -631,6 +793,7 @@ export class ChiptuneAudio {
       clearInterval(this.timer);
       this.timer = null;
     }
+    this._fadeOutActiveFileTrack();
   }
 
   _createLowpass(cutoff, q = 0.7) {

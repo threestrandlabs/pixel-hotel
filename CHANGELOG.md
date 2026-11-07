@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.7.1] - 2026-11-07
+
+### Added
+
+- **Licensed Floor Soundtrack (`audio/music/`, `js/audio.js`, `js/main.js`)**: Replaced the procedural per-floor loops with James's original MP3 tracks (`01-grand-lobby.mp3` … `10-rooftop.mp3`, one per floor, Music by James). Each floor's file loads lazily when first visited, the next floor in sequence preloads in the background, the current track loops seamlessly via the browser's native media loop, and switching floors crossfades the old track out and the new one in over the Web Audio graph — all routed through the existing Music and Master volume sliders and the play/pause/prev/next/Auto: Room controls. If a floor's file fails to load or play, that floor instantly and silently falls back to the original procedural synth track. Still no autoplay: playback only starts after the first user gesture, exactly as before.
+- **Bottom-Left Player Track Titles (`js/audio.js`, `index.html`)**: The music player now shows the licensed track title for the current floor — Grand Lobby Jazz Lounge, Cafe and Bar Bossa Nova, Restaurant Smooth Jazz, Gym Pulse Fitness Electronic, Pool and Spa Calm Ambient, Arcade Chiptune, Library Soft Piano, My Room Lofi Chill, Sky Garden Nature Acoustic, Rooftop Sunset Night House — falling back to the original procedural track title whenever a floor's file isn't playing.
+
+### Changed
+
+- **Deploy Workflow (`.github/workflows/deploy.yml`)**: The GitHub Pages deploy step now copies `audio/` into `_site` alongside `index.html`, `css`, and `js` so the floor soundtrack ships with the live site.
+
 ## [0.7.0] - 2026-11-07
 
 ### Added

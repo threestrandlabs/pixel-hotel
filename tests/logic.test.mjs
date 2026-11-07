@@ -23,7 +23,7 @@ import {
   clampZoom, zoomAtPoint, centerCameraOnTile, screenToTile, worldToScreen,
   DEFAULT_ZOOM, MIN_ZOOM, MAX_ZOOM,
 } from '../js/render.js';
-import { ChiptuneAudio, MOOD_PROFILES, moodForRoom } from '../js/audio.js';
+import { ChiptuneAudio, MOOD_PROFILES, MUSIC_FILES, moodForRoom } from '../js/audio.js';
 
 // ---------- fake localStorage ----------
 function makeFakeStorage(initial = {}) {
@@ -1296,4 +1296,86 @@ test('v0.7.0 audio: traffic ambience is quieter on higher floors and inside than
   synth.setRoomMood('library', 0.5, 7);
   const highFloorAtten = synth._effectiveAmbienceTarget();
   assert.ok(highFloorAtten < streetAtten, 'traffic ambience attenuates on higher floors');
+});
+
+// ======================= v0.7.1 James's floor MP3 soundtrack =======================
+
+test('v0.7.1 audio: floor MP3s play per room, crossfade between floors, and fall back to synth on file failure', () => {
+  class FakeGainParam {
+    constructor() { this.value = 0.0001; this.ops = []; }
+    setValueAtTime(v) { this.value = v; this.ops.push(['set', v]); }
+    linearRampToValueAtTime(v) { this.value = v; this.ops.push(['ramp', v]); }
+    exponentialRampToValueAtTime(v) { this.value = v; this.ops.push(['exp', v]); }
+    cancelScheduledValues() {}
+  }
+  class FakeGainNode {
+    constructor() { this.gain = new FakeGainParam(); }
+    connect() {}
+    disconnect() {}
+  }
+  class FakeAudioContext {
+    constructor() {
+      this.state = 'running';
+      this.currentTime = 0;
+      this.sampleRate = 22050;
+      this.destination = {};
+    }
+    createGain() { return new FakeGainNode(); }
+    createBiquadFilter() { return { type: 'lowpass', frequency: { value: 1000 }, Q: { value: 0.7 }, connect() {} }; }
+    createOscillator() {
+      return {
+        type: 'sine',
+        frequency: { value: 440, setValueAtTime() {}, exponentialRampToValueAtTime() {} },
+        detune: { value: 0 },
+        connect() {}, start() {}, stop() {},
+      };
+    }
+    createBuffer(ch, len) { return { getChannelData: () => new Float32Array(len) }; }
+    createBufferSource() { return { buffer: null, connect() {}, start() {}, stop() {} }; }
+    createMediaElementSource() { return { connect() {}, disconnect() {} }; }
+    resume() { this.state = 'running'; }
+  }
+  class FakeAudioElement {
+    constructor() { this.loop = false; this.preload = ''; this._src = ''; this.paused = true; }
+    set src(v) { this._src = v; }
+    get src() { return this._src; }
+    addEventListener() {}
+    play() { this.paused = false; return Promise.resolve(); }
+    pause() { this.paused = true; }
+  }
+
+  global.Audio = FakeAudioElement;
+  let synth;
+  try {
+    synth = new ChiptuneAudio(FakeAudioContext);
+    synth.unlockGesture();
+
+    // Gym floor resolves to the 04-gym.mp3 file and plays it (not the procedural fallback)
+    synth.setRoomMood('gym', 0.5, 4);
+    let info = synth.getMoodInfo();
+    assert.equal(info.src, MUSIC_FILES.gym.src);
+    assert.ok(info.src.endsWith('04-gym.mp3'));
+    assert.equal(info.usingFile, true);
+    assert.equal(info.label, MUSIC_FILES.gym.label);
+    assert.equal(synth.fileNodes.gym.el.paused, false, 'the gym file element is playing');
+
+    // Switching floors crossfades: previous track ramps its gain down, new one ramps up
+    const gymNode = synth.fileNodes.gym;
+    synth.setRoomMood('pool', 0.5, 5);
+    info = synth.getMoodInfo();
+    assert.equal(info.src, MUSIC_FILES.pool.src);
+    assert.equal(info.usingFile, true);
+    assert.ok(gymNode.gain.gain.ops.some(([op, v]) => op === 'ramp' && v <= 0.0001), 'previous floor track crossfades out');
+    assert.ok(synth.fileNodes.pool.gain.gain.ops.some(([op, v]) => op === 'ramp' && v > 0.0001), 'new floor track crossfades in');
+
+    // A file load/playback failure falls back to the procedural synth track for that room
+    synth._handleFileError('pool');
+    info = synth.getMoodInfo();
+    assert.equal(info.fallback, true);
+    assert.equal(info.usingFile, false);
+    assert.equal(info.label, synth.getTrackProfile().title, 'falls back to the procedural track title');
+  } finally {
+    if (synth) synth.stopLoop(); // clear the ticking interval so the test process can exit
+    delete global.Audio;
+  }
 });
