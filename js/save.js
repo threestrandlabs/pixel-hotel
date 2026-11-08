@@ -38,7 +38,7 @@ export function createDefaultState() {
   };
 }
 
-function sanitizePlacedItemsForRoom(roomDef, placedList, returnedInventory = []) {
+export function sanitizePlacedItemsForRoom(roomDef, placedList, returnedInventory = []) {
   const accepted = [];
   const solidOccupied = new Set();
   const flatOccupied = new Set();

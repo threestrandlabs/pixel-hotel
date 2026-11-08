@@ -21,7 +21,7 @@ import {
   tileToScreen, computeOrigin, computeGroundDy, computeCityGroundDy,
   projectIsoCityPoint, buildIsoCityLayout, computeCityVehicles,
   clampZoom, zoomAtPoint, centerCameraOnTile, screenToTile, worldToScreen,
-  DEFAULT_ZOOM, MIN_ZOOM, MAX_ZOOM,
+  DEFAULT_ZOOM, MIN_ZOOM, MAX_ZOOM, deviceScale,
 } from '../js/render.js';
 import { ChiptuneAudio, MOOD_PROFILES, MUSIC_FILES, moodForRoom } from '../js/audio.js';
 
@@ -1275,6 +1275,37 @@ test('v0.7.0 vehicles: cars, taxis, buses, and scooters render on the isometric 
 
   const nightVehicles = computeCityVehicles(layout, 0, 0.0);
   assert.ok(nightVehicles.every((v) => v.lightsOn === true), 'headlights/taillights on at night');
+});
+
+test('v0.7.2 vehicles: every vehicle sits inside a road corridor (never over a building block)', () => {
+  const layout = buildIsoCityLayout(ROOMS.lobby, 960, 600, 0.5);
+  // Sample the whole traffic-light cycle so cars occupy many positions along their lanes.
+  for (const now of [0, 1500, 3000, 6000, 9000, 11000]) {
+    for (const v of computeCityVehicles(layout, now, 0.5)) {
+      // The vehicle must ride a road of its own axis, with its cross-axis coordinate
+      // inside that road's width — i.e. on asphalt, never over a building block.
+      const onRoad = layout.roads.some((r) => {
+        if (r.axis !== v.axis) return false;
+        return (r.axis === 'v')
+          ? (v.u >= r.u0 - 0.01 && v.u <= r.u1 + 0.01) // v-road: constrained in u
+          : (v.v >= r.v0 - 0.01 && v.v <= r.v1 + 0.01); // u-road: constrained in v
+      });
+      assert.ok(onRoad, `vehicle ${v.id} (${v.type}) at u=${v.u.toFixed(2)},v=${v.v.toFixed(2)} must be on a ${v.axis}-road`);
+    }
+  }
+});
+
+test('v0.7.2 render: deviceScale bakes at ceil(dpr*zoom) so bitmaps are never upscaled when zoomed in', () => {
+  for (const dpr of [1, 2, 3]) {
+    for (const zoom of [MIN_ZOOM, 0.7, 1, DEFAULT_ZOOM, MAX_ZOOM]) {
+      const ds = deviceScale(dpr, zoom);
+      assert.ok(Number.isInteger(ds), 'device scale is an integer bucket');
+      assert.ok(ds >= dpr * zoom - 1e-9, `ds=${ds} must be >= dpr*zoom=${(dpr * zoom).toFixed(2)} (no upscaling)`);
+      assert.ok(ds >= 1 && ds <= 8, 'device scale stays within sane bounds');
+    }
+  }
+  assert.equal(deviceScale(1, 1), 1);
+  assert.equal(deviceScale(2, DEFAULT_ZOOM), 4); // ceil(2 * 1.85) = 4
 });
 
 test('v0.7.0 audio: every hotel room/floor resolves to its own distinct procedural track', () => {

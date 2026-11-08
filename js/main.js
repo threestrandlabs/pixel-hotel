@@ -5,7 +5,7 @@ import {
   availableCatalogue, rotatedFootprint, findApproachTile, seatDirFromRot,
 } from './inventory.js';
 import { advanceQuestsByType, setQuestProgress, claimReward, listQuests } from './quests.js';
-import { loadState, saveState, resetState } from './save.js';
+import { loadState, saveState, resetState, sanitizePlacedItemsForRoom } from './save.js';
 import {
   createNpcRuntime, tickNpc, findWanderTarget, directionBetween, respondToMessage, pickRandom,
 } from './npc.js';
@@ -14,6 +14,9 @@ import {
   DEFAULT_ZOOM, MIN_ZOOM, MAX_ZOOM, clampZoom, zoomAtPoint, centerCameraOnTile,
 } from './render.js';
 import { audio } from './audio.js';
+import {
+  initMultiplayerUI, getRemoteMultiplayerEntities, tickMultiplayer, notifyLocalChat, publishOwnRoomSnapshot,
+} from './multiplayer/ui.js';
 
 const STEP_MS = 240;
 const DAY_CYCLE_MS = 120000;
@@ -148,11 +151,42 @@ window.addEventListener('resize', syncCanvasSize);
 
 // ---------- room/state helpers ----------
 
+// Transient, read-only override while visiting a friend's My Room via the
+// multiplayer "Visit" flow. Deliberately NOT part of `state` (never
+// JSON.stringify'd by saveState) so a friend's furniture can never leak into
+// the local single-player save, no matter when an autosave timer fires.
+let visitScene = null; // { placed, previousRoom }
+
 function currentRoomDef() { return ROOMS[state.player.room] || ROOMS.lobby; }
-function currentRoomRuntime() { return state.rooms[state.player.room]; }
+function currentRoomRuntime() {
+  if (visitScene && state.player.room === 'myroom') return visitScene;
+  return state.rooms[state.player.room];
+}
 function roomForInventory(roomId = state.player.room) {
   const def = ROOMS[roomId];
-  return { width: def.width, height: def.height, grid: def.grid, placed: state.rooms[roomId].placed };
+  const placed = (visitScene && roomId === 'myroom') ? visitScene.placed : state.rooms[roomId].placed;
+  return { width: def.width, height: def.height, grid: def.grid, placed };
+}
+
+/** True while rendering a friend's read-only room snapshot — blocks all edits. */
+function isVisitingFriendRoom() { return !!visitScene; }
+
+/** Enters the transient visitor scene (called only via the multiplayer UI). */
+function enterVisitScene(displayName, roomData) {
+  const def = ROOMS.myroom;
+  const rawPlaced = (roomData && Array.isArray(roomData.placed)) ? roomData.placed : [];
+  visitScene = { placed: sanitizePlacedItemsForRoom(def, rawPlaced, []), previousRoom: state.player.room };
+  switchRoom('myroom');
+  showToast(`Visiting ${displayName}'s room — look only, nothing here can be edited.`);
+}
+
+/** Exits the visitor scene, restoring the player's own previous room if still inside it. */
+function exitVisitScene() {
+  if (!visitScene) return;
+  const prevRoom = visitScene.previousRoom;
+  const wasInMyRoom = state.player.room === 'myroom';
+  visitScene = null;
+  if (wasInMyRoom) switchRoom(prevRoom);
 }
 
 function furnitureAt(room, roomRuntime, x, y) {
@@ -238,7 +272,7 @@ function walkMoverTo(mover, tx, ty, room, isBlocked, { nearestFallback = true } 
 // ---------- player actions & elevator navigation ----------
 
 function applyInteractionArrival(mover, pending, isPlayer = false) {
-  const roomRuntime = state.rooms[isPlayer ? state.player.room : mover.room];
+  const roomRuntime = isPlayer ? currentRoomRuntime() : state.rooms[mover.room];
   const placed = roomRuntime.placed.find((p) => p.instanceId === pending.instanceId);
   if (!placed) return;
   mover.dir = pending.dir;
@@ -288,6 +322,7 @@ function tryWalkPlayer(tx, ty) {
 }
 
 function tryInteractPlayer(placedItem, immediate = false) {
+  if (isVisitingFriendRoom()) return false;
   const room = currentRoomDef();
   const roomRuntime = currentRoomRuntime();
   const occ = occupantTilesExcluding('player', null);
@@ -586,6 +621,7 @@ function handleChatSubmit(text) {
   player.bubbleUntil = performance.now() + 3200;
   pushChatLine('You', text);
   audio.playSfx('chat');
+  notifyLocalChat(text);
 
   const greetWords = ['hello', 'hi', 'hey'];
   const isGreeting = greetWords.some((w) => text.toLowerCase().includes(w));
@@ -759,6 +795,7 @@ function buildEntities(now = performance.now()) {
       bubbleText: n.bubble ? n.bubble.text : null,
     });
   }
+  list.push(...getRemoteMultiplayerEntities(now));
   return list;
 }
 
@@ -776,6 +813,7 @@ function frame(now) {
     width: room0.width, height: room0.height, isBlocked: playerBlocked, stepMs: STEP_MS, onArrive: onPlayerArrive,
   });
   tickActiveDialogue(now);
+  tickMultiplayer(now, player);
 
   if (ui.elevatorAnim && now - ui.elevatorAnim.start > ui.elevatorAnim.duration) {
     ui.elevatorAnim = null;
@@ -943,6 +981,7 @@ document.getElementById('chatForm').addEventListener('submit', (e) => {
 // ---------- placing mode ----------
 
 function startPlacing({ instanceId, itemId, moveInstanceId }) {
+  if (isVisitingFriendRoom()) { showToast("You're just visiting — nothing here can be edited."); return; }
   ui.placing = { instanceId, itemId, rot: 0, moveInstanceId: moveInstanceId || null };
   document.getElementById('placingBar').classList.remove('hidden');
   document.getElementById('placingLabel').textContent = `Placing ${getCatalogueItem(itemId).name} — click a tile`;
@@ -967,6 +1006,7 @@ function recordPlacementProgress() {
 }
 
 function confirmPlacement(tile) {
+  if (isVisitingFriendRoom()) { cancelPlacing(); return; }
   const room = roomForInventory();
   const occ = occupantTilesExcluding(null, null);
   let result;
@@ -986,6 +1026,7 @@ function confirmPlacement(tile) {
     refreshBagTab();
     refreshRoomTab();
     autoSave();
+    if (state.player.room === 'myroom') publishOwnRoomSnapshot(state.rooms.myroom.placed);
   } else {
     showToast(result.reason === 'furniture_overlap' ? "Can't place there — occupied." : "Can't place there.");
   }
@@ -1047,6 +1088,7 @@ document.getElementById('btnElevator').addEventListener('click', () => togglePan
 document.getElementById('btnMyRoom').addEventListener('click', () => travelByElevator('myroom'));
 document.getElementById('btnInventory').addEventListener('click', () => togglePanel('inventoryPanel'));
 document.getElementById('btnQuests').addEventListener('click', () => togglePanel('questPanel'));
+document.getElementById('btnMultiplayer').addEventListener('click', () => togglePanel('multiplayerPanel'));
 document.querySelectorAll('.panel-close').forEach((btn) => {
   btn.addEventListener('click', () => document.getElementById(btn.dataset.close).classList.add('hidden'));
 });
@@ -1126,6 +1168,7 @@ function refreshShopTab() {
     </div>`).join('');
   el.querySelectorAll('[data-buy]').forEach((btn) => {
     btn.addEventListener('click', () => {
+      if (isVisitingFriendRoom()) { showToast("You're just visiting — nothing here can be edited."); return; }
       const res = buyItem(state, btn.dataset.buy);
       if (res.ok) {
         audio.playSfx('coin');
@@ -1181,6 +1224,7 @@ function refreshRoomTab() {
     el.innerHTML = '<p>Nothing placed in this room yet.</p>';
     return;
   }
+  const readOnly = isVisitingFriendRoom();
   el.innerHTML = roomRuntime.placed.map((p) => {
     const item = getCatalogueItem(p.itemId);
     return `
@@ -1191,17 +1235,20 @@ function refreshRoomTab() {
         ${item.description ? `<div class="item-desc">${item.description}</div>` : ''}
       </div>
       <div class="item-actions">
+        ${readOnly ? '' : `
         <button class="pixel-btn" data-move="${p.instanceId}:${p.itemId}">Move</button>
-        <button class="pixel-btn" data-pickup="${p.instanceId}">Pick up</button>
+        <button class="pixel-btn" data-pickup="${p.instanceId}">Pick up</button>`}
       </div>
     </div>`;
   }).join('');
   el.querySelectorAll('[data-pickup]').forEach((btn) => {
     btn.addEventListener('click', () => {
+      if (isVisitingFriendRoom()) { showToast("You're just visiting — nothing here can be edited."); return; }
       pickupItem(state, roomRuntime, btn.dataset.pickup);
       refreshRoomTab();
       refreshBagTab();
       autoSave();
+      if (state.player.room === 'myroom') publishOwnRoomSnapshot(state.rooms.myroom.placed);
     });
   });
   el.querySelectorAll('[data-move]').forEach((btn) => {
@@ -1460,6 +1507,14 @@ function init() {
   audio.setRoomMood(state.player.room, ui.phase, currentRoomDef().floor || 1);
   refreshAudioUi();
   if (!window.localStorage.getItem(HELP_SEEN_KEY)) showHelp();
+  initMultiplayerUI({
+    switchRoom: (roomId) => switchRoom(roomId),
+    getPlayerRoom: () => state.player.room,
+    onRemoteChat: (who, text) => pushChatLine(who, text),
+    getMyRoomPlaced: () => state.rooms.myroom.placed,
+    enterVisitScene: (displayName, roomData) => enterVisitScene(displayName, roomData),
+    exitVisitScene: () => exitVisitScene(),
+  });
   requestAnimationFrame(frame);
 }
 init();
@@ -1501,6 +1556,7 @@ window.__pixelHotel = {
     refreshAudioUi();
   }, // 0.5 noon, 0 midnight
   getSaveVersion: () => SAVE_VERSION,
+  getRemoteMultiplayer: () => getRemoteMultiplayerEntities(performance.now()),
   walkTo: (x, y) => tryWalkPlayer(x, y),
   interactWith: (itemIdOrInstanceId, immediate = false) => {
     const roomRuntime = currentRoomRuntime();

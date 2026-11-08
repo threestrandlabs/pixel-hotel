@@ -22,7 +22,7 @@ const canvasCache = new Map();
 // while snapping to integers bounds the sprite/skyline caches to a few buckets instead
 // of rebaking on every 0.01 zoom step. Capped so an extreme dpr can't explode memory.
 export function deviceScale(dpr = 1, zoom = 1) {
-  return Math.max(1, Math.min(6, Math.ceil(dpr * (zoom || 1))));
+  return Math.max(1, Math.min(8, Math.ceil(dpr * (zoom || 1))));
 }
 
 // Baked sprite canvases are rasterised at `dpr` density in room/world space. The

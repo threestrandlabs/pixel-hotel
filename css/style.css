@@ -421,6 +421,29 @@ kbd {
 .npc-dlg-options { display: flex; flex-direction: column; gap: 4px; }
 .npc-dlg-opt { text-align: left; font-size: 12px; }
 
+.mp-hint { font-size: 11.5px; color: #b8a6ea; line-height: 1.4; margin: 4px 0; }
+#mpConnectTab input, #mpVisitTab input, #mpRoomTab input, .mp-note-form input {
+  font-family: inherit;
+  background: #1b1430;
+  color: #f4eeff;
+  border: 2px solid #0e0a1d;
+  border-radius: 4px;
+  padding: 6px 10px;
+  font-size: 13px;
+  width: 100%;
+  margin-bottom: 6px;
+  box-sizing: border-box;
+}
+#mpConnectTab button, #mpVisitTab > button, #mpRoomIdleRow button, #mpRoomActiveRow > button {
+  margin-bottom: 6px;
+  margin-right: 4px;
+}
+.mp-guestbook-title { font-weight: 700; color: #ffd27a; margin: 8px 0 6px; font-size: 13.5px; }
+.mp-note-form { display: flex; gap: 6px; margin-bottom: 8px; }
+.mp-note-form input { margin-bottom: 0; }
+.mp-like-btn.active { background: #a23a5a; color: #fff; }
+.mp-member { justify-content: space-between; }
+
 @media (max-width: 860px) {
   .panel {
     left: 8px;

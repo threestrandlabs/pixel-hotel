@@ -17,6 +17,7 @@
       <button id="btnMyRoom" class="pixel-btn" title="Go to My Room (Floor 8)">🔑 My Room</button>
       <button id="btnInventory" class="pixel-btn" title="Inventory (I)">🛋️ Items</button>
       <button id="btnQuests" class="pixel-btn" title="Quests (Q)">📜 Quests</button>
+      <button id="btnMultiplayer" class="pixel-btn" title="Multiplayer (friends &amp; party rooms)">🌐 Multiplayer</button>
       <button id="btnMusicMute" class="pixel-btn" title="Mute/unmute Music (M)">🎵 On</button>
       <button id="btnSfxMute" class="pixel-btn" title="Mute/unmute SFX">🔔 On</button>
       <button id="btnMute" class="pixel-btn" title="Audio Mixer &amp; Volume">🎚️</button>
@@ -120,6 +121,52 @@
       <button class="panel-close" data-close="questPanel">✕</button>
     </div>
     <div id="questList"></div>
+  </aside>
+
+  <aside id="multiplayerPanel" class="panel hidden">
+    <div class="panel-header">
+      <span>🌐 Multiplayer</span>
+      <button class="panel-close" data-close="multiplayerPanel">✕</button>
+    </div>
+    <div class="panel-tabs">
+      <button class="tab-btn active" data-tab="mpConnectTab">Connect</button>
+      <button class="tab-btn" data-tab="mpVisitTab">Visit Friend</button>
+      <button class="tab-btn" data-tab="mpRoomTab">Party Room</button>
+    </div>
+    <div id="mpConnectTab" class="tab-content">
+      <p class="mp-hint">Opt-in only: nothing here touches the network until you press Connect. Single-player play and saves are never affected.</p>
+      <div id="mpSignedOutRow">
+        <input id="mpDisplayNameInput" type="text" maxlength="24" placeholder="Choose a display name" />
+        <button id="btnMpConnect" class="pixel-btn">Connect</button>
+      </div>
+      <div id="mpSignedInRow" class="hidden">
+        <p>Connected as <b id="mpOwnName"></b></p>
+        <p>Your friend code: <b id="mpOwnCode"></b> <span class="mp-hint">(share this so friends can visit your room)</span></p>
+        <input id="mpDisplayNameInput2" type="text" maxlength="24" placeholder="New display name" />
+        <button id="btnMpRename" class="pixel-btn">Rename</button>
+        <button id="btnMpOwnGuestbook" class="pixel-btn">View My Guestbook</button>
+        <button id="btnMpDisconnect" class="pixel-btn">Disconnect</button>
+      </div>
+      <p id="mpStatus" class="mp-hint"></p>
+    </div>
+    <div id="mpVisitTab" class="tab-content hidden">
+      <input id="mpVisitCodeInput" type="text" maxlength="6" placeholder="Friend code (e.g. AB12CD)" />
+      <button id="btnMpVisit" class="pixel-btn">Visit</button>
+      <div id="mpGuestbookWrap"></div>
+    </div>
+    <div id="mpRoomTab" class="tab-content hidden">
+      <div id="mpRoomIdleRow">
+        <button id="btnMpCreateRoom" class="pixel-btn">Create Party Room</button>
+        <p class="mp-hint">or join one:</p>
+        <input id="mpJoinCodeInput" type="text" maxlength="10" placeholder="Invite code" />
+        <button id="btnMpJoinRoom" class="pixel-btn">Join</button>
+      </div>
+      <div id="mpRoomActiveRow" class="hidden">
+        <p>Invite code: <b id="mpRoomCode"></b></p>
+        <button id="btnMpLeaveRoom" class="pixel-btn">Leave Room</button>
+        <div id="mpMemberList"></div>
+      </div>
+    </div>
   </aside>
 
   <aside id="audioPanel" class="panel hidden">

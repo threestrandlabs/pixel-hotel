@@ -15,6 +15,252 @@ const PORT = 8734;
 const BASE_URL = `http://localhost:${PORT}`;
 const SCREENSHOT_DIR = path.join(__dirname, 'screenshots');
 
+// Installed in-page via page.addInitScript() for the mocked multiplayer UI
+// flow tests below. Builds a fake Supabase client (auth/rpc/from/channel)
+// backed by a single shared in-memory "server" (window.__mpFakeServer), so
+// multiple independently-created client instances within the SAME page can
+// represent different simulated users talking to the same fake backend and
+// the same fake Realtime bus — without any real network/CDN access. Mirrors
+// the migration's rules (ownership checks, invite-code/kick gating) the same
+// way tests/multiplayer.unit.test.mjs's Node-side fake does.
+function installMpFakeServer() {
+  const db = {
+    profiles: new Map(), friendCodes: new Map(), notes: [], likes: new Set(),
+    snapshots: new Map(), rooms: new Map(), access: new Set(), kicks: new Set(),
+  };
+  let nextId = 1;
+  let noteSeq = 1;
+  let codeSeq = 1;
+  const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  function genCode(len) {
+    let n = codeSeq++;
+    let out = '';
+    for (let i = 0; i < len; i++) { out += CODE_ALPHABET[n % CODE_ALPHABET.length]; n = Math.floor(n / CODE_ALPHABET.length) + i + 1; }
+    return out;
+  }
+  function uuid() {
+    const h = (nextId++).toString(16).padStart(12, '0');
+    return `00000000-0000-4000-8000-${h}`;
+  }
+  const MAX_NOTES_PER_HOUR = 5;
+  const buses = new Map(); // topic -> { members: Map<key,meta>, subs: Set<channelObj> }
+  function getBus(topic) {
+    if (!buses.has(topic)) buses.set(topic, { members: new Map(), subs: new Set() });
+    return buses.get(topic);
+  }
+
+  function createClient() {
+    let currentUserId = null;
+    function requireAuth() { if (!currentUserId) throw new Error('not authenticated'); return currentUserId; }
+    const auth = {
+      async getSession() { return { data: { session: currentUserId ? { user: { id: currentUserId } } : null }, error: null }; },
+      async signInAnonymously() { currentUserId = uuid(); return { data: { user: { id: currentUserId } }, error: null }; },
+      async signOut() { currentUserId = null; return { error: null }; },
+    };
+
+    async function rpc(name, args = {}) {
+      try {
+        switch (name) {
+          case 'ensure_profile': {
+            const uid = requireAuth();
+            let profile = db.profiles.get(uid);
+            if (profile) {
+              if (args.p_display_name) { profile = { ...profile, display_name: args.p_display_name }; db.profiles.set(uid, profile); }
+              return { data: profile, error: null };
+            }
+            const code = genCode(6);
+            profile = { id: uid, display_name: args.p_display_name || 'Guest', friend_code: code };
+            db.profiles.set(uid, profile);
+            db.friendCodes.set(code, uid);
+            return { data: profile, error: null };
+          }
+          case 'lookup_owner_by_friend_code': {
+            const ownerId = db.friendCodes.get(String(args.p_code).toUpperCase());
+            if (!ownerId) return { data: [], error: null };
+            const profile = db.profiles.get(ownerId);
+            return { data: [{ owner_id: ownerId, display_name: profile.display_name }], error: null };
+          }
+          case 'get_display_names': {
+            const rows = (args.p_ids || []).map((id) => db.profiles.get(id)).filter(Boolean)
+              .map((p) => ({ id: p.id, display_name: p.display_name }));
+            return { data: rows, error: null };
+          }
+          case 'create_multiplayer_room': {
+            const uid = requireAuth();
+            const code = genCode(6);
+            const room = { code, owner_id: uid, active: true };
+            db.rooms.set(code, room);
+            db.access.add(`${code}:${uid}`);
+            return { data: room, error: null };
+          }
+          case 'join_multiplayer_room': {
+            const uid = requireAuth();
+            const code = String(args.p_code).toUpperCase();
+            const room = db.rooms.get(code);
+            if (!room || !room.active) return { data: null, error: new Error('invalid_or_inactive_code') };
+            if (db.kicks.has(`${code}:${uid}`)) return { data: null, error: new Error('kicked_from_room') };
+            db.access.add(`${code}:${uid}`);
+            return { data: room, error: null };
+          }
+          case 'kick_from_multiplayer_room': {
+            const uid = requireAuth();
+            const room = db.rooms.get(args.p_code);
+            if (!room || room.owner_id !== uid) return { data: null, error: new Error('not_room_owner') };
+            db.access.delete(`${args.p_code}:${args.p_target_user}`);
+            db.kicks.add(`${args.p_code}:${args.p_target_user}`);
+            return { data: null, error: null };
+          }
+          case 'check_kicked_from_room': {
+            const uid = requireAuth();
+            return { data: db.kicks.has(`${String(args.p_code).toUpperCase()}:${uid}`), error: null };
+          }
+          default:
+            return { data: null, error: new Error(`unknown rpc ${name}`) };
+        }
+      } catch (err) {
+        return { data: null, error: err };
+      }
+    }
+
+    function matchFilters(row, filters) {
+      return filters.every(([col, val, kind]) => (kind === 'in' ? val.includes(row[col]) : row[col] === val));
+    }
+
+    function exec(table, b) {
+      if (table === 'room_notes') {
+        if (b._op === 'insert') {
+          const uid = currentUserId;
+          const payload = b._payload;
+          if (payload.author_id !== uid) return { data: null, error: new Error('author_id must match the authenticated user') };
+          const author = db.profiles.get(payload.author_id);
+          if (!author) return { data: null, error: new Error('author profile not found') };
+          if (!db.profiles.has(payload.room_owner_id)) return { data: null, error: new Error('room owner not found') };
+          if (payload.body.length === 0 || payload.body.length > 140) return { data: null, error: new Error('body_len') };
+          const hourAgo = Date.now() - 60 * 60 * 1000;
+          const recentCount = db.notes.filter((n) => (
+            n.author_id === payload.author_id && n.room_owner_id === payload.room_owner_id && n.created_at > hourAgo
+          )).length;
+          if (recentCount >= MAX_NOTES_PER_HOUR) return { data: null, error: new Error('rate_limited: max notes per room per hour') };
+          const note = {
+            id: `note-${noteSeq++}`, room_owner_id: payload.room_owner_id, author_id: payload.author_id,
+            author_name: author.display_name, body: payload.body, created_at: Date.now(),
+          };
+          db.notes.push(note);
+          return { data: note, error: null };
+        }
+        if (b._op === 'select') {
+          // Matches the real listRoomNotes' .order('created_at', { ascending: false }) — newest first.
+          // Tie-break on insertion order (the numeric id suffix) since two notes can share a Date.now() tick.
+          const seqOf = (n) => Number(n.id.split('-')[1]);
+          const rows = db.notes.filter((n) => matchFilters(n, b._filters))
+            .sort((a, c) => (c.created_at - a.created_at) || (seqOf(c) - seqOf(a)));
+          return { data: rows, error: null };
+        }
+        if (b._op === 'delete') {
+          const [[, noteId]] = b._filters;
+          const note = db.notes.find((n) => n.id === noteId);
+          if (!note) return { data: null, error: null };
+          const uid = currentUserId;
+          if (note.author_id !== uid && note.room_owner_id !== uid) return { data: null, error: new Error('permission denied') };
+          db.notes = db.notes.filter((n) => n.id !== noteId);
+          return { data: null, error: null };
+        }
+      }
+      if (table === 'room_note_likes') {
+        if (b._op === 'select') {
+          const noteIds = b._filters.find(([col]) => col === 'note_id')?.[1] || [];
+          const rows = Array.from(db.likes).map((k) => k.split(':'))
+            .filter(([noteId]) => noteIds.includes(noteId)).map(([note_id, author_id]) => ({ note_id, author_id }));
+          return { data: rows, error: null };
+        }
+        if (b._op === 'upsert') { db.likes.add(`${b._payload.note_id}:${b._payload.author_id}`); return { data: null, error: null }; }
+        if (b._op === 'delete') {
+          const noteId = b._filters.find(([col]) => col === 'note_id')?.[1];
+          const authorId = b._filters.find(([col]) => col === 'author_id')?.[1];
+          db.likes.delete(`${noteId}:${authorId}`);
+          return { data: null, error: null };
+        }
+      }
+      if (table === 'room_snapshots') {
+        if (b._op === 'upsert') { db.snapshots.set(b._payload.owner_id, b._payload.room_data); return { data: null, error: null }; }
+        if (b._op === 'select') {
+          const ownerId = b._filters.find(([col]) => col === 'owner_id')?.[1];
+          const roomData = db.snapshots.get(ownerId);
+          return { data: roomData ? { room_data: roomData } : null, error: null };
+        }
+      }
+      return { data: null, error: new Error(`unhandled fake table/op ${table}/${b._op}`) };
+    }
+
+    function from(table) {
+      const builder = {
+        _filters: [], _op: null, _payload: null,
+        eq(col, val) { this._filters.push([col, val]); return this; },
+        in(col, vals) { this._filters.push([col, vals, 'in']); return this; },
+        order() { return this; },
+        select() { if (!this._op) this._op = 'select'; return this; },
+        insert(payload) { this._op = 'insert'; this._payload = payload; return this; },
+        upsert(payload) { this._op = 'upsert'; this._payload = payload; return this; },
+        delete() { this._op = 'delete'; return this; },
+        single() { this._single = true; return this; },
+        maybeSingle() { this._single = true; this._maybe = true; return this; },
+        then(resolve) { resolve(exec(table, this)); },
+      };
+      return builder;
+    }
+
+    function channel(topic, opts) {
+      const bus = getBus(topic);
+      const presenceKey = opts?.config?.presence?.key;
+      const handlers = { presence: [], broadcast: {} };
+      const chanObj = {
+        on(type, filter, cb) {
+          if (type === 'presence') handlers.presence.push(cb);
+          else if (type === 'broadcast') { (handlers.broadcast[filter.event] ||= []).push(cb); }
+          return chanObj;
+        },
+        subscribe(cb) {
+          bus.subs.add(chanObj);
+          if (cb) cb('SUBSCRIBED');
+          return chanObj;
+        },
+        async track(meta) {
+          bus.members.set(presenceKey, meta);
+          for (const sub of bus.subs) sub._handlers.presence.forEach((fn) => fn());
+          return 'ok';
+        },
+        presenceState() {
+          const out = {};
+          for (const [k, v] of bus.members) out[k] = [v];
+          return out;
+        },
+        async send({ type, event, payload }) {
+          if (type === 'broadcast') {
+            for (const sub of bus.subs) {
+              if (sub === chanObj) continue; // approximates config.broadcast.self === false
+              (sub._handlers.broadcast[event] || []).forEach((fn) => fn({ payload }));
+            }
+          }
+          return 'ok';
+        },
+        async unsubscribe() {
+          bus.subs.delete(chanObj);
+          if (presenceKey) bus.members.delete(presenceKey);
+          for (const sub of bus.subs) sub._handlers.presence.forEach((fn) => fn());
+          return 'ok';
+        },
+      };
+      chanObj._handlers = handlers;
+      return chanObj;
+    }
+
+    return { auth, rpc, from, channel, _setUser: (id) => { currentUserId = id; } };
+  }
+
+  window.__mpCreateClient = createClient;
+  window.__mpTestClientFactory = createClient;
+}
+
 let failures = 0;
 function check(name, cond) {
   if (cond) {
@@ -56,8 +302,10 @@ async function main() {
 
     const consoleErrors = [];
     const pageErrors = [];
+    const networkRequests = [];
     page.on('console', (msg) => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
     page.on('pageerror', (err) => pageErrors.push(String(err)));
+    page.on('request', (req) => networkRequests.push(req.url()));
 
     console.log('Loading page at deviceScaleFactor=1...');
     await page.goto(BASE_URL, { waitUntil: 'load' });
@@ -469,8 +717,30 @@ async function main() {
     await page2x.waitForTimeout(450);
     await page2x.screenshot({ path: path.join(SCREENSHOT_DIR, '09-restaurant-2x.png') });
 
+    // ---- v0.8.0: multiplayer panel opens/switches tabs with zero network calls until opt-in ----
+    await page.click('#btnMultiplayer');
+    await page.waitForTimeout(100);
+    check('multiplayer panel opens', await page.locator('#multiplayerPanel:not(.hidden)').count() === 1);
+    await page.click('[data-tab="mpVisitTab"]');
+    await page.waitForTimeout(80);
+    check('Visit Friend tab shows', await page.locator('#mpVisitTab:not(.hidden)').count() === 1);
+    await page.click('[data-tab="mpRoomTab"]');
+    await page.waitForTimeout(80);
+    check('Party Room tab shows', await page.locator('#mpRoomTab:not(.hidden)').count() === 1);
+    await page.click('[data-tab="mpConnectTab"]');
+    await page.click('[data-close="multiplayerPanel"]');
+    await page.waitForTimeout(80);
+    const offendingRequests = networkRequests.filter((url) => /supabase\.co|esm\.sh/.test(url));
+    check(
+      'opening/using the multiplayer panel without clicking Connect makes zero requests to Supabase or the CDN (offline until opt-in)',
+      offendingRequests.length === 0,
+    );
+    if (offendingRequests.length) console.error('unexpected multiplayer network requests:', offendingRequests);
+
     await context1x.close();
     await context2x.close();
+
+    await runMultiplayerUiFlowTests(browser);
   } finally {
     if (browser) await browser.close().catch(() => {});
     killServer();
@@ -482,6 +752,227 @@ async function main() {
     process.exitCode = 1;
   } else {
     console.log('All smoke checks passed.');
+  }
+}
+
+// Mocked-browser multiplayer UI flow test (v0.8.0). Drives the REAL DOM/UI
+// (Connect, Visit, note posting, owner delete, Party Room create/join,
+// movement, chat filter, mute, kick) against the fake Supabase client
+// installed by installMpFakeServer — never a real Supabase project. A
+// second/third simulated "browser" (Bob/Carol/Dave) is a raw fake-client
+// instance created directly via window.__mpCreateClient() and driven through
+// the REAL js/multiplayer/*.js modules (dynamically imported in-page), not
+// through the DOM — since this page's own UI module only supports one
+// connected identity at a time, exactly like a real single browser tab.
+async function runMultiplayerUiFlowTests(browser) {
+  console.log('Running mocked-browser multiplayer UI flow tests...');
+  const context = await browser.newContext({ viewport: { width: 1200, height: 800 } });
+  const page = await context.newPage();
+  await page.addInitScript(installMpFakeServer);
+  await page.goto(BASE_URL, { waitUntil: 'load' });
+  await page.waitForFunction(() => window.__pixelHotel, null, { timeout: 8000 });
+  await page.keyboard.press('Escape'); // close the first-run help overlay
+  await page.waitForTimeout(100);
+
+  try {
+    // ---- Connect ----
+    await page.click('#btnMultiplayer');
+    await page.waitForTimeout(80);
+    await page.fill('#mpDisplayNameInput', 'Alice');
+    await page.click('#btnMpConnect');
+    await page.waitForFunction(
+      () => !document.getElementById('mpSignedInRow').classList.contains('hidden'), null, { timeout: 4000 },
+    );
+    const aliceCode = (await page.textContent('#mpOwnCode')).trim();
+    check('mp: Connect creates a profile with a well-formed friend code', /^[A-Z2-9]{6}$/.test(aliceCode));
+
+    // ---- note + filter: posting a note to your own guestbook is censored client-side ----
+    await page.click('#btnMpOwnGuestbook');
+    await page.waitForTimeout(100);
+    check('mp: "View My Guestbook" jumps to the Visit tab and labels it "(yours)"',
+      (await page.textContent('#mpGuestbookWrap')).includes('(yours)'));
+    await page.fill('#mpNoteInput', 'you fucking rock');
+    await page.click('#mpNoteForm button[type="submit"]');
+    await page.waitForTimeout(150);
+    const ownNoteHtml = await page.innerHTML('#mpGuestbookWrap');
+    check('mp: filter — a posted note is censored before ever reaching the (fake) server',
+      ownNoteHtml.includes('you ******* rock') && !ownNoteHtml.includes('fucking'));
+
+    // ---- a second simulated user ("Bob") posts a note to Alice's room via the real guestbook.js module ----
+    const bobNote = await page.evaluate(async (ownerCode) => {
+      const { signInAndEnsureProfile, fetchOwnerByFriendCode } = await import('/js/multiplayer/auth.js');
+      const { addRoomNote } = await import('/js/multiplayer/guestbook.js');
+      const bob = window.__mpCreateClient();
+      await bob.auth.signInAnonymously();
+      const bobProfile = await signInAndEnsureProfile(bob, 'Bob');
+      const owner = await fetchOwnerByFriendCode(bob, ownerCode);
+      return addRoomNote(bob, { ownerId: owner.ownerId, authorId: bobProfile.id, text: 'nice fucking place' });
+    }, aliceCode);
+    check('mp: a different user can post a note to the owner\'s room, also censored server-side-equivalent',
+      bobNote.ok === true && bobNote.note.body === 'nice ******* place');
+
+    // ---- owner delete: Alice deletes Bob's note from her own guestbook even though she didn't author it ----
+    // "View My Guestbook" lives in the Connect tab, which the first click away from — switch back to it first.
+    await page.click('[data-tab="mpConnectTab"]');
+    await page.click('#btnMpOwnGuestbook');
+    await page.waitForTimeout(150);
+    const guestbookWithBobNote = await page.innerHTML('#mpGuestbookWrap');
+    check('mp: owner sees the other author\'s censored note', guestbookWithBobNote.includes('nice ******* place'));
+    await page.click('[data-delete-note]');
+    await page.waitForTimeout(150);
+    check('mp: owner delete removes another author\'s note', !(await page.textContent('#mpGuestbookWrap')).includes('nice'));
+
+    // ---- Visit (a friend's room): transient read-only scene, no edits to the local save, restore on exit ----
+    const beforeVisit = await page.evaluate(() => window.__pixelHotel.getState());
+    const ownMyRoomBeforeVisit = JSON.stringify(beforeVisit.rooms.myroom.placed);
+    const roomBeforeVisit = beforeVisit.room;
+
+    const carolCode = await page.evaluate(async () => {
+      const { signInAndEnsureProfile } = await import('/js/multiplayer/auth.js');
+      const { pushRoomSnapshot } = await import('/js/multiplayer/guestbook.js');
+      const carol = window.__mpCreateClient();
+      await carol.auth.signInAnonymously();
+      const profile = await signInAndEnsureProfile(carol, 'Carol');
+      await pushRoomSnapshot(carol, profile.id, { placed: [{ instanceId: 'carol-plant', itemId: 'plant', x: 3, y: 3, rot: 0 }] });
+      return profile.friend_code;
+    });
+
+    await page.click('[data-tab="mpVisitTab"]');
+    await page.fill('#mpVisitCodeInput', carolCode);
+    await page.click('#btnMpVisit');
+    await page.waitForTimeout(250);
+    const duringVisit = await page.evaluate(() => window.__pixelHotel.getState());
+    check('mp: visit — the live scene switches to My Room to show the host\'s snapshot', duringVisit.room === 'myroom');
+    check('mp: visit — guestbook header shows the host\'s display name',
+      (await page.textContent('#mpGuestbookWrap')).includes('Carol'));
+
+    await page.click('#btnInventory');
+    await page.click('[data-tab="roomTab"]');
+    await page.waitForTimeout(80);
+    const roomTabDuringVisit = await page.innerHTML('#roomTab');
+    check('mp: visit — the visited room renders read-only (no Move/Pick up controls)',
+      !roomTabDuringVisit.includes('data-move') && !roomTabDuringVisit.includes('data-pickup'));
+
+    await page.click('[data-tab="shopTab"]');
+    await page.waitForTimeout(80);
+    // Baseline right before the click, not before entering the visit — switching into My Room can itself
+    // complete a "visit N rooms" quest and grant coins, which is unrelated to whether buying is blocked.
+    const coinsJustBeforeBuy = (await page.evaluate(() => window.__pixelHotel.getState())).coins;
+    await page.click('[data-buy]');
+    await page.waitForTimeout(80);
+    const coinsDuringVisit = (await page.evaluate(() => window.__pixelHotel.getState())).coins;
+    check('mp: visit — buying is blocked while visiting (coins unchanged)', coinsDuringVisit === coinsJustBeforeBuy);
+    await page.click('[data-close="inventoryPanel"]');
+
+    // togglePanel() hides every .panel when opening another one, so re-open the multiplayer panel.
+    await page.click('#btnMultiplayer');
+    await page.click('[data-tab="mpVisitTab"]');
+    await page.click('#btnMpLeaveVisit');
+    await page.waitForTimeout(200);
+    const afterVisit = await page.evaluate(() => window.__pixelHotel.getState());
+    check('mp: visit — leaving restores the player\'s own previous room', afterVisit.room === roomBeforeVisit);
+    check('mp: visit — the local save\'s My Room furniture is byte-for-byte unchanged after visiting',
+      JSON.stringify(afterVisit.rooms.myroom.placed) === ownMyRoomBeforeVisit);
+
+    // ---- Party Room: join, movement, chat/filter, mute, spoofed-kick rejection, real kick ----
+    await page.click('[data-tab="mpRoomTab"]');
+    await page.click('#btnMpCreateRoom');
+    await page.waitForFunction(
+      () => !document.getElementById('mpRoomActiveRow').classList.contains('hidden'), null, { timeout: 4000 },
+    );
+    const inviteCode = (await page.textContent('#mpRoomCode')).trim();
+    check('mp: Create Party Room produces an invite code', inviteCode.length >= 6);
+
+    const aliceProfileId = await page.evaluate(() => window.__mpDebugState.profile.id);
+
+    const daveJoin = await page.evaluate(async (code) => {
+      const { signInAndEnsureProfile } = await import('/js/multiplayer/auth.js');
+      const { joinRoomByCode, openRoomChannel } = await import('/js/multiplayer/realtimeRoom.js');
+      const dave = window.__mpCreateClient();
+      await dave.auth.signInAnonymously();
+      const profile = await signInAndEnsureProfile(dave, 'Dave');
+      const joinResult = await joinRoomByCode(dave, code);
+      const channel = openRoomChannel(dave, code, profile.id);
+      await new Promise((resolve) => {
+        channel.on('presence', { event: 'sync' }, () => {}).subscribe((status) => {
+          if (status === 'SUBSCRIBED') { channel.track({ displayName: 'Dave' }).then(resolve); }
+        });
+      });
+      window.__mpDave = { client: dave, profile, channel };
+      return { ok: joinResult.ok, daveId: profile.id };
+    }, inviteCode);
+    check('mp: join — a second user joins the party room by invite code', daveJoin.ok === true);
+
+    await page.waitForFunction(
+      () => document.querySelector('#mpMemberList [data-mute]')?.textContent !== undefined
+        && document.getElementById('mpMemberList').textContent.includes('Dave'),
+      null, { timeout: 4000 },
+    );
+    check('mp: join — owner\'s member list shows the joined member via presence sync', true);
+
+    // movement
+    await page.evaluate(async ({ daveId }) => {
+      const { broadcastPosition } = await import('/js/multiplayer/realtimeRoom.js');
+      broadcastPosition(window.__mpDave.channel, { userId: daveId, displayName: 'Dave', x: 5, y: 6, dir: 'left' });
+    }, { daveId: daveJoin.daveId });
+    await page.waitForTimeout(250);
+    const remoteAfterMove = await page.evaluate(() => window.__pixelHotel.getRemoteMultiplayer());
+    const daveEntity = remoteAfterMove.find((e) => e.id === `mp-${daveJoin.daveId}`);
+    check('mp: movement — the other member\'s broadcast position is reflected as a remote entity',
+      !!daveEntity && Math.abs(daveEntity.x - 5) < 0.01 && Math.abs(daveEntity.y - 6) < 0.01);
+
+    // chat (and implicitly: receive-side filter validation, since the payload round-trips through validateChatPayload)
+    const chatLogBefore = await page.textContent('#chatLog');
+    await page.evaluate(async ({ daveId }) => {
+      const { broadcastChatBubble } = await import('/js/multiplayer/realtimeRoom.js');
+      broadcastChatBubble(window.__mpDave.channel, 'hello from dave', { userId: daveId, displayName: 'Dave' });
+    }, { daveId: daveJoin.daveId });
+    await page.waitForTimeout(200);
+    const chatLogAfterDaveChat = await page.textContent('#chatLog');
+    check('mp: chat — a remote member\'s broadcast chat appears in the chat log',
+      chatLogAfterDaveChat.length > chatLogBefore.length && chatLogAfterDaveChat.includes('hello from dave'));
+
+    // mute: mute Dave, then confirm a further chat from Dave does NOT reach the chat log
+    await page.click(`[data-mute="${daveJoin.daveId}"]`);
+    await page.waitForTimeout(80);
+    const chatLogBeforeMutedMsg = await page.textContent('#chatLog');
+    await page.evaluate(async ({ daveId }) => {
+      const { broadcastChatBubble } = await import('/js/multiplayer/realtimeRoom.js');
+      broadcastChatBubble(window.__mpDave.channel, 'are you there', { userId: daveId, displayName: 'Dave' });
+    }, { daveId: daveJoin.daveId });
+    await page.waitForTimeout(200);
+    const chatLogAfterMutedMsg = await page.textContent('#chatLog');
+    check('mp: mute — a muted member\'s further chat does not reach the chat log',
+      chatLogAfterMutedMsg === chatLogBeforeMutedMsg);
+
+    // security: a non-owner member (Dave) broadcasting a spoofed "kicked" event targeting the OWNER
+    // must be ignored — the owner's client verifies against check_kicked_from_room, not the broadcast alone.
+    await page.evaluate(async ({ targetUserId }) => {
+      window.__mpDave.channel.send({ type: 'broadcast', event: 'kicked', payload: { targetUserId } });
+    }, { targetUserId: aliceProfileId });
+    await page.waitForTimeout(200);
+    check('mp: kick security — a spoofed "kicked" broadcast targeting the owner is ignored (RPC-verified, not broadcast-trusted)',
+      !(await page.locator('#mpRoomActiveRow.hidden').count()) && (await page.textContent('#mpRoomCode')).trim() === inviteCode);
+
+    // real kick: the owner kicks Dave via the UI's Kick button
+    await page.click(`[data-kick="${daveJoin.daveId}"]`);
+    await page.waitForTimeout(150);
+    const kickOutcome = await page.evaluate(async ({ code, daveId }) => {
+      const { checkKicked, joinRoomByCode } = await import('/js/multiplayer/realtimeRoom.js');
+      window.__mpDave.client._setUser(daveId);
+      const kicked = await checkKicked(window.__mpDave.client, code);
+      const rejoin = await joinRoomByCode(window.__mpDave.client, code);
+      return { kicked, rejoin };
+    }, { code: inviteCode, daveId: daveJoin.daveId });
+    check('mp: kick — the owner\'s Kick button durably bans the target server-side', kickOutcome.kicked === true);
+    check('mp: kick — the banned user cannot rejoin with the same invite code',
+      kickOutcome.rejoin.ok === false && kickOutcome.rejoin.reason === 'kicked');
+
+    await page.click('#btnMpLeaveRoom');
+    await page.waitForTimeout(150);
+    check('mp: leaving the party room hides the active room view', await page.locator('#mpRoomIdleRow:not(.hidden)').count() === 1);
+  } finally {
+    await context.close();
   }
 }
 

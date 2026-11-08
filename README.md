@@ -1,9 +1,12 @@
 # Pixel Hotel
 
-A cosy, single-player browser game: check into a tiny isometric pixel-art hotel,
-chat with the guests, decorate the lobby and rooftop lounge, and work through a
-short list of quests. Built with plain HTML/CSS/JS ES modules — no build step,
-no frameworks, no network calls.
+A cosy isometric pixel-art hotel game: check in, chat with the guests, decorate
+the lobby and rooftop lounge, and work through a short list of quests. Built
+with plain HTML/CSS/JS ES modules — no build step, no frameworks. Single-player
+play makes **zero network calls**; an entirely optional 🌐 Multiplayer panel
+(visit a friend's room, leave guestbook notes, invite-code party rooms with
+live avatars/chat) only talks to a backend after you explicitly click
+**Connect** — see [`docs/v0.8-multiplayer.md`](docs/v0.8-multiplayer.md).
 
 This is an original homage to the cosy retro "virtual hotel" genre of the late
 90s/2000s. It is **not affiliated with, endorsed by, or associated with Habbo,
@@ -115,11 +118,28 @@ Then open **http://localhost:8080** in a modern desktop or mobile browser.
 - Responsive layout for desktop and mobile, a first-run help overlay, and
   keyboard shortcuts.
 
+## Multiplayer (optional, `v0.8.0`)
+
+A 🌐 Multiplayer panel adds anonymous sign-in with a shareable friend code,
+visiting a friend's My Room (shown as a transient, read-only snapshot — no
+editing, no effect on your own save) to read/post a 140-character guestbook
+note or like one (with a server-side hourly rate limit, plus a one-click
+shortcut to your own guestbook), and invite-code party rooms with live
+presence, throttled/interpolated remote avatars, and speech-bubble chat over
+a Supabase Realtime private channel. It is entirely opt-in — see
+[`docs/v0.8-multiplayer.md`](docs/v0.8-multiplayer.md) for the Supabase
+dashboard setup, the full threat/limits write-up (anonymous identities,
+client-side word filter, local mute), and the two-browser validation
+checklist. The schema lives in
+[`supabase/migrations/0001_v08_multiplayer.sql`](supabase/migrations/0001_v08_multiplayer.sql),
+a single idempotent SQL file meant to be run once via the Supabase SQL Editor.
+
 ## Project structure
 
 ```
 index.html          entry point
 css/style.css        UI styling
+js/config.js          public Supabase URL/key + pinned CDN client URL (multiplayer only)
 js/data.js            seed content: rooms, NPCs, catalogue, quests (pure)
 js/pathfinding.js     A* grid pathfinding (pure)
 js/inventory.js       buy/place/move/pickup validation (pure)
@@ -129,6 +149,7 @@ js/npc.js             NPC wandering/dialogue logic (pure)
 js/voxel.js           procedural 3D voxel character models & projection (pure)
 js/sprites.js         procedural pixel-art generation & wall/window geometry
 js/render.js           isometric rendering, depth sort, lighting (canvas)
+js/multiplayer/        opt-in multiplayer: auth, guestbook, realtime rooms, filter, UI (see docs/v0.8-multiplayer.md)
 js/audio.js            floor MP3 soundtrack + procedural WebAudio fallback/SFX
 js/main.js             game loop, input, UI wiring, debug hooks
 ```
@@ -148,16 +169,19 @@ For debugging/tests, the running page exposes `window.__pixelHotel` with
 ## Tests
 
 ```sh
-npm test         # Node built-in test runner: pathfinding, inventory, quests, save/load, voxel/window rendering
+npm test         # Node built-in test runner: pathfinding, inventory, quests, save/load, voxel/window rendering, multiplayer filter/rate-limit/mocked-Supabase smoke
 npm run test:smoke   # Playwright end-to-end smoke test (needs: npm i -D playwright && npx playwright install chromium)
 ```
 
 The smoke test boots a local static server, loads the page in headless
 Chromium, and checks for console/page errors, a non-blank canvas, click-to-walk
 movement, chat, furniture purchase/placement, a room switch through a door,
-the per-floor MP3 soundtrack (including crossfade and fallback), and
-save/reload persistence — taking screenshots into `tests/screenshots/` along
-the way.
+the per-floor MP3 soundtrack (including crossfade and fallback),
+save/reload persistence, and that opening the Multiplayer panel makes zero
+network requests until Connect is clicked — taking screenshots into
+`tests/screenshots/` along the way. **No test — unit or smoke — ever talks
+to a real Supabase project or database**; multiplayer code paths are
+exercised only against an in-memory mock (`tests/multiplayer.unit.test.mjs`).
 
 ## Assets & Attribution
 
@@ -172,7 +196,8 @@ are generated mathematically in `js/sprites.js`, and SFX (plus the fallback
 soundtrack used if a floor's MP3 ever fails to load) are synthesized at
 runtime with the Web Audio API in `js/audio.js`. There are no other downloaded
 images, fonts, sound files, or external assets anywhere in this repository,
-and the game makes no network requests beyond loading its own files.
+and single-player makes no network requests beyond loading its own files —
+the only networked feature is the opt-in Multiplayer panel described above.
 
 All character names, room names, dialogue, and item names are original
 creations for this project. Pixel Hotel is an independent homage to the cosy
