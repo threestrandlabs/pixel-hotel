@@ -92,12 +92,14 @@
     </form>
   </div>
 
-  <aside id="elevatorPanel" class="panel hidden">
-    <div class="panel-header">
-      <span>🛗 Tower Elevator Directory</span>
-      <button class="panel-close" data-close="elevatorPanel">✕</button>
+  <aside id="elevatorPanel" class="panel elevator-modal-backdrop hidden">
+    <div class="elevator-modal-box">
+      <div class="panel-header">
+        <span>🛗 Tower Elevator Directory</span>
+        <button class="panel-close" data-close="elevatorPanel">✕</button>
+      </div>
+      <div id="elevatorList" class="tab-content"></div>
     </div>
-    <div id="elevatorList" class="tab-content"></div>
   </aside>
 
   <aside id="inventoryPanel" class="panel hidden">

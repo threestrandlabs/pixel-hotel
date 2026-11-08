@@ -1,4 +1,4 @@
-import { ROOMS, NPCS, QUESTS, getCatalogueItem, TILE, SAVE_VERSION } from './data.js';
+import { ROOMS, NPCS, QUESTS, getCatalogueItem, TILE, SAVE_VERSION, ITEM_CATEGORIES } from './data.js';
 import { retargetMover, advanceMover, findPath } from './pathfinding.js';
 import {
   buyItem, placeItem, pickupItem, moveItem, canPlaceAt, footprintCells,
@@ -243,6 +243,9 @@ function isBlockedFactory(room, roomRuntime, occupantTiles) {
   return (x, y) => {
     const cell = room.grid[y][x];
     if (cell === TILE.WALL || cell === TILE.WINDOW || cell === TILE.VOID) return true;
+    // Elevator doors open the floor-directory modal from the doormat tile in front of them
+    // (see onPlayerArrive) — the avatar never walks into the elevator car itself.
+    if (cell === TILE.DOOR && room.doors.find((d) => d.x === x && d.y === y)?.elevator) return true;
     const furn = furnitureAt(room, roomRuntime, x, y);
     if (furn) {
       const item = getCatalogueItem(furn.itemId);
@@ -277,7 +280,10 @@ function applyInteractionArrival(mover, pending, isPlayer = false) {
   if (!placed) return;
   mover.dir = pending.dir;
   const kind = pending.kind;
-  const isSeatPose = kind === 'sit' || kind === 'eat';
+  const item = getCatalogueItem(placed.itemId);
+  // Counters/tables/bars use kind 'eat' too (standing use), so only a true seat item
+  // (item.seat) should render the sitting pose — see tests/logic.test.mjs "never seats".
+  const isSeatPose = Boolean(item?.seat) && (kind === 'sit' || kind === 'eat');
   const isLiePose = kind === 'lie';
   mover.sitting = (isSeatPose || isLiePose) ? placed.instanceId : null;
   mover.lying = isLiePose;
@@ -299,6 +305,12 @@ function applyInteractionArrival(mover, pending, isPlayer = false) {
     }
     if (state.player.room === 'restaurant' && (kind === 'sit' || kind === 'eat')) {
       onQuestProgress(advanceQuestsByType(state, 'sit_restaurant', 1));
+    }
+    if (kind === 'toggle_light' && item?.lightSource) {
+      const wasOn = roomRuntime.lightsOn !== false;
+      roomRuntime.lightsOn = !wasOn;
+      showToast(roomRuntime.lightsOn ? `${item.name} turned on.` : `${item.name} turned off.`);
+      saveState(window.localStorage, state);
     }
     persistPlayerPos();
   }
@@ -330,6 +342,10 @@ function tryInteractPlayer(placedItem, immediate = false) {
   const blocked = isBlockedFactory(room, roomRuntime, occ);
   const approach = findApproachTile(roomForInventory(), placedItem, blocked, { x: player.x, y: player.y }, occ, res);
   if (!approach) return false;
+  if (approach.kind === 'toggle_light' && state.player.room !== 'myroom') {
+    showToast('Not your room — lamps can only be toggled in My Room.');
+    return false;
+  }
   const pending = {
     instanceId: placedItem.instanceId,
     itemId: placedItem.itemId,
@@ -470,6 +486,12 @@ function tickActiveDialogue(now) {
   if (dist > 2) closeNpcDialogue();
 }
 
+// The tile just inside the room, directly facing a door (matches inventory.js's
+// hasDoorArrivalRoute "landing" tile) — the doormat the player steps on to use it.
+function doorLandingTile(d) {
+  return d.y === 0 ? { x: d.x, y: 1 } : { x: 1, y: d.y };
+}
+
 function onPlayerArrive() {
   const room = currentRoomDef();
   const cell = room.grid[player.y][player.x];
@@ -504,14 +526,16 @@ function onPlayerArrive() {
   }
   if (cell === TILE.DOOR) {
     const doorDef = room.doors.find((d) => d.x === player.x && d.y === player.y);
-    if (doorDef) {
-      if (doorDef.elevator) {
-        openElevatorPanel();
-      } else {
-        switchRoom(doorDef.to, doorDef.toTile);
-      }
+    if (doorDef && !doorDef.elevator) {
+      switchRoom(doorDef.to, doorDef.toTile);
+      return;
     }
-    return;
+  }
+  // Stepping onto the doormat tile directly in front of an elevator door opens the floor
+  // directory as a modal — the avatar stays on the doormat and never walks into the car.
+  const elevatorDoor = room.doors.find((d) => d.elevator && doorLandingTile(d).x === player.x && doorLandingTile(d).y === player.y);
+  if (elevatorDoor) {
+    openElevatorPanel();
   }
   persistPlayerPos();
 }
@@ -847,6 +871,7 @@ function frame(now) {
     now,
     elevatorAnim: ui.elevatorAnim,
     camera: ui.camera,
+    lightsOn: roomRuntime.lightsOn !== false,
   });
 
   requestAnimationFrame(frame);
@@ -1072,7 +1097,13 @@ function togglePanel(id) {
   const willShow = el.classList.contains('hidden');
   document.querySelectorAll('.panel').forEach((p) => p.classList.add('hidden'));
   if (willShow) el.classList.remove('hidden');
-  if (id === 'inventoryPanel' && willShow) { refreshShopTab(); refreshBagTab(); refreshRoomTab(); }
+  if (id === 'inventoryPanel' && willShow) {
+    // Re-opening the panel always lands back on the category tiles, not wherever you left off.
+    activeCategory.shopTab = null;
+    activeCategory.bagTab = null;
+    activeCategory.roomTab = null;
+    refreshShopTab(); refreshBagTab(); refreshRoomTab();
+  }
   if (id === 'questPanel' && willShow) refreshQuestPanel();
   if (id === 'elevatorPanel' && willShow) refreshElevatorPanel();
   if (id === 'audioPanel' && willShow) refreshAudioUi();
@@ -1091,6 +1122,10 @@ document.getElementById('btnQuests').addEventListener('click', () => togglePanel
 document.getElementById('btnMultiplayer').addEventListener('click', () => togglePanel('multiplayerPanel'));
 document.querySelectorAll('.panel-close').forEach((btn) => {
   btn.addEventListener('click', () => document.getElementById(btn.dataset.close).classList.add('hidden'));
+});
+// Elevator directory is a centred modal: clicking the dimmed backdrop (not the box itself) closes it.
+document.getElementById('elevatorPanel').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden');
 });
 document.querySelectorAll('.tab-btn').forEach((btn) => {
   btn.addEventListener('click', () => {
@@ -1151,10 +1186,55 @@ function itemIconImg(item) {
     : `<div class="item-swatch" style="background:${swatchColor(item)}"></div>`;
 }
 
+// Shop / My Items / In This Room each start on a grid of category tiles; clicking one
+// opens its filtered item list with a Back button. Each tab tracks its own open category.
+const activeCategory = { shopTab: null, bagTab: null, roomTab: null };
+
+function categoryMeta(catId) {
+  return ITEM_CATEGORIES.find((c) => c.id === catId) || { id: catId, name: catId, icon: '📦' };
+}
+
+function categoryTilesHtml(entries, categoryOf) {
+  const counts = new Map();
+  for (const e of entries) {
+    const cat = categoryOf(e);
+    counts.set(cat, (counts.get(cat) || 0) + 1);
+  }
+  return ITEM_CATEGORIES.filter((c) => counts.has(c.id)).map((c) => `
+    <button class="category-tile" data-category="${c.id}">
+      <span class="category-tile-icon">${c.icon}</span>
+      <span class="category-tile-label">${c.name}</span>
+      <span class="category-tile-count">${counts.get(c.id)}</span>
+    </button>`).join('');
+}
+
+/** Renders category tiles when no category is open, or wires the Back button when one is. */
+function renderCategoryNav(el, tabKey, entries, categoryOf, refreshFn, emptyMessage) {
+  const cat = activeCategory[tabKey];
+  if (entries.length === 0) {
+    el.innerHTML = `<p>${emptyMessage}</p>`;
+    return { show: false, items: [] };
+  }
+  if (!cat) {
+    el.innerHTML = `<div class="category-grid">${categoryTilesHtml(entries, categoryOf)}</div>`;
+    el.querySelectorAll('[data-category]').forEach((btn) => {
+      btn.addEventListener('click', () => { activeCategory[tabKey] = btn.dataset.category; refreshFn(); });
+    });
+    return { show: false, items: [] };
+  }
+  const meta = categoryMeta(cat);
+  const backHtml = `<button class="pixel-btn category-back-btn" data-back>← Back · ${meta.icon} ${meta.name}</button>`;
+  return { show: true, items: entries.filter((e) => categoryOf(e) === cat), backHtml, wireBack: (htmlEl) => {
+    htmlEl.querySelector('[data-back]').addEventListener('click', () => { activeCategory[tabKey] = null; refreshFn(); });
+  } };
+}
+
 function refreshShopTab() {
   const el = document.getElementById('shopTab');
   const items = availableCatalogue(state);
-  el.innerHTML = items.map((item) => `
+  const nav = renderCategoryNav(el, 'shopTab', items, (i) => i.category, refreshShopTab, 'No items available.');
+  if (!nav.show) return;
+  el.innerHTML = nav.backHtml + nav.items.map((item) => `
     <div class="shop-item">
       ${itemIconImg(item)}
       <div class="item-info">
@@ -1166,6 +1246,7 @@ function refreshShopTab() {
         <button class="pixel-btn" data-buy="${item.id}" ${item.unlocked && state.coins >= item.price ? '' : 'disabled'}>Buy</button>
       </div>
     </div>`).join('');
+  nav.wireBack(el);
   el.querySelectorAll('[data-buy]').forEach((btn) => {
     btn.addEventListener('click', () => {
       if (isVisitingFriendRoom()) { showToast("You're just visiting — nothing here can be edited."); return; }
@@ -1184,17 +1265,18 @@ function refreshShopTab() {
 }
 
 function swatchColor(item) {
-  const map = { seat: '#caa05a', decor: '#8fd0ff' };
+  const map = { seating: '#caa05a', beds: '#caa05a', decor: '#8fd0ff' };
   return map[item.category] || '#888';
 }
 
 function refreshBagTab() {
   const el = document.getElementById('bagTab');
-  if (state.inventory.length === 0) {
-    el.innerHTML = '<p>No unplaced items. Buy something from the Shop tab!</p>';
-    return;
-  }
-  el.innerHTML = state.inventory.map((inv) => {
+  const nav = renderCategoryNav(
+    el, 'bagTab', state.inventory, (inv) => getCatalogueItem(inv.itemId).category,
+    refreshBagTab, 'No unplaced items. Buy something from the Shop tab!',
+  );
+  if (!nav.show) return;
+  el.innerHTML = nav.backHtml + nav.items.map((inv) => {
     const item = getCatalogueItem(inv.itemId);
     return `
     <div class="bag-item">
@@ -1208,6 +1290,7 @@ function refreshBagTab() {
       </div>
     </div>`;
   }).join('');
+  nav.wireBack(el);
   el.querySelectorAll('[data-place]').forEach((btn) => {
     btn.addEventListener('click', () => {
       const [instanceId, itemId] = btn.dataset.place.split(':');
@@ -1220,12 +1303,13 @@ function refreshBagTab() {
 function refreshRoomTab() {
   const el = document.getElementById('roomTab');
   const roomRuntime = currentRoomRuntime();
-  if (roomRuntime.placed.length === 0) {
-    el.innerHTML = '<p>Nothing placed in this room yet.</p>';
-    return;
-  }
   const readOnly = isVisitingFriendRoom();
-  el.innerHTML = roomRuntime.placed.map((p) => {
+  const nav = renderCategoryNav(
+    el, 'roomTab', roomRuntime.placed, (p) => getCatalogueItem(p.itemId).category,
+    refreshRoomTab, 'Nothing placed in this room yet.',
+  );
+  if (!nav.show) return;
+  el.innerHTML = nav.backHtml + nav.items.map((p) => {
     const item = getCatalogueItem(p.itemId);
     return `
     <div class="room-item">
@@ -1241,6 +1325,7 @@ function refreshRoomTab() {
       </div>
     </div>`;
   }).join('');
+  nav.wireBack(el);
   el.querySelectorAll('[data-pickup]').forEach((btn) => {
     btn.addEventListener('click', () => {
       if (isVisitingFriendRoom()) { showToast("You're just visiting — nothing here can be edited."); return; }

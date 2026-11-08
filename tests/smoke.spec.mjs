@@ -359,6 +359,17 @@ async function main() {
       seeded.rooftop.placed.length > 5
     );
 
+    // ---- v0.8.1: lamps are not toggleable on public floors (show a hint, no state change) ----
+    // Checked here, while still on the starting lobby floor, so this never disturbs the
+    // camera framing other checks further down rely on.
+    const lobbyLampBefore = await page.evaluate(() => window.__pixelHotel.getState().rooms.lobby.lightsOn);
+    const lobbyToggleRes = await page.evaluate(() => window.__pixelHotel.interactWith('lamp', true));
+    const lobbyLampAfter = await page.evaluate(() => window.__pixelHotel.getState().rooms.lobby.lightsOn);
+    check(
+      'the lobby lamp (public floor) ignores the toggle — interaction is rejected and lightsOn is unchanged',
+      lobbyToggleRes === false && lobbyLampBefore !== false && lobbyLampAfter !== false
+    );
+
     await page.screenshot({ path: path.join(SCREENSHOT_DIR, '01-lobby-1x.png') });
     await page.screenshot({ path: '/workspace/pixel-hotel-v060-dpr1.png' });
 
@@ -527,6 +538,43 @@ async function main() {
     check('player chat message appears in chat log', chatText.includes('hello everyone'));
     await page.screenshot({ path: path.join(SCREENSHOT_DIR, '02-chat.png') });
 
+    // ---- v0.8.1: elevator doormat trigger opens a centred modal; avatar never enters the car ----
+    await page.evaluate(() => window.__pixelHotel.walkTo(4, 1)); // lobby's elevator doormat tile
+    await page.waitForTimeout(1200);
+    const doormatState = await page.evaluate(() => ({
+      player: window.__pixelHotel.getState().player,
+      hidden: document.getElementById('elevatorPanel').classList.contains('hidden'),
+    }));
+    check(
+      'stepping on the doormat tile opens the elevator modal and the avatar stays off the door tile',
+      doormatState.hidden === false && doormatState.player.x === 4 && doormatState.player.y === 1
+    );
+    const modalBox = await page.evaluate(() => {
+      const backdrop = document.getElementById('elevatorPanel');
+      const box = backdrop.querySelector('.elevator-modal-box');
+      const bRect = backdrop.getBoundingClientRect();
+      const rRect = box.getBoundingClientRect();
+      const centeredX = Math.abs((rRect.left + rRect.right) / 2 - (bRect.left + bRect.right) / 2) < 2;
+      const centeredY = Math.abs((rRect.top + rRect.bottom) / 2 - (bRect.top + bRect.bottom) / 2) < 2;
+      return { centeredX, centeredY };
+    });
+    check('the elevator directory is a centred modal box, not a side panel', modalBox.centeredX && modalBox.centeredY);
+
+    await page.keyboard.press('Escape');
+    check('Esc closes the elevator modal', await page.evaluate(() => document.getElementById('elevatorPanel').classList.contains('hidden')));
+
+    await page.keyboard.press('e');
+    await page.waitForTimeout(100);
+    check('the E key shortcut reopens the same elevator modal', !(await page.evaluate(() => document.getElementById('elevatorPanel').classList.contains('hidden'))));
+
+    await page.mouse.click(5, 5); // backdrop, well outside the centred modal box
+    check('clicking outside the modal box (the dimmed backdrop) closes it', await page.evaluate(() => document.getElementById('elevatorPanel').classList.contains('hidden')));
+
+    await page.click('#btnElevator');
+    await page.waitForTimeout(100);
+    await page.click('[data-close="elevatorPanel"]');
+    check('the close (X) button closes the elevator modal', await page.evaluate(() => document.getElementById('elevatorPanel').classList.contains('hidden')));
+
     // ---- elevator travel to Gym (Floor 4) & treadmill interaction ----
     await page.click('#btnElevator');
     await page.waitForTimeout(150);
@@ -592,10 +640,48 @@ async function main() {
     const stateInMyRoom = await page.evaluate(() => window.__pixelHotel.getState());
     check('elevator travel to My Room works', stateInMyRoom.room === 'myroom' && stateInMyRoom.floor === 8);
 
+    // ---- v0.8.1: Shop opens on category tiles; a tile drills into its filtered item list ----
+    await page.click('#btnInventory');
+    await page.waitForTimeout(80);
+    const shopLandsOnTiles = await page.evaluate(() => ({
+      tileCount: document.querySelectorAll('#shopTab .category-tile').length,
+      buyButtons: document.querySelectorAll('#shopTab [data-buy]').length,
+    }));
+    check('Shop tab first shows category tiles, not a flat item list', shopLandsOnTiles.tileCount > 1 && shopLandsOnTiles.buyButtons === 0);
+    await page.screenshot({ path: path.join(SCREENSHOT_DIR, '10-shop-categories.png') });
+    const lightingTile = page.locator('#shopTab .category-tile[data-category="lighting"]');
+    const lightingCount = await lightingTile.locator('.category-tile-count').textContent();
+    await lightingTile.click();
+    await page.waitForTimeout(80);
+    const shopCategoryItems = await page.evaluate(() => document.querySelectorAll('#shopTab [data-buy]').length);
+    check('clicking a category tile opens its submenu list with only that category\'s items', String(shopCategoryItems) === lightingCount.trim());
+    check('the submenu has a Back button', (await page.locator('#shopTab .category-back-btn').count()) === 1);
+    await page.click('#shopTab .category-back-btn');
+    await page.waitForTimeout(80);
+    check('Back returns to the category tile grid', (await page.locator('#shopTab .category-tile').count()) > 1);
+    await page.click('[data-close="inventoryPanel"]');
+
     const buyRes = await page.evaluate(() => window.__pixelHotel.buy('plant'));
     check('buying a plant succeeds', buyRes.ok === true);
     const placeRes = await page.evaluate((instanceId) => window.__pixelHotel.placeAt(instanceId, 7, 6, 0), buyRes.instanceId);
     check('placing the plant in My Room succeeds', placeRes.ok === true);
+
+    // ---- v0.8.1: the lamp in My Room toggles the room's own light on/off ----
+    const myLampBefore = await page.evaluate(() => window.__pixelHotel.getState().rooms.myroom.lightsOn);
+    check('My Room lamp starts on by default', myLampBefore !== false);
+    const myToggleOff = await page.evaluate(() => window.__pixelHotel.interactWith('lamp', true));
+    const myLampOff = await page.evaluate(() => window.__pixelHotel.getState().rooms.myroom.lightsOn);
+    check('interacting with the lamp in My Room toggles the room light off', myToggleOff === true && myLampOff === false);
+    const myToggleOn = await page.evaluate(() => window.__pixelHotel.interactWith('lamp', true));
+    const myLampOn = await page.evaluate(() => window.__pixelHotel.getState().rooms.myroom.lightsOn);
+    check('toggling the lamp again turns the room light back on', myToggleOn === true && myLampOn === true);
+    // Leave the lamp off so the reload check below also verifies lightsOn persistence.
+    await page.evaluate(() => window.__pixelHotel.interactWith('lamp', true));
+    // interactWith() snapped the player onto the lamp's approach tile; re-entering the
+    // room resets them to the spawn tile so the camera framing below (and the night-view
+    // pixel sample at a fixed canvas coordinate) matches the pre-existing baseline.
+    await page.evaluate(() => window.__pixelHotel.takeElevator('myroom'));
+    await page.waitForTimeout(500);
 
     // ---- separate music and SFX mute/volume controls & persistence ----
     await page.click('#btnMusicMute');
@@ -623,6 +709,7 @@ async function main() {
       stateAfterReload.room === 'myroom' &&
       stateAfterReload.rooms.myroom.placed.some((p) => p.itemId === 'plant' && p.x === 7 && p.y === 6)
     );
+    check('the My Room lamp off state persists across reload', stateAfterReload.rooms.myroom.lightsOn === false);
     check(
       'separate musicMuted and sfxVolume settings persist across reload and defer context until gesture',
       audioAfterReload.musicMuted === true &&
@@ -849,11 +936,15 @@ async function runMultiplayerUiFlowTests(browser) {
     await page.click('#btnInventory');
     await page.click('[data-tab="roomTab"]');
     await page.waitForTimeout(80);
+    await page.click('#roomTab .category-tile'); // drill into Carol's one placed category to see the actual item row
+    await page.waitForTimeout(80);
     const roomTabDuringVisit = await page.innerHTML('#roomTab');
     check('mp: visit — the visited room renders read-only (no Move/Pick up controls)',
-      !roomTabDuringVisit.includes('data-move') && !roomTabDuringVisit.includes('data-pickup'));
+      roomTabDuringVisit.includes('item-name') && !roomTabDuringVisit.includes('data-move') && !roomTabDuringVisit.includes('data-pickup'));
 
     await page.click('[data-tab="shopTab"]');
+    await page.waitForTimeout(80);
+    await page.click('#shopTab .category-tile'); // Shop opens on category tiles; drill into the first one
     await page.waitForTimeout(80);
     // Baseline right before the click, not before entering the visit — switching into My Room can itself
     // complete a "visit N rooms" quest and grant coins, which is unrelated to whether buying is blocked.

@@ -4,6 +4,25 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.8.1] - 2026-11-09
+
+### Fixed
+
+- **City Vehicles Floating Over Buildings (`js/render.js`)**: `drawBackground` now renders the city in three strictly ordered passes onto separate cached canvases — street/sky backdrop (no buildings), animated vehicles, then a buildings layer that **unconditionally redraws every block's building** (not just a "foreground" depth subset as before, which was the actual bug: any building behind that depth cutoff never got redrawn over the vehicle layer). Buildings now always occlude cars correctly regardless of their distance from the hotel, on every floor and at every zoom. Covered by a new Node test that drives `drawBackground` against a fake canvas context and asserts the buildings blit always lands after the vehicle draw calls.
+- **Incomplete City Background at Zoom-Out (`js/render.js`)**: `buildIsoCityLayout`'s screen-space culling margins, the road/crossing/block grid extents, and the spire/beacon bounds were all too tight for a fully zoomed-out viewport, leaving an empty sky band with buildings cut off flat along a horizontal line. Extended the over-scan padding and block grid range, and added a procedural distant skyline silhouette plus high-floor cloud ribbons so the city now fills the viewport edge-to-edge at every floor and the full `[0.55, 2.5]` zoom range. Verified with screenshots at min zoom on floors 1, 5, 8, and 10.
+- **Player Could Sit On Counters/Bars/Tables (`js/main.js`)**: `applyInteractionArrival`'s sitting-pose decision only checked the interaction *kind* (`'sit'`/`'eat'`), but counters/tables/bars also use kind `'eat'` for their standing "use" interaction — so walking up to use one (or an NPC forced onto one) rendered the avatar sitting on top of it. The sit pose now additionally requires the catalogue item's own `seat: true` flag, so only real seats (chairs, stools, sofas, benches) ever sit; standing-use surfaces render standing. A new logic test asserts every item whose id/name looks like a table/counter/bar/desk has `seat: false`.
+- **Floor 9 & 10 Furniture Overlaps (`js/data.js`)**: Sky Garden's two ornamental sakura trees visually fused into the neighbouring flower planter (adjacent-tile sprites with tall canopies overlapping in the isometric projection even without a literal tile collision); repositioned both trees well clear of the planters, the koi pond, and the benches. Rooftop's bar counter/stools were already correctly spaced — the "Lola fused into the bar" symptom traced back to the same sit-pose bug above (an NPC forced onto the bar rendered seated). A new logic test checks every preset floor layout for overlapping non-flat furniture footprints and verifies every door/elevator-mat landing tile stays reachable and unblocked.
+
+### Added
+
+- **Lamp/Light On-Off Toggle (`js/data.js`, `js/main.js`, `js/render.js`)**: Every light-fixture item (Lava Lamp, String Light Post, Neon "HOTEL" Sign, Imperial Crystal Chandelier — tagged `lightSource: true`, interaction `toggle_light`) can now be clicked to toggle the room's lighting. Off darkens the room's floor and walls with a real colour-shade dim (not just an overlay) and renders the fixture's own sprite darkened; on restores normal colours and the fixture's warm emissive glow at night. Only works in the player's own My Room — public floors and a friend's room during a multiplayer Visit show a "Not your room" toast and make no change. The per-room `lightsOn` flag is persisted in the save (`SAVE_VERSION` 4 → 5, with a migration step that defaults any existing room to on and preserves an already-saved choice).
+- **Elevator Doormat Trigger + Modal Popup (`index.html`, `css/style.css`, `js/main.js`)**: The floor directory now opens as soon as the avatar steps on the doormat tile directly in front of an elevator door, instead of walking into the door itself (elevator door tiles are now non-walkable). The directory is a centred modal popup with a dimmed backdrop, closable via the X button, Esc, or a click outside the box; the E key shortcut still opens the same popup.
+- **Shop/Inventory Category Submenus (`js/data.js`, `js/main.js`, `css/style.css`)**: Every catalogue item now carries a `category` (Seating, Tables, Beds, Lighting, Plants, Rugs, Decor & Signs, Entertainment, Outdoor/Pool, Kitchen/Food). The Shop, My Items, and In This Room tabs all open on a grid of category tiles showing each category's item count; clicking a tile drills into its filtered list with a Back button. Buy/Place/Move/Pick-up/locked behaviour is unchanged. A logic test asserts every catalogue item has a category from the canonical list.
+
+### Testing
+
+- `npm test` (73 Node unit/logic tests) and `npm run test:smoke` (Playwright, DPR 1× and 2×, plus the mocked-multiplayer UI flow) both pass.
+
 ## [0.8.0] - 2026-11-08
 
 ### Added

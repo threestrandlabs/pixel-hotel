@@ -12,6 +12,7 @@ export function createDefaultState() {
   const rooms = {};
   for (const id of Object.keys(ROOMS)) rooms[id] = {
     placed: (SEED_FURNITURE[id] || []).map((f, i) => ({ instanceId: `seed-${id}-${i}`, ...f })),
+    lightsOn: true,
   };
   return {
     version: SAVE_VERSION,
@@ -236,6 +237,21 @@ const MIGRATIONS = {
       stats: { ...def.stats, ...(old.stats || {}), activitiesUsed: old.stats?.activitiesUsed || [] },
       settings: { ...def.settings, ...(old.settings || {}) },
     };
+  },
+  4: (old) => {
+    const def = createDefaultState();
+    const mergedRooms = { ...def.rooms };
+    if (old.rooms && typeof old.rooms === 'object') {
+      for (const [roomId, rState] of Object.entries(old.rooms)) {
+        if (!def.rooms[roomId] || !rState || typeof rState !== 'object') continue;
+        mergedRooms[roomId] = {
+          ...mergedRooms[roomId],
+          ...rState,
+          lightsOn: typeof rState.lightsOn === 'boolean' ? rState.lightsOn : true,
+        };
+      }
+    }
+    return { ...def, ...old, version: 5, rooms: mergedRooms };
   },
 };
 

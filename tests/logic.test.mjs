@@ -7,19 +7,19 @@ import {
 import {
   buyItem, placeItem, pickupItem, moveItem, canPlaceAt, footprintCells, rotatedFootprint,
   availableCatalogue, interactionSlots, findFreeInteractionSlot, findApproachTile,
-  hasDoorArrivalRoute, isDiningSeat,
+  hasDoorArrivalRoute, isDiningSeat, isFurnitureWalkable,
 } from '../js/inventory.js';
 import {
   initQuestState, advanceQuestsByType, setQuestProgress, claimReward, listQuests,
 } from '../js/quests.js';
 import { createDefaultState, loadState, saveState, resetState, SAVE_KEY } from '../js/save.js';
-import { getCatalogueItem, TILE, SAVE_VERSION, ROOMS, NPCS, CATALOGUE } from '../js/data.js';
+import { getCatalogueItem, TILE, SAVE_VERSION, ROOMS, NPCS, CATALOGUE, SEED_FURNITURE, ITEM_CATEGORIES } from '../js/data.js';
 import { respondToMessage, findWanderTarget, createNpcRuntime, tickNpc } from '../js/npc.js';
 import { LOOKS, renderCharacter, buildParts } from '../js/voxel.js';
 import { buildWindowSegment, FURNITURE_BUILDERS } from '../js/sprites.js';
 import {
   tileToScreen, computeOrigin, computeGroundDy, computeCityGroundDy,
-  projectIsoCityPoint, buildIsoCityLayout, computeCityVehicles,
+  projectIsoCityPoint, buildIsoCityLayout, computeCityVehicles, drawBackground,
   clampZoom, zoomAtPoint, centerCameraOnTile, screenToTile, worldToScreen,
   DEFAULT_ZOOM, MIN_ZOOM, MAX_ZOOM, deviceScale,
 } from '../js/render.js';
@@ -516,7 +516,7 @@ test('catalogue: all 8 new v0.3.0 collection items have valid definitions, descr
     assert.ok(item.name && item.name.length > 5, `missing or too short name for ${id}`);
     assert.ok(item.description && item.description.length > 15, `missing or too short description for ${id}`);
     assert.ok(item.price >= 30 && item.price <= 100, `price ${item.price} out of sensible range for ${id}`);
-    assert.equal(item.category, 'decor');
+    assert.ok(item.category && typeof item.category === 'string', `missing category for ${id}`);
     assert.ok(item.footprint.w >= 1 && item.footprint.h >= 1, `invalid footprint for ${id}`);
     assert.equal(item.seat, false);
     assert.equal(item.unlockRequires, null, `item ${id} should be available for purchase`);
@@ -761,8 +761,7 @@ test('v0.5.0 rooms: irregular VOID cutouts, zone tiles, door landing clearance, 
   assert.equal(canPlaceAt(lobbyRoom, rug, 4, 1, 0).ok, true, 'flat rug allowed on door apron');
 });
 
-test('v0.5.0 migration: v2 save migrates to v4, pruning items on VOID cutouts and rescuing player position if on VOID', () => {
-  assert.equal(SAVE_VERSION, 4);
+test('v0.5.0 migration: v2 save migrates to the latest version, pruning items on VOID cutouts and rescuing player position if on VOID', () => {
   const v2Save = {
     version: 2,
     coins: 500,
@@ -781,7 +780,7 @@ test('v0.5.0 migration: v2 save migrates to v4, pruning items on VOID cutouts an
   };
   const storage = makeFakeStorage({ [SAVE_KEY]: JSON.stringify(v2Save) });
   const loaded = loadState(storage);
-  assert.equal(loaded.version, 4);
+  assert.equal(loaded.version, SAVE_VERSION);
   assert.equal(loaded.rooms.lobby.placed.length, 1);
   assert.equal(loaded.rooms.lobby.placed[0].instanceId, 'valid_stool');
   assert.deepEqual({ x: loaded.player.x, y: loaded.player.y }, ROOMS.lobby.spawn);
@@ -1477,5 +1476,135 @@ test('v0.7.2 audio: unmuting then changing room keeps the room track playing (no
     global.clearTimeout = realClearTimeout;
     if (synth) synth.stopLoop();
     delete global.Audio;
+  }
+});
+
+// ======================= v0.8.1: seats, overlaps, categories =======================
+
+test('v0.8.1 furniture: table/counter/bar/desk items are never seats', () => {
+  const surfaceLike = CATALOGUE.filter((c) => /table|counter|\bbar\b|desk|station/i.test(c.id) || /table|counter|\bbar\b|desk|station/i.test(c.name));
+  assert.ok(surfaceLike.length > 5, 'sanity: the catalogue has several table/counter/bar/desk items');
+  for (const item of surfaceLike) {
+    assert.equal(item.seat, false, `${item.id} looks like a table/counter/bar/desk and must not be a seat`);
+  }
+  for (const item of CATALOGUE) {
+    if (item.seat) {
+      assert.ok(item.interaction, `seat item ${item.id} must declare an interaction`);
+      assert.ok(Array.isArray(item.seatOffsets) && item.seatOffsets.length > 0, `seat item ${item.id} must declare seatOffsets`);
+    }
+  }
+});
+
+test('v0.8.1 furniture: no two non-walkable preset furniture footprints overlap, and doors/elevator mats stay clear', () => {
+  for (const [roomId, placedList] of Object.entries(SEED_FURNITURE)) {
+    const room = ROOMS[roomId];
+    const cellOwner = new Map();
+    for (const placed of placedList) {
+      const item = getCatalogueItem(placed.itemId);
+      assert.ok(item, `${roomId}: ${placed.itemId} is a real catalogue item`);
+      if (isFurnitureWalkable(item)) continue; // flat decor (rugs, runners) may legitimately sit under other items
+      for (const c of footprintCells(placed.x, placed.y, item.footprint, placed.rot || 0)) {
+        const key = `${c.x},${c.y}`;
+        assert.ok(!cellOwner.has(key), `${roomId}: ${placed.itemId} overlaps ${cellOwner.get(key)} at (${key})`);
+        cellOwner.set(key, placed.itemId);
+      }
+    }
+    assert.ok(hasDoorArrivalRoute(room, placedList), `${roomId}: every door/elevator mat must stay reachable and unblocked`);
+  }
+});
+
+// ======================= v0.8.1: city vehicle/building draw order =======================
+
+function makeFakeCanvasCtx({ record = false } = {}) {
+  const calls = [];
+  let transform = { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
+  const push = (type) => { if (record) calls.push(type); };
+  return {
+    _calls: calls,
+    canvas: { width: 0, height: 0 },
+    fillStyle: '#000', strokeStyle: '#000', lineWidth: 1, imageSmoothingEnabled: true,
+    save() { push('save'); }, restore() { push('restore'); },
+    beginPath() { push('beginPath'); }, closePath() { push('closePath'); }, clip() { push('clip'); }, rect() { push('rect'); },
+    moveTo() { push('moveTo'); }, lineTo() { push('lineTo'); }, arc() { push('arc'); }, ellipse() { push('ellipse'); },
+    fill() { push('fill'); }, stroke() { push('stroke'); },
+    fillRect() { push('fillRect'); }, strokeRect() { push('strokeRect'); }, clearRect() { push('clearRect'); },
+    createLinearGradient() { return { addColorStop() {} }; },
+    createRadialGradient() { return { addColorStop() {} }; },
+    setTransform(a, b, c, d, e, f) { transform = { a, b, c, d, e, f }; push('setTransform'); },
+    getTransform() { return { ...transform }; },
+    drawImage() { push('drawImage'); },
+  };
+}
+
+test('v0.8.1 render: street vehicles are drawn strictly between the street backdrop and the buildings layer, so buildings always occlude them', () => {
+  const realDocument = global.document;
+  global.document = {
+    createElement(tag) {
+      assert.equal(tag, 'canvas', 'drawBackground only creates offscreen <canvas> elements');
+      const canvas = { width: 0, height: 0 };
+      canvas.getContext = () => makeFakeCanvasCtx({ record: false });
+      return canvas;
+    },
+  };
+  try {
+    const liveCtx = makeFakeCanvasCtx({ record: true });
+    drawBackground(liveCtx, 960, 600, 0.5, 8, 1, 5000, ROOMS.myroom, 1, null);
+    const calls = liveCtx._calls;
+    const blitIdx = calls.reduce((acc, c, i) => (c === 'drawImage' ? [...acc, i] : acc), []);
+    assert.equal(blitIdx.length, 2, 'exactly two cached-layer blits land on the live canvas: street backdrop, then buildings');
+    const [backdropIdx, buildingsIdx] = blitIdx;
+    assert.ok(backdropIdx < buildingsIdx, 'the street backdrop must blit before the buildings layer');
+    const vehicleDrawn = calls.some((c, i) => i > backdropIdx && i < buildingsIdx && (c === 'fill' || c === 'arc'));
+    assert.ok(vehicleDrawn, 'vehicles must be drawn strictly between the backdrop and buildings blits, so buildings always occlude them');
+  } finally {
+    global.document = realDocument;
+  }
+});
+
+// ======================= v0.8.1: lamp/light toggle & save migration =======================
+
+test('v0.8.1 lighting: every lamp/light catalogue item is a proper toggleable light source', () => {
+  const lights = CATALOGUE.filter((c) => c.lightSource);
+  assert.ok(lights.length >= 4, 'sanity: lamp, string_lights, neon_sign, chandelier should all be tagged');
+  for (const item of lights) {
+    assert.equal(item.interaction, 'toggle_light', `${item.id} must use the toggle_light interaction`);
+    assert.ok(item.emissive && item.emissive.color, `${item.id} must declare an emissive glow to toggle`);
+    assert.equal(item.seat, false, `${item.id} is a light fixture, not a seat`);
+  }
+  for (const id of ['lamp', 'string_lights', 'neon_sign', 'chandelier']) {
+    assert.ok(getCatalogueItem(id)?.lightSource, `${id} must be tagged as a light source`);
+  }
+});
+
+test('v0.8.1 persistence: lightsOn defaults true for a fresh save and survives a v4 -> latest migration', () => {
+  const fresh = createDefaultState();
+  assert.equal(fresh.rooms.myroom.lightsOn, true);
+
+  const v4Save = {
+    version: 4,
+    coins: 100,
+    unlocked: [],
+    inventory: [],
+    rooms: { myroom: { placed: [{ instanceId: 'seed-myroom-0', itemId: 'lamp', x: 8, y: 2, rot: 0 }] } },
+    quests: {},
+    player: { room: 'myroom', x: 4, y: 2, dir: 'down', sitting: null },
+  };
+  const storage = makeFakeStorage({ [SAVE_KEY]: JSON.stringify(v4Save) });
+  const loaded = loadState(storage);
+  assert.equal(loaded.version, SAVE_VERSION);
+  assert.equal(loaded.rooms.myroom.lightsOn, true, 'a save with no lightsOn field migrates in as on (unchanged behaviour)');
+
+  // A save that had already turned the lamp off must keep that choice through migration.
+  const v4SaveOff = { ...v4Save, rooms: { myroom: { ...v4Save.rooms.myroom, lightsOn: false } } };
+  const storage2 = makeFakeStorage({ [SAVE_KEY]: JSON.stringify(v4SaveOff) });
+  const loaded2 = loadState(storage2);
+  assert.equal(loaded2.rooms.myroom.lightsOn, false);
+});
+
+test('v0.8.1 catalogue: every item has a valid shop/inventory category', () => {
+  assert.ok(ITEM_CATEGORIES.length >= 8, 'sanity: the taxonomy has several categories');
+  const validIds = new Set(ITEM_CATEGORIES.map((c) => c.id));
+  for (const item of CATALOGUE) {
+    assert.ok(validIds.has(item.category), `${item.id} has an invalid category: ${item.category}`);
   }
 });
