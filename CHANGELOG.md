@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.7.2] - 2026-11-08
+
+### Fixed
+
+- **Crisp Rendering at Every DPR × Zoom (`js/render.js`)**: All baked bitmaps (furniture, characters/NPCs, floor/wall/window/door tiles, the tower cut-away, and the city skyline/foreground) are now rasterised at `deviceScale(dpr, zoom) = ceil(dpr * zoom)` instead of raw `dpr`, so zooming in no longer upscales a lower-resolution bitmap into a blurry one — every layer stays 1:1 or sharper in device pixels at any supported DPR/zoom combination.
+- **Zoomed-Out Background Gap (`js/render.js`)**: `drawBackground`/`renderSkylineToCanvas` now over-scan the baked city canvas (bucketed to 96px steps) by exactly the margin a zoom-out below 100% exposes, so the sky/city/ground always fills the viewport edge-to-edge with no empty margin, and the bottom-left music player is never clipped.
+- **Vehicles Floating Over Building Facades (`js/render.js`)**: City blocks nearer the camera than street level are redrawn in a second transparent pass over the animated vehicle layer (`renderSkylineToCanvas(..., foregroundOnly)`), so a car on a road behind a building is correctly occluded instead of appearing to drive across its windows; headlight/taillight cones stay clipped to the ground-plane band.
+- **Music Not Restarting After Unmute Then Room Change (`js/audio.js`)**: `_playFileTrack` now cancels any pending deferred-pause timer left over from a prior fade-out of the track it is about to (re)play, so a stale timer scheduled before the mute/room-change sequence can no longer pause the audio element seconds after playback has already resumed.
+
 ## [0.7.1] - 2026-11-07
 
 ### Added

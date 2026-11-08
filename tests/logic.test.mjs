@@ -1379,3 +1379,72 @@ test('v0.7.1 audio: floor MP3s play per room, crossfade between floors, and fall
     delete global.Audio;
   }
 });
+
+test('v0.7.2 audio: unmuting then changing room keeps the room track playing (no stale pause)', () => {
+  class FakeGainParam {
+    constructor() { this.value = 0.0001; }
+    setValueAtTime(v) { this.value = v; }
+    linearRampToValueAtTime(v) { this.value = v; }
+    exponentialRampToValueAtTime(v) { this.value = v; }
+    setTargetAtTime(v) { this.value = v; }
+    cancelScheduledValues() {}
+  }
+  class FakeGainNode { constructor() { this.gain = new FakeGainParam(); } connect() {} disconnect() {} }
+  class FakeAudioContext {
+    constructor() { this.state = 'running'; this.currentTime = 0; this.sampleRate = 22050; this.destination = {}; }
+    createGain() { return new FakeGainNode(); }
+    createBiquadFilter() { return { type: 'lowpass', frequency: { value: 1000 }, Q: { value: 0.7 }, connect() {} }; }
+    createOscillator() { return { frequency: { value: 440, setValueAtTime() {}, exponentialRampToValueAtTime() {} }, detune: { value: 0 }, connect() {}, start() {}, stop() {} }; }
+    createBuffer(ch, len) { return { getChannelData: () => new Float32Array(len) }; }
+    createBufferSource() { return { buffer: null, connect() {}, start() {}, stop() {} }; }
+    createMediaElementSource() { return { connect() {}, disconnect() {} }; }
+    resume() {}
+  }
+  class FakeAudioElement {
+    constructor() { this.loop = false; this.preload = ''; this._src = ''; this.paused = true; }
+    set src(v) { this._src = v; } get src() { return this._src; }
+    addEventListener() {}
+    play() { this.paused = false; return Promise.resolve(); }
+    pause() { this.paused = true; }
+  }
+
+  // Capture deferred pause timers so we can deterministically fire them AFTER the
+  // interaction sequence, emulating the real-world delay that exposed the bug.
+  const realSetTimeout = global.setTimeout;
+  const realClearTimeout = global.clearTimeout;
+  const pending = new Map();
+  let nextId = 1;
+  global.setTimeout = (fn, ms) => { if (ms >= 200) { const id = nextId++; pending.set(id, fn); return id; } return realSetTimeout(fn, ms); };
+  global.clearTimeout = (id) => { if (pending.has(id)) pending.delete(id); else realClearTimeout(id); };
+  global.Audio = FakeAudioElement;
+
+  let synth;
+  try {
+    synth = new ChiptuneAudio(FakeAudioContext);
+    synth.unlockGesture();
+
+    // Visit pool then gym (pool crossfades out, scheduling a deferred pause on pool).
+    synth.setRoomMood('pool', 0.5, 5);
+    synth.setRoomMood('gym', 0.5, 4);
+
+    // Mute then unmute (gym fades out and is restarted).
+    synth.setMusicMuted(true);
+    synth.setMusicMuted(false);
+
+    // Change room back to pool — the room's track must play.
+    synth.setRoomMood('pool', 0.5, 5);
+    assert.equal(synth.getMoodInfo().usingFile, true, 'pool file track becomes active after room change');
+    assert.equal(synth.fileNodes.pool.el.paused, false, 'pool track is playing right after the room change');
+
+    // Fire every deferred pause timer (what happens ~1s later in the real app).
+    for (const fn of pending.values()) fn();
+
+    assert.equal(synth.fileNodes.pool.el.paused, false, 'pool track stays playing; no stale pause timer killed it');
+    assert.equal(synth.activeFileTrackId, 'pool', 'pool remains the active file track');
+  } finally {
+    global.setTimeout = realSetTimeout;
+    global.clearTimeout = realClearTimeout;
+    if (synth) synth.stopLoop();
+    delete global.Audio;
+  }
+});

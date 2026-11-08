@@ -16,6 +16,15 @@ export const TOP_PADDING = 54;
 
 const canvasCache = new Map();
 
+// Effective device-pixel density for baked bitmaps drawn under the camera transform.
+// The camera scales the world by `zoom`, so a sprite baked only at `dpr` gets upscaled
+// (blurry) when zoomed in. Baking at ceil(dpr*zoom) guarantees it is never upscaled,
+// while snapping to integers bounds the sprite/skyline caches to a few buckets instead
+// of rebaking on every 0.01 zoom step. Capped so an extreme dpr can't explode memory.
+export function deviceScale(dpr = 1, zoom = 1) {
+  return Math.max(1, Math.min(6, Math.ceil(dpr * (zoom || 1))));
+}
+
 // Baked sprite canvases are rasterised at `dpr` density in room/world space. The
 // caller may be drawing under a camera transform (device-pixel-ratio * zoom, plus
 // pan) — we must honour that same transform here too, or sprites drift out of sync
@@ -285,7 +294,7 @@ function seededRand(seed) {
   };
 }
 
-export function buildIsoCityLayout(room = { id: 'lobby', width: 12, height: 9, floor: 1 }, width = 960, height = 600, phase = 0.5) {
+export function buildIsoCityLayout(room = { id: 'lobby', width: 12, height: 9, floor: 1 }, width = 960, height = 600, phase = 0.5, padX = 320, padBottom = 240) {
   const W = room?.width || 12;
   const H = room?.height || 9;
   const floor = room?.floor || 1;
@@ -392,14 +401,14 @@ export function buildIsoCityLayout(room = { id: 'lobby', width: 12, height: 9, f
   const blocks = [];
   const beacons = [];
 
-  for (let sum = -8; sum <= 8; sum++) {
-    for (let bi = -4; bi <= 4; bi++) {
+  for (let sum = -12; sum <= 12; sum++) {
+    for (let bi = -6; bi <= 6; bi++) {
       const bj = sum - bi;
-      if (bj < -4 || bj > 4) continue;
+      if (bj < -6 || bj > 6) continue;
       const [u0, u1] = uBounds(bi);
       const [v0, v1] = vBounds(bj);
       const cPt = P((u0 + u1) / 2, (v0 + v1) / 2, 0);
-      if (cPt[0] < -320 || cPt[0] > width + 320 || cPt[1] < horizonY - 110 || cPt[1] > height + 240) {
+      if (cPt[0] < -padX || cPt[0] > width + padX || cPt[1] < horizonY - 110 || cPt[1] > height + padBottom) {
         continue;
       }
 
@@ -573,7 +582,8 @@ export function buildIsoCityLayout(room = { id: 'lobby', width: 12, height: 9, f
   };
 }
 
-let skylineCache = { key: '', canvas: null, beacons: [] };
+let skylineCache = { key: '', canvas: null, beacons: [], ox: 0, oy: 0 };
+let foregroundCache = { key: '', canvas: null, ox: 0, oy: 0 };
 let cutawayCache = { key: '', canvas: null };
 
 // ---------- Animated City Vehicles (Cars, Taxis, Buses, Scooters) ----------
@@ -797,23 +807,29 @@ export function drawCityVehicles(ctx, layout, vehicles, phase = 0.5, dpr = 1) {
   }
 }
 
-export function drawBackground(ctx, width, height, phase, floor = 1, dpr = 1, now = 0, room = null) {
+export function drawBackground(ctx, width, height, phase, floor = 1, dpr = 1, now = 0, room = null, zoom = 1) {
   const phaseBucket = Math.round(phase * 48) % 48;
   const rW = room?.width || 12;
   const rH = room?.height || 9;
-  const key = `${width}x${height}@${dpr}:p${phaseBucket}:f${floor}:${rW}x${rH}`;
+  // When zoomed out the whole bitmap shrinks toward the viewport centre, so over-scan
+  // the baked city by enough world pixels to still cover the exposed margins. Bucketed
+  // to 96px steps so a continuous zoom doesn't rebake every frame. No over-scan at zoom>=1.
+  const z = zoom || 1;
+  const ox = z < 1 ? Math.ceil(((width / z - width) / 2 + 72) / 96) * 96 : 0;
+  const oy = z < 1 ? Math.ceil(((height / z - height) / 2 + 72) / 96) * 96 : 0;
+  const key = `${width}x${height}+${ox}x${oy}@${dpr}:p${phaseBucket}:f${floor}:${rW}x${rH}`;
 
   if (skylineCache.key !== key) {
     const off = skylineCache.canvas || document.createElement('canvas');
-    off.width = Math.max(1, Math.round(width * dpr));
-    off.height = Math.max(1, Math.round(height * dpr));
+    off.width = Math.max(1, Math.round((width + 2 * ox) * dpr));
+    off.height = Math.max(1, Math.round((height + 2 * oy) * dpr));
     const g = off.getContext('2d');
-    g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const beacons = renderSkylineToCanvas(g, width, height, phaseBucket / 48, floor, room);
-    skylineCache = { key, canvas: off, beacons };
+    g.setTransform(dpr, 0, 0, dpr, ox * dpr, oy * dpr);
+    const beacons = renderSkylineToCanvas(g, width, height, phaseBucket / 48, floor, room, ox, oy);
+    skylineCache = { key, canvas: off, beacons, ox, oy };
   }
 
-  blitDeviceAligned(ctx, skylineCache.canvas, 0, 0, dpr);
+  blitDeviceAligned(ctx, skylineCache.canvas, -skylineCache.ox, -skylineCache.oy, dpr);
 
   // Live animated city vehicles on isometric road corridors. Clipped to the same
   // ground-plane band as the roads/buildings so a vehicle far down a road (near the
@@ -823,10 +839,27 @@ export function drawBackground(ctx, width, height, phase, floor = 1, dpr = 1, no
   const vehicles = computeCityVehicles(layout, now, phase);
   ctx.save();
   ctx.beginPath();
-  ctx.rect(0, layout.horizonY, width, height - layout.horizonY);
+  ctx.rect(-ox, layout.horizonY, width + 2 * ox, height + oy - layout.horizonY);
   ctx.clip();
   drawCityVehicles(ctx, layout, vehicles, phase, dpr);
   ctx.restore();
+
+  // Re-draw the foreground buildings (nearer the camera than street level) over the
+  // vehicles so a car on a road behind a building is occluded by it instead of floating
+  // across its facade. Cached on a transparent canvas, aligned 1:1 with the skyline cache.
+  const fgKey = `${key}:fg`;
+  if (foregroundCache.key !== fgKey) {
+    const off = foregroundCache.canvas || document.createElement('canvas');
+    off.width = Math.max(1, Math.round((width + 2 * ox) * dpr));
+    off.height = Math.max(1, Math.round((height + 2 * oy) * dpr));
+    const g = off.getContext('2d');
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.clearRect(0, 0, off.width, off.height);
+    g.setTransform(dpr, 0, 0, dpr, ox * dpr, oy * dpr);
+    renderSkylineToCanvas(g, width, height, phaseBucket / 48, floor, room, ox, oy, true);
+    foregroundCache = { key: fgKey, canvas: off, ox, oy };
+  }
+  blitDeviceAligned(ctx, foregroundCache.canvas, -foregroundCache.ox, -foregroundCache.oy, dpr);
 
   // Live blinking red aircraft warning beacons on tall isometric skyscraper spires
   const blinkOn = Math.floor(now / 650) % 2 === 0;
@@ -850,28 +883,42 @@ function drawIsoPrism(g, P, u0, v0, u1, v1, z0, z1, leftCol, rightCol, topCol) {
   fillPoly(g, [P(u0, v0, z1), P(u1, v0, z1), P(u1, v1, z1), P(u0, v1, z1)], topCol);
 }
 
-function renderSkylineToCanvas(g, width, height, phase, floor, room = null) {
+// foregroundOnly renders ONLY the city blocks nearer the camera than the street level
+// (bi+bj >= FG_DEPTH) on a transparent canvas, with no sky/ground. Blitted on top of the
+// animated vehicles so cars on roads behind a building are occluded instead of floating
+// over its facade (depth-sorted behind foreground buildings).
+const FG_DEPTH = 1;
+function renderSkylineToCanvas(g, width, height, phase, floor, room = null, ox = 0, oy = 0, foregroundOnly = false) {
   const { skyTop, skyMid, skyBottom, day } = dayNightColors(phase);
   const roomSpec = room || { id: 'lobby', width: 12, height: 9, floor };
-  const layout = buildIsoCityLayout(roomSpec, width, height, phase);
+  const layout = buildIsoCityLayout(roomSpec, width, height, phase, 320 + ox, 240 + oy);
   const { originX, groundOriginY, horizonY } = layout;
   const P = (u, v, z = 0) => projectIsoCityPoint(u, v, z, originX, groundOriginY);
+  // Logical fill bounds, widened by the over-scan so the city/ground/sky still cover
+  // the viewport when the camera is zoomed out (the whole bitmap shrinks toward centre).
+  const bx0 = -ox;
+  const by0 = -oy;
+  const bw = width + 2 * ox;
+  const bh = height + 2 * oy;
+  const by1 = height + oy;
+  const hazeColor = lerpColor('#1d244b', '#9ec6ec', day);
 
+  if (!foregroundOnly) {
   // 1. Sky backdrop gradient
   const grad = g.createLinearGradient(0, 0, 0, horizonY + 50);
   grad.addColorStop(0, skyTop);
   grad.addColorStop(0.58, skyMid);
   grad.addColorStop(1, skyBottom);
   g.fillStyle = grad;
-  g.fillRect(0, 0, width, height);
+  g.fillRect(bx0, by0, bw, bh);
 
   // 2. Twinkling stars at night / twilight
   if (day < 0.72) {
     const starAlpha = Math.min(0.95, (0.72 - day) * 1.45);
     const rStar = seededRand(90421);
     for (let i = 0; i < 85; i++) {
-      const sx = Math.round(rStar() * width);
-      const sy = Math.round(rStar() * (horizonY * 0.85));
+      const sx = Math.round(bx0 + rStar() * bw);
+      const sy = Math.round(by0 + rStar() * (horizonY - by0) * 0.85);
       const sz = rStar() > 0.8 ? 2 : 1.2;
       g.fillStyle = `rgba(255, 248, 224, ${(starAlpha * (0.4 + rStar() * 0.6)).toFixed(2)})`;
       g.fillRect(sx, sy, sz, sz);
@@ -919,32 +966,31 @@ function renderSkylineToCanvas(g, width, height, phase, floor, room = null) {
   const hillColor = lerpColor('#151d3f', '#789ec8', day);
   g.fillStyle = hillColor;
   g.beginPath();
-  g.moveTo(0, horizonY);
-  for (let x = 0; x <= width; x += 40) {
+  g.moveTo(bx0, horizonY);
+  for (let x = bx0; x <= bx0 + bw; x += 40) {
     const h = Math.sin(x * 0.0065 + 1.2) * 12 + Math.cos(x * 0.015) * 6 + 10;
     g.lineTo(x, horizonY - h);
   }
-  g.lineTo(width, horizonY + 8);
-  g.lineTo(0, horizonY + 8);
+  g.lineTo(bx0 + bw, horizonY + 8);
+  g.lineTo(bx0, horizonY + 8);
   g.closePath();
   g.fill();
 
   // 4. Shared Isometric Ground Plane, Roads, Lane Markings & Zebra Crossings (clipped below horizonY)
-  const hazeColor = lerpColor('#1d244b', '#9ec6ec', day);
   const asphaltNear = lerpColor('#191926', '#4c5360', day);
   const asphaltFar = lerpColor(asphaltNear, hazeColor, 0.48);
 
   g.save();
   g.beginPath();
-  g.rect(0, horizonY, width, height - horizonY);
+  g.rect(bx0, horizonY, bw, by1 - horizonY);
   g.clip();
 
-  const groundGrad = g.createLinearGradient(0, horizonY, 0, height);
+  const groundGrad = g.createLinearGradient(0, horizonY, 0, by1);
   groundGrad.addColorStop(0, asphaltFar);
   groundGrad.addColorStop(0.38, lerpColor(asphaltNear, hazeColor, 0.18));
   groundGrad.addColorStop(1, asphaltNear);
   g.fillStyle = groundGrad;
-  g.fillRect(0, horizonY, width, height - horizonY);
+  g.fillRect(bx0, horizonY, bw, by1 - horizonY);
 
   // Isometric road corridors & centre lane dashes aligned with hotel (u, v) axes
   const roadSurfCol = lerpColor('#161622', '#454c58', day);
@@ -975,7 +1021,8 @@ function renderSkylineToCanvas(g, width, height, phase, floor, room = null) {
   mistGrad.addColorStop(0.45, lerpColor('#1d244b', '#cde4fa', day) + '55');
   mistGrad.addColorStop(1, 'rgba(255,255,255,0)');
   g.fillStyle = mistGrad;
-  g.fillRect(0, horizonY - 12, width, 40);
+  g.fillRect(bx0, horizonY - 12, bw, 40);
+  } // end !foregroundOnly background
 
   // 5. Depth-Sorted Isometric City Blocks, Pavements, 3D Buildings, Trees & Streetlamps
   const basePaveTop = lerpColor('#343244', '#b8b2a6', day);
@@ -986,6 +1033,7 @@ function renderSkylineToCanvas(g, width, height, phase, floor, room = null) {
 
   // Pass 5a: Raised isometric sidewalk slabs for all city blocks
   for (const blk of layout.blocks) {
+    if (foregroundOnly && (blk.bi + blk.bj) < FG_DEPTH) continue;
     const { u0, v0, u1, v1, haze } = blk;
     const paveTop = lerpColor(basePaveTop, hazeColor, haze);
     const paveLeft = lerpColor(basePaveLeft, hazeColor, haze);
@@ -1027,6 +1075,7 @@ function renderSkylineToCanvas(g, width, height, phase, floor, room = null) {
 
   // Pass 5b: Draw each block's buildings/plazas and front-sidewalk trees/lamps in topological block order
   for (const blk of layout.blocks) {
+    if (foregroundOnly && (blk.bi + blk.bj) < FG_DEPTH) continue;
     const { haze } = blk;
     const paveTop = lerpColor(basePaveTop, hazeColor, haze);
     const paveLeft = lerpColor(basePaveLeft, hazeColor, haze);
@@ -1103,7 +1152,7 @@ function renderSkylineToCanvas(g, width, height, phase, floor, room = null) {
     const trunkCol = lerpColor('#4e3624', hazeColor, haze);
     for (const tr of blk.trees) {
       const base = P(tr.u, tr.v, 3);
-      if (base[1] < horizonY + 4 || base[1] > height + 20) continue;
+      if (base[1] < horizonY + 4 || base[1] > by1 + 20) continue;
       g.fillStyle = 'rgba(18, 12, 28, 0.22)';
       g.beginPath();
       g.ellipse(base[0], base[1], 7, 3.5, 0, 0, Math.PI * 2);
@@ -1116,7 +1165,7 @@ function renderSkylineToCanvas(g, width, height, phase, floor, room = null) {
     const poleCol = lerpColor('#2c2a3a', hazeColor, haze);
     for (const lp of blk.lamps) {
       const base = P(lp.u, lp.v, 3);
-      if (base[1] < horizonY + 4 || base[1] > height + 20) continue;
+      if (base[1] < horizonY + 4 || base[1] > by1 + 20) continue;
       if (day < 0.72) {
         g.fillStyle = `rgba(255, 214, 120, ${(0.22 * (1 - haze)).toFixed(2)})`;
         g.beginPath();
@@ -1133,7 +1182,7 @@ function renderSkylineToCanvas(g, width, height, phase, floor, room = null) {
   }
 
   // 7. High-altitude atmospheric cloud ribbons on upper tower floors (Floors 7-10)
-  if (floor >= 7) {
+  if (floor >= 7 && !foregroundOnly) {
     const cloudAlpha = day > 0.5 ? 0.18 : 0.08;
     g.fillStyle = `rgba(236, 244, 255, ${cloudAlpha})`;
     for (let i = 0; i < 5; i++) {
@@ -1627,6 +1676,9 @@ export function renderRoom(ctx, opts) {
   const zoom = camera?.zoom ?? 1;
   const panX = camera?.panX ?? 0;
   const panY = camera?.panY ?? 0;
+  // Everything drawn inside the camera transform is baked at dpr*zoom device pixels
+  // so nothing is an upscaled (blurry) bitmap when zoomed in.
+  const ds = deviceScale(dpr, zoom);
 
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.imageSmoothingEnabled = false;
@@ -1646,7 +1698,7 @@ export function renderRoom(ctx, opts) {
   ctx.scale(zoom, zoom);
   ctx.translate(-width / 2, -height / 2);
 
-  drawBackground(ctx, width, height, phase, room.floor || 1, dpr, now, room);
+  drawBackground(ctx, width, height, phase, room.floor || 1, ds, now, room, zoom);
   const { originX, originY } = computeOrigin(room, width, height);
   const floorColor = floorBaseColor(room);
   const wallColor = wallBaseColor(room);
@@ -1654,7 +1706,7 @@ export function renderRoom(ctx, opts) {
   const sky = { top: lerpColor('#1a2250', '#8fd0ff', wb), bottom: lerpColor('#ffd27a', '#fff6c9', wb) };
 
   // Tower cut-away shaft, concrete floor slab, and neighbouring floors (cached static layer)
-  drawTowerCutawayUnderCached(ctx, room, originX, originY, width, height, phase, dpr);
+  drawTowerCutawayUnderCached(ctx, room, originX, originY, width, height, phase, ds);
 
   // Pass 1: floor tiles (skipping walls, windows, doors, and irregular VOID cutouts)
   const doorMap = new Map();
@@ -1674,13 +1726,13 @@ export function renderRoom(ctx, opts) {
       const tileCol = inZone ? (zt.color || floorColor) : floorColor;
       let canvas;
       if (doorDef?.elevator) {
-        canvas = bakeSprite(`elevtile:${room.id}`, buildElevatorTile(floorColor), dpr);
+        canvas = bakeSprite(`elevtile:${room.id}`, buildElevatorTile(floorColor), ds);
       } else if (doorDef) {
-        canvas = bakeSprite(`doortile:${room.id}`, buildDoorTile(floorColor), dpr);
+        canvas = bakeSprite(`doortile:${room.id}`, buildDoorTile(floorColor), ds);
       } else {
-        canvas = bakeSprite(`floor:${room.id}:${inZone ? 'z' : 'b'}:${variant}`, buildFloorTile(tileCol, variant), dpr);
+        canvas = bakeSprite(`floor:${room.id}:${inZone ? 'z' : 'b'}:${variant}`, buildFloorTile(tileCol, variant), ds);
       }
-      blitDeviceAligned(ctx, canvas, sx - TILE_W / 2, sy - TILE_H / 2, dpr);
+      blitDeviceAligned(ctx, canvas, sx - TILE_W / 2, sy - TILE_H / 2, ds);
       if (inZone && zt.riser && (x === zt.x0 || y === zt.y0)) {
         ctx.strokeStyle = 'rgba(255, 248, 224, 0.35)';
         ctx.lineWidth = 1.2;
@@ -1696,7 +1748,7 @@ export function renderRoom(ctx, opts) {
   // Flat decor (rugs, yoga mats, lap pool tiles) lies on the floor
   for (const f of placedFurniture) {
     if (!getCatalogueItem(f.itemId)?.flat) continue;
-    drawFurniture(ctx, f, originX, originY, dpr);
+    drawFurniture(ctx, f, originX, originY, ds);
   }
 
   // Hover + placement ghost highlights
@@ -1737,8 +1789,8 @@ export function renderRoom(ctx, opts) {
         key = `wall:${room.id}:${kind}`;
         sprite = () => buildWallSegment(wallColor, kind);
       }
-      const wallCanvas = bakeSprite(key, sprite(), dpr);
-      blitDeviceAligned(ctx, wallCanvas, sx - TILE_W / 2, sy - WALL_ANCHOR_Y, dpr);
+      const wallCanvas = bakeSprite(key, sprite(), ds);
+      blitDeviceAligned(ctx, wallCanvas, sx - TILE_W / 2, sy - WALL_ANCHOR_Y, ds);
     }
   }
 
@@ -1768,11 +1820,11 @@ export function renderRoom(ctx, opts) {
   const bubbleTargets = [];
   for (const d of drawables) {
     if (d.type === 'furniture') {
-      drawFurniture(ctx, d.data, originX, originY, dpr);
+      drawFurniture(ctx, d.data, originX, originY, ds);
     } else {
       const e = d.data;
       const { sx, sy } = tileToScreen(e.x, e.y, originX, originY);
-      const bbox = drawCharacter(ctx, e, sx, sy, dpr);
+      const bbox = drawCharacter(ctx, e, sx, sy, ds);
       const sPt = worldToScreen(bbox.x, bbox.y, camera, width, height);
       const hw = Math.round(20 * zoom);
       const hh = Math.round((bbox.h || 52) * zoom);
@@ -1795,7 +1847,7 @@ export function renderRoom(ctx, opts) {
 
   // Draw overhead items (e.g. chandelier) above characters and furniture
   for (const f of overheadDrawables) {
-    drawFurniture(ctx, f, originX, originY, dpr);
+    drawFurniture(ctx, f, originX, originY, ds);
   }
 
   // Night lighting tint over the tower & room + localized warm emissive light pools

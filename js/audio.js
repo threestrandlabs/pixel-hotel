@@ -660,6 +660,12 @@ export class ChiptuneAudio {
     if (!ctx) return false;
     const node = this._getFileTrack(trackId);
     if (!node || !this._connectFileNode(trackId, node)) return false;
+    // Cancel any deferred pause from a prior fade-out of this track, otherwise the
+    // stale timer pauses the element we are restarting (e.g. unmute then room change).
+    if (this._fadeTimers[trackId]) {
+      clearTimeout(this._fadeTimers[trackId]);
+      delete this._fadeTimers[trackId];
+    }
     const prevId = this.activeFileTrackId;
     const crossfade = !!(prevId && prevId !== trackId);
     if (crossfade) this._fadeOutActiveFileTrack(1.1);

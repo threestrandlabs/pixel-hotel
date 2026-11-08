@@ -7,3 +7,5 @@ playwright-report/
 claude_run*.log
 .DS_Store
 .env*
+.refs/
+.claude/settings.local.json
