@@ -527,6 +527,7 @@ function onPlayerArrive() {
   if (cell === TILE.DOOR) {
     const doorDef = room.doors.find((d) => d.x === player.x && d.y === player.y);
     if (doorDef && !doorDef.elevator) {
+      if (doorDef.label) showToast(doorDef.label);
       switchRoom(doorDef.to, doorDef.toTile);
       return;
     }
@@ -592,9 +593,11 @@ function travelByElevator(roomId) {
   const targetDef = ROOMS[roomId];
   if (!targetDef) return false;
   const fromDef = currentRoomDef();
+  const floorNum = (f) => (f === 'R' ? 10 : (Number(f) || 1));
   ui.elevatorAnim = {
-    fromFloor: fromDef.floor || 1,
-    toFloor: targetDef.floor || 1,
+    fromFloor: floorNum(fromDef.floor),
+    toFloor: floorNum(targetDef.floor),
+    toFloorLabel: targetDef.floor === 'R' ? 'R' : String(targetDef.floor || 1),
     toName: targetDef.name,
     start: performance.now(),
     duration: 420,
@@ -836,6 +839,11 @@ function frame(now) {
   advanceMover(player, now, {
     width: room0.width, height: room0.height, isBlocked: playerBlocked, stepMs: STEP_MS, onArrive: onPlayerArrive,
   });
+  if (player.walking && !ui.dragging) {
+    const target = centerCameraOnTile(player.renderX, player.renderY, room0, ui.cssW, ui.cssH, ui.camera.zoom);
+    ui.camera.panX += (target.panX - ui.camera.panX) * 0.18;
+    ui.camera.panY += (target.panY - ui.camera.panY) * 0.18;
+  }
   tickActiveDialogue(now);
   tickMultiplayer(now, player);
 
@@ -1142,13 +1150,15 @@ function refreshCoins() {
 }
 function updateRoomLabel() {
   const def = currentRoomDef();
-  document.getElementById('roomName').textContent = `Floor ${def.floor || 1} — ${def.name}`;
+  const floorLabel = def.floor === 'R' ? 'Floor R' : `Floor ${def.floor || 1}`;
+  document.getElementById('roomName').textContent = `${floorLabel} — ${def.name}`;
 }
 
 function refreshElevatorPanel() {
   const el = document.getElementById('elevatorList');
   if (!el) return;
-  const floors = Object.values(ROOMS).sort((a, b) => (b.floor || 0) - (a.floor || 0));
+  const floorNum = (r) => (r.floor === 'R' ? 10 : (Number(r.floor) || 0));
+  const floors = Object.values(ROOMS).sort((a, b) => floorNum(b) - floorNum(a));
   let lastWing = null;
   el.innerHTML = floors.map((r) => {
     const isCurrent = r.id === state.player.room;
@@ -1158,16 +1168,21 @@ function refreshElevatorPanel() {
     lastWing = r.wing || lastWing;
     const guestCount = npcRuntimes.filter((n) => n.room === r.id).length;
     const guestLabel = guestCount > 0 ? ` • 👤 ${guestCount}` : '';
+    const floorPill = r.floor === 'R' ? 'R' : `F${r.floor}`;
+    const levelDesc = r.privateSuite
+      ? 'Your private personal suite'
+      : (r.floor === 'R' ? `Open-Air Rooftop${guestLabel}` : `Tower Level ${r.floor}${guestLabel}`);
+    const btnLabel = isCurrent ? 'Here' : (r.floor === 'R' ? 'R' : 'Go');
     return `${wingHeader}
       <div class="elevator-item ${isCurrent ? 'active-floor' : ''}">
-        <div class="floor-pill">F${r.floor}</div>
+        <div class="floor-pill">${floorPill}</div>
         <div class="item-info">
           <div class="item-name">${r.icon || '🏢'} ${r.name}</div>
-          <div class="item-desc">${r.privateSuite ? 'Your private personal suite' : `Tower Level ${r.floor}${guestLabel}`}</div>
+          <div class="item-desc">${levelDesc}</div>
         </div>
         <div class="item-actions">
           <button class="pixel-btn elevator-floor-btn" data-floor-room="${r.id}" ${isCurrent ? 'disabled' : ''}>
-            ${isCurrent ? 'Here' : 'Go'}
+            ${btnLabel}
           </button>
         </div>
       </div>`;

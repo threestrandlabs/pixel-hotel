@@ -4,6 +4,31 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.8.2] - 2026-11-09
+
+### Added
+
+- **Public Floor Expansion (`js/data.js`, `js/render.js`)**:
+  - Expanded all public hotel floors according to the area size plan: 16x area (4x width, 4x depth) for Grand Lobby (`64x48`), Skyline Restaurant (`48x36`), and Azure Pool & Spa (`44x36`); 4x area (2x width, 2x depth) for Starlight Cafe & Bar (`20x16`), Pulse Fitness Gym (`22x16`), Pixel Arcade (`22x16`), Quiet Library & Hub (`22x16`), and Cloud Nine Sky Garden (`22x18`). My Room remains unchanged (`9x8`).
+  - Redistributed and added furniture, lighting, and NPC zones across all expanded rooms with sensible zoning, zero overlaps, and generous open areas reserved for future major facilities.
+  - Viewport frustum culling in `renderRoom` transforms visible screen bounds to isometric tile coordinates, drawing only tiles within view to maintain 60 FPS performance on large layouts.
+  - Expanded isometric background city corridors and block coverage to wrap seamlessly around the enlarged hotel footprint at all zoom levels.
+- **Open-Air Rooftop Rework (`js/data.js`, `js/sprites.js`, `js/render.js`, `js/main.js`, `js/audio.js`)**:
+  - Transformed Rooftop Lounge from tower floor 10 into an authentic open-air rooftop observatory above the tower stack (`floor: 'R'`, `isRooftop: true`).
+  - Perimeter styled with transparent glass balustrades, stainless steel stanchions, and safety handrails (`buildGlassBalustradeSegment`) replacing standard walls, completely open to the sky and procedural skyline with no ceiling slab cutaway overhead.
+  - Features an illuminated outdoor infinity pool along the eastern terrace with water overflow weir and cascading visual against the tower facade, outdoor lounge sofa, cocktail bar, and brass telescopes.
+  - Removed legacy non-elevator door pair `Lobby(6,0) <-> Rooftop(4,0)`. Added direct illuminated stairwell door pair between the Sky Garden top floor and Rooftop Lounge ("To Roof" / "To Sky Garden").
+  - Elevator system and room labels updated to designate the rooftop as "Floor R" / "R" sorted atop the elevator directory.
+- **Save Version 6 Migration (`js/data.js`, `js/save.js`)**:
+  - Bumped `SAVE_VERSION` to 6. Added `MIGRATIONS[5]` safely migrating v5 saves: unmodified public floors upgrade to the expanded v0.8.2 layouts, custom furniture placed on changed floors is sanitized with any overlapping or out-of-bounds items returned to player inventory, and players saved on deprecated doors or invalid tiles are safely relocated to room spawn. Multiplayer My Room snapshots remain fully compatible.
+
+### Fixed
+
+- **Rooftop Rendered a Blank Sky (`js/render.js`)**: `buildIsoCityLayout` computed `horizonY` as `height * 0.26 + (floor - 1) * 3`, but the Rooftop's `floor` is now the string `'R'` — `('R' - 1) * 3` is `NaN`, which fed a `NaN` into `ctx.createLinearGradient`, threw an uncaught exception mid-frame, and silently killed the `requestAnimationFrame` loop for the rest of the session (every floor after that, not just the Rooftop, froze on whatever was last drawn). `horizonY` now resolves `'R'` to the same numeric floor (10) the rest of the file already used. The Rooftop (and everything navigated to afterwards) renders correctly again.
+- **Camera Didn't Follow the Player on the Bigger Floors (`js/main.js`)**: the camera only recentred on room entry, which was fine when every floor fit on screen; now that the Lobby/Restaurant/Pool are up to 16x their old area, walking across one could carry the player far outside the viewport with no way to see them. The camera now eases toward the player each frame while they're walking (skipped while manually dragging/panning), so they stay in view across the whole floor.
+- **Smoke Test's Rooftop Screenshot Was Actually the Lobby (`tests/smoke.spec.mjs`)**: `08-rooftop-night-2x.png` was captured after a stray `takeElevator('lobby')`, so it never exercised the Rooftop at all (and the `NaN` bug above made it an empty blue sky regardless). The Rooftop is now screenshotted in place for both day (`08-rooftop-day-2x.png`) and night (`08-rooftop-night-2x.png`), each asserting the floor indicator reads "Floor R — Rooftop Lounge" first.
+- **Flaky Doormat Smoke Check on the Bigger Lobby (`tests/smoke.spec.mjs`)**: the elevator-doormat check walked the player across the now much larger Lobby but only waited a fixed 1200ms, which was no longer enough time to arrive. Swapped the fixed wait for polling until the player reaches the doormat tile.
+
 ## [0.8.1] - 2026-11-09
 
 ### Fixed

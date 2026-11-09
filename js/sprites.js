@@ -319,6 +319,75 @@ export function buildElevatorDoorSegment(baseColor, kind = 'north') {
   return s;
 }
 
+export function buildStairwellDoorSegment(baseColor, kind = 'north') {
+  const s = buildWallSegment(baseColor, kind);
+  const frame = '#323a48';
+  const frameLight = '#627288';
+  const xl = kind === 'north' ? 34 : 4;
+  const xr = xl + 28;
+  const mid = Math.floor((xl + xr) / 2);
+  const doorH = 48;
+  for (let x = xl; x < xr; x++) {
+    const base = Math.round(ISO.WALL_H + (kind === 'north' ? (x - 32) / 2 : (32 - x) / 2)) - 1;
+    for (let y = base - doorH; y <= base; y++) {
+      const isFrame = x < xl + 3 || x >= xr - 3 || y < base - doorH + 4;
+      const isWindow = !isFrame && y >= base - doorH + 8 && y <= base - doorH + 22 && x >= mid - 8 && x <= mid + 8;
+      if (isFrame) {
+        setPixel(s, x, y, (x === xl || y === base - doorH) ? frameLight : frame);
+      } else if (isWindow) {
+        setPixel(s, x, y, (x + y) % 2 === 0 ? '#b8ebff' : '#88ccee');
+      } else {
+        setPixel(s, x, y, x < mid ? '#485468' : '#384252');
+      }
+    }
+    // Illuminated green "ROOF / EXIT" emergency sign above the stairwell door
+    const signY = Math.round(ISO.WALL_H + (kind === 'north' ? (x - 32) / 2 : (32 - x) / 2)) - doorH - 4;
+    if (x >= mid - 8 && x <= mid + 8) {
+      setPixel(s, x, signY - 2, '#183824');
+      setPixel(s, x, signY - 1, (x === mid - 8 || x === mid + 8) ? '#22c55e' : '#15803d');
+      setPixel(s, x, signY, (x >= mid - 3 && x <= mid + 3) ? '#f0fdf4' : '#22c55e');
+      setPixel(s, x, signY + 1, '#183824');
+    }
+  }
+  return s;
+}
+
+export function buildGlassBalustradeSegment(kind = 'north') {
+  const w = ISO.TILE_W;
+  const h = ISO.WALL_H + ISO.TILE_H / 2;
+  const s = makeGrid(w, h);
+  const baseY = (x) => Math.round(ISO.WALL_H + (kind === 'north' ? (x - w / 2) / 2 : (w / 2 - x) / 2));
+  const RAIL_H = 18;
+
+  for (let x = 0; x < w; x++) {
+    const base = baseY(x);
+    // Base mounting shoe (dark metal channel)
+    setPixel(s, x, base, '#242b35');
+    setPixel(s, x, base - 1, '#3a4452');
+    setPixel(s, x, base - 2, '#505d6e');
+
+    // Tempered glass panel with reflections and sky tint
+    for (let y = base - RAIL_H + 2; y <= base - 3; y++) {
+      const isReflect = ((x * 2 + y * 3) % 20 < 2);
+      const isPost = (x === 4 || x === 5 || x === 31 || x === 32 || x === 58 || x === 59);
+      if (isPost) {
+        setPixel(s, x, y, (x % 2 === 0) ? '#d8e4f0' : '#8fa4b8');
+      } else if (isReflect) {
+        setPixel(s, x, y, '#eaf8ff');
+      } else {
+        // Translucent glass texture with subtle dither
+        setPixel(s, x, y, (x + y) % 2 === 0 ? '#98d2f0' : '#68b4dc');
+      }
+    }
+
+    // Top handrail (polished steel chrome with upper highlight)
+    setPixel(s, x, base - RAIL_H, '#edf4fa');
+    setPixel(s, x, base - RAIL_H + 1, '#b8c8d8');
+    setPixel(s, x, base - RAIL_H + 2, '#6c7c8c');
+  }
+  return s;
+}
+
 export function buildElevatorTile(baseColor) {
   const s = buildFloorTile(baseColor, 1);
   const w = ISO.TILE_W, h = ISO.TILE_H;

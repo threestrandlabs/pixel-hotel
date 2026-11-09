@@ -7,6 +7,7 @@ import { TILE, getCatalogueItem } from './data.js';
 import {
   ISO, WALL_ANCHOR_Y, buildFloorTile, buildWallSegment, buildWindowSegment,
   buildDoorSegment, buildElevatorDoorSegment, buildDoorTile, buildElevatorTile,
+  buildGlassBalustradeSegment, buildStairwellDoorSegment,
   FURNITURE_BUILDERS, shadeColor,
 } from './sprites.js';
 import { LOOKS, getCharacterCanvas } from './voxel.js';
@@ -265,16 +266,17 @@ export const SLAB_H = 16;
 export const STORY_H = 56;
 
 export function storiesBelowFloor(floor = 1) {
-  return Math.max(0, Math.min(10, Math.floor(floor) - 1));
+  const f = floor === 'R' ? 10 : (Number(floor) || 1);
+  return Math.max(0, Math.min(10, Math.floor(f) - 1));
 }
 
 export function computeGroundDy(floor = 1) {
-  const f = Math.max(1, floor);
+  const f = floor === 'R' ? 10 : Math.max(1, Number(floor) || 1);
   return SLAB_H + (f - 1) * STORY_H;
 }
 
 export function computeCityGroundDy(floor = 1) {
-  const f = Math.max(1, floor);
+  const f = floor === 'R' ? 10 : Math.max(1, Number(floor) || 1);
   if (f <= 5) return computeGroundDy(f);
   return computeGroundDy(5) + (f - 5) * 32;
 }
@@ -302,7 +304,8 @@ export function buildIsoCityLayout(room = { id: 'lobby', width: 12, height: 9, f
   const groundDy = computeGroundDy(floor);
   const cityGroundDy = computeCityGroundDy(floor);
   const groundOriginY = originY + cityGroundDy;
-  const horizonY = Math.round(height * 0.26 + (floor - 1) * 3);
+  const floorNum = floor === 'R' ? 10 : (Number(floor) || 1);
+  const horizonY = Math.round(height * 0.26 + (floorNum - 1) * 3);
   const { day } = dayNightColors(phase);
   const nightFactor = Math.max(0, Math.min(1, (0.78 - day) * 1.55));
 
@@ -338,15 +341,19 @@ export function buildIsoCityLayout(room = { id: 'lobby', width: 12, height: 9, f
   // Road corridors between block columns (v-axis avenues) and rows (u-axis avenues)
   const vRoads = [];
   const uRoads = [];
-  for (let bi = -7; bi <= 6; bi++) {
+  const effPadX = Math.max(padX, W * 24, H * 24);
+  const effPadBottom = Math.max(padBottom, (W + H) * 12);
+  const maxB = Math.max(12, Math.ceil(Math.max(W, H) / 5.8) + 6);
+  const maxSpan = Math.max(100, W + 60, H + 60);
+  for (let bi = -maxB; bi <= maxB - 1; bi++) {
     const [, leftU1] = uBounds(bi);
     const [rightU0] = uBounds(bi + 1);
-    vRoads.push({ axis: 'v', idx: bi, u0: leftU1, u1: rightU0, v0: -56, v1: 56 });
+    vRoads.push({ axis: 'v', idx: bi, u0: leftU1, u1: rightU0, v0: -maxSpan, v1: maxSpan });
   }
-  for (let bj = -7; bj <= 6; bj++) {
+  for (let bj = -maxB; bj <= maxB - 1; bj++) {
     const [, topV1] = vBounds(bj);
     const [botV0] = vBounds(bj + 1);
-    uRoads.push({ axis: 'u', idx: bj, u0: -56, u1: 56, v0: topV1, v1: botV0 });
+    uRoads.push({ axis: 'u', idx: bj, u0: -maxSpan, u1: maxSpan, v0: topV1, v1: botV0 });
   }
 
   const roads = [
@@ -401,18 +408,18 @@ export function buildIsoCityLayout(room = { id: 'lobby', width: 12, height: 9, f
   const blocks = [];
   const beacons = [];
 
-  for (let sum = -18; sum <= 16; sum++) {
-    for (let bi = -8; bi <= 8; bi++) {
+  for (let sum = -maxB * 2; sum <= maxB * 2; sum++) {
+    for (let bi = -maxB; bi <= maxB; bi++) {
       const bj = sum - bi;
-      if (bj < -8 || bj > 8) continue;
+      if (bj < -maxB || bj > maxB) continue;
       const [u0, u1] = uBounds(bi);
       const [v0, v1] = vBounds(bj);
       const cPt = P((u0 + u1) / 2, (v0 + v1) / 2, 0);
-      if (cPt[0] < -padX || cPt[0] > width + padX || cPt[1] < horizonY - 140 || cPt[1] > height + padBottom) {
+      if (cPt[0] < -effPadX || cPt[0] > width + effPadX || cPt[1] < horizonY - 140 || cPt[1] > height + effPadBottom) {
         continue;
       }
 
-      const distMetric = Math.max(0, (horizonY + 280 - cPt[1]) / 380) + Math.hypot(bi, bj) * 0.08;
+      const distMetric = Math.max(0, (horizonY + 380 - cPt[1]) / 380) + Math.max(0, -sum) * 0.08;
       const haze = Math.max(0, Math.min(0.72, distMetric * 0.42));
       const rand = seededRand((bi + 17) * 73856093 ^ (bj + 19) * 19349663);
 
@@ -1283,15 +1290,16 @@ function drawTowerCutawayUnder(ctx, room, originX, originY, height, phase) {
   const gL = (pt) => (grounded ? pt[1] + groundDy : bottomY);
 
   // Outer left & right structural corner columns
+  const colTopOffset = room.isRooftop ? 0 : WALL_H;
   fillPoly(ctx, [
-    [westPt[0] - 8, westPt[1] - WALL_H],
-    [westPt[0], westPt[1] - WALL_H],
+    [westPt[0] - 8, westPt[1] - colTopOffset],
+    [westPt[0], westPt[1] - colTopOffset],
     [westPt[0], gL(westPt)],
     [westPt[0] - 8, gL(westPt)],
   ], colLeft);
   fillPoly(ctx, [
-    [eastPt[0], eastPt[1] - WALL_H],
-    [eastPt[0] + 8, eastPt[1] - WALL_H],
+    [eastPt[0], eastPt[1] - colTopOffset],
+    [eastPt[0] + 8, eastPt[1] - colTopOffset],
     [eastPt[0] + 8, gL(eastPt)],
     [eastPt[0], gL(eastPt)],
   ], colRight);
@@ -1378,15 +1386,28 @@ function drawTowerCutawayUnder(ctx, room, originX, originY, height, phase) {
           const winCol = day > 0.65 ? (isLit ? '#78b0d8' : '#384e68') : (isLit ? '#f0be68' : '#1b182c');
           fillPoly(ctx, [[x0, y0], [x1, y1], [x1, y1 + 26], [x0, y0 + 26]], winCol);
         }
-        fillPoly(ctx, [sPt, ePt, [ePt[0], ePt[1] + SLAB_H], [sPt[0], sPt[1] + SLAB_H]], '#565264');
-        ctx.fillStyle = '#2a2636';
-        ctx.fillRect(Math.round((sPt[0] + ePt[0]) / 2 - 2), Math.round((sPt[1] + ePt[1]) / 2 + 4), 4, 8);
+        if (room.isRooftop && x >= 15 && y >= 3 && y <= 8) {
+          // Shimmering infinity pool overflow weir & cascading waterfall sheen
+          fillPoly(ctx, [sPt, ePt, [ePt[0], ePt[1] + 24], [sPt[0], sPt[1] + 24]], 'rgba(72, 212, 240, 0.72)');
+          fillPoly(ctx, [sPt, ePt, [ePt[0], ePt[1] + 8], [sPt[0], sPt[1] + 8]], 'rgba(210, 248, 255, 0.88)');
+          ctx.strokeStyle = '#cff8ff';
+          ctx.lineWidth = 2.0;
+          ctx.beginPath();
+          ctx.moveTo(sPt[0], sPt[1]);
+          ctx.lineTo(ePt[0], ePt[1]);
+          ctx.stroke();
+        } else {
+          fillPoly(ctx, [sPt, ePt, [ePt[0], ePt[1] + SLAB_H], [sPt[0], sPt[1] + SLAB_H]], '#565264');
+          ctx.fillStyle = '#2a2636';
+          ctx.fillRect(Math.round((sPt[0] + ePt[0]) / 2 - 2), Math.round((sPt[1] + ePt[1]) / 2 + 4), 4, 8);
+        }
       }
     }
   }
 }
 
 function drawTowerCutawayOver(ctx, room, originX, originY) {
+  if (room.isRooftop) return;
   const last = { x: room.width - 1, y: room.height - 1 };
   const isFloorTile = (tx, ty) => (
     tx >= 1 && ty >= 1 && tx < room.width && ty < room.height && room.grid[ty][tx] !== TILE.VOID
@@ -1407,23 +1428,6 @@ function drawTowerCutawayOver(ctx, room, originX, originY) {
   const nwUp = [northPt[0], northPt[1] - WALL_H];
   const wUp = [westPt[0], westPt[1] - WALL_H];
   const eUp = [eastPt[0], eastPt[1] - WALL_H];
-
-  if (room.isRooftop) {
-    // Rooftop parapet stone coping along top of the walls
-    fillPoly(ctx, [
-      [wUp[0] - 6, wUp[1] + 2],
-      [nwUp[0], nwUp[1] + 2],
-      [nwUp[0], nwUp[1] - 5],
-      [wUp[0] - 6, wUp[1] - 5],
-    ], '#d8dce6');
-    fillPoly(ctx, [
-      [nwUp[0], nwUp[1] + 2],
-      [eUp[0] + 6, eUp[1] + 2],
-      [eUp[0] + 6, eUp[1] - 5],
-      [nwUp[0], nwUp[1] - 5],
-    ], '#aeb6c8');
-    return;
-  }
 
   // Upper concrete floor slab capping the cut-away walls
   const SLAB_TOP = 12;
@@ -1766,6 +1770,14 @@ export function renderRoom(ctx, opts) {
   // Tower cut-away shaft, concrete floor slab, and neighbouring floors (cached static layer)
   drawTowerCutawayUnderCached(ctx, room, originX, originY, width, height, phase, ds);
 
+  // Viewport bounds in world space for frustum culling on expanded floors
+  const tl = screenToWorld(0, 0, camera, width, height);
+  const br = screenToWorld(width, height, camera, width, height);
+  const viewMinX = Math.min(tl.wx, br.wx) - 80;
+  const viewMaxX = Math.max(tl.wx, br.wx) + 80;
+  const viewMinY = Math.min(tl.wy, br.wy) - 90;
+  const viewMaxY = Math.max(tl.wy, br.wy) + 80;
+
   // Pass 1: floor tiles (skipping walls, windows, doors, and irregular VOID cutouts)
   const doorMap = new Map();
   for (const d of room.doors) {
@@ -1778,6 +1790,7 @@ export function renderRoom(ctx, opts) {
       const cell = room.grid[y][x];
       if (cell === TILE.WALL || cell === TILE.WINDOW || cell === TILE.DOOR || cell === TILE.VOID) continue;
       const { sx, sy } = tileToScreen(x, y, originX, originY);
+      if (camera && (sx < viewMinX || sx > viewMaxX || sy < viewMinY || sy > viewMaxY)) continue;
       const variant = (x + y) % 2;
       const doorDef = doorMap.get(`${x},${y}`);
       const inZone = zt && x >= zt.x0 && x <= zt.x1 && y >= zt.y0 && y <= zt.y1;
@@ -1807,6 +1820,8 @@ export function renderRoom(ctx, opts) {
   for (const f of placedFurniture) {
     const flatItem = getCatalogueItem(f.itemId);
     if (!flatItem?.flat) continue;
+    const flatPt = tileToScreen(f.x, f.y, originX, originY);
+    if (camera && (flatPt.sx < viewMinX - 80 || flatPt.sx > viewMaxX + 80 || flatPt.sy < viewMinY - 80 || flatPt.sy > viewMaxY + 80)) continue;
     drawFurniture(ctx, f, originX, originY, ds, Boolean(flatItem.lightSource) && !lightsOn);
   }
 
@@ -1830,9 +1845,13 @@ export function renderRoom(ctx, opts) {
       if (x === 0 && y === 0) continue;
       const kind = y === 0 ? 'north' : 'west';
       const { sx, sy } = tileToScreen(kind === 'north' ? x : 1, kind === 'north' ? 1 : y, originX, originY);
+      if (camera && (sx < viewMinX || sx > viewMaxX || sy < viewMinY || sy > viewMaxY)) continue;
       let sprite;
       let key;
-      if (cell === TILE.WINDOW) {
+      if (room.isRooftop && cell !== TILE.DOOR) {
+        key = `rooftop_rail:${kind}:${ds}`;
+        sprite = () => buildGlassBalustradeSegment(kind);
+      } else if (cell === TILE.WINDOW) {
         key = `window:${room.id}:${kind}:${wb}:${lightsTag}`;
         sprite = () => buildWindowSegment(wallColor, sky, kind);
       } else if (cell === TILE.DOOR) {
@@ -1840,6 +1859,9 @@ export function renderRoom(ctx, opts) {
         if (doorDef?.elevator) {
           key = `elevdoor:${room.id}:${kind}:${lightsTag}`;
           sprite = () => buildElevatorDoorSegment(wallColor, kind);
+        } else if (doorDef?.to === 'rooftop' || room.isRooftop) {
+          key = `stairdoor:${room.id}:${kind}:${lightsTag}`;
+          sprite = () => buildStairwellDoorSegment(wallColor, kind);
         } else {
           key = `door:${room.id}:${kind}:${lightsTag}`;
           sprite = () => buildDoorSegment(wallColor, kind);
@@ -1985,7 +2007,8 @@ function drawElevatorTransition(ctx, width, height, anim, now) {
   ctx.fillRect(width - panelW, 0, 4, height);
 
   // Central digital floor counter badge
-  const curFloor = Math.round(anim.fromFloor + (anim.toFloor - anim.fromFloor) * t);
+  const curFloorNum = Math.round(anim.fromFloor + (anim.toFloor - anim.fromFloor) * t);
+  const curFloorBadge = (curFloorNum >= 10 && anim.toFloor >= 10) ? 'ROOFTOP (R)' : `FLOOR ${curFloorNum}`;
   const boxW = 220;
   const boxH = 68;
   const bx = Math.round((width - boxW) / 2);
@@ -2000,7 +2023,7 @@ function drawElevatorTransition(ctx, width, height, anim, now) {
   ctx.font = '700 18px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
   ctx.fillStyle = '#ffd27a';
   ctx.textAlign = 'center';
-  ctx.fillText(`🛗 FLOOR ${curFloor}`, width / 2, by + 28);
+  ctx.fillText(`🛗 ${curFloorBadge}`, width / 2, by + 28);
   ctx.font = '600 14px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
   ctx.fillStyle = '#f2e9ff';
   ctx.fillText(anim.toName, width / 2, by + 52);

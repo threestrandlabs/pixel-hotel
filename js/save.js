@@ -253,6 +253,68 @@ const MIGRATIONS = {
     }
     return { ...def, ...old, version: 5, rooms: mergedRooms };
   },
+  5: (old) => {
+    const def = createDefaultState();
+    const mergedRooms = { ...def.rooms };
+    const returnedInventory = Array.isArray(old.inventory) ? [...old.inventory] : [];
+
+    if (old.rooms && typeof old.rooms === 'object') {
+      for (const [roomId, rState] of Object.entries(old.rooms)) {
+        const roomDef = ROOMS[roomId];
+        if (!roomDef || !rState || !Array.isArray(rState.placed)) continue;
+        const allSeed = rState.placed.length > 0 && rState.placed.every((p) => String(p.instanceId || '').startsWith(`seed-${roomId}-`));
+        if (allSeed && roomId !== 'myroom') {
+          mergedRooms[roomId] = {
+            ...mergedRooms[roomId],
+            ...rState,
+            placed: def.rooms[roomId].placed,
+          };
+        } else {
+          mergedRooms[roomId] = {
+            ...mergedRooms[roomId],
+            ...rState,
+            placed: sanitizePlacedItemsForRoom(roomDef, rState.placed, returnedInventory),
+          };
+        }
+      }
+    }
+
+    const mergedQuests = { ...def.quests };
+    if (old.quests && typeof old.quests === 'object') {
+      for (const [qId, qState] of Object.entries(old.quests)) {
+        if (qState && typeof qState === 'object') {
+          mergedQuests[qId] = { ...mergedQuests[qId], ...qState };
+        }
+      }
+    }
+
+    const playerRoom = old.player?.room && ROOMS[old.player.room] ? old.player.room : 'lobby';
+    const roomDef = ROOMS[playerRoom];
+    const placedInPlayerRoom = mergedRooms[playerRoom]?.placed || [];
+    let px = typeof old.player?.x === 'number' ? old.player.x : roomDef.spawn.x;
+    let py = typeof old.player?.y === 'number' ? old.player.y : roomDef.spawn.y;
+    const tileInvalid = (
+      py <= 0 || px <= 0 || py >= roomDef.height || px >= roomDef.width ||
+      roomDef.grid[py][px] !== TILE.FLOOR ||
+      (!old.player?.sitting && isTileBlockedByFurniture(placedInPlayerRoom, px, py))
+    );
+    if (tileInvalid) {
+      px = roomDef.spawn.x;
+      py = roomDef.spawn.y;
+    }
+
+    return {
+      ...def,
+      ...old,
+      version: 6,
+      inventory: returnedInventory,
+      rooms: mergedRooms,
+      quests: mergedQuests,
+      player: { ...def.player, ...(old.player || {}), room: playerRoom, x: px, y: py, activity: old.player?.activity || null },
+      stats: { ...def.stats, ...(old.stats || {}), activitiesUsed: old.stats?.activitiesUsed || [] },
+      settings: { ...def.settings, ...(old.settings || {}) },
+    };
+  },
 };
 
 function migrate(data) {

@@ -540,7 +540,13 @@ async function main() {
 
     // ---- v0.8.1: elevator doormat trigger opens a centred modal; avatar never enters the car ----
     await page.evaluate(() => window.__pixelHotel.walkTo(4, 1)); // lobby's elevator doormat tile
-    await page.waitForTimeout(1200);
+    // v0.8.2: the lobby is much bigger now, so the walk there can take longer than a fixed
+    // timeout — poll for arrival instead of sleeping a fixed duration.
+    await page.waitForFunction(
+      () => { const p = window.__pixelHotel.getState().player; return p.x === 4 && p.y === 1; },
+      null,
+      { timeout: 8000 },
+    ).catch(() => {});
     const doormatState = await page.evaluate(() => ({
       player: window.__pixelHotel.getState().player,
       hidden: document.getElementById('elevatorPanel').classList.contains('hidden'),
@@ -769,22 +775,26 @@ async function main() {
     await page2x.screenshot({ path: '/workspace/pixel-hotel-v060-gym.png' });
     await page2x.screenshot({ path: '/workspace/pixel-hotel-v070-gym.png' });
 
-    // High-floor screenshot (Floor 10 — Rooftop Lounge): looking across neighbouring isometric rooftops & haze
+    // High-floor screenshot (Floor R — Rooftop Lounge): open-air balustrade, lounge, bar,
+    // infinity pool, and neighbouring isometric rooftops & haze, by day and by night.
     await page2x.evaluate(() => {
       window.__pixelHotel.takeElevator('rooftop');
       window.__pixelHotel.setDayPhase(0.52);
       window.__pixelHotel.interactWith('rooftop_sofa', true);
     });
     await page2x.waitForTimeout(550);
+    const roofLabelDay = await page2x.textContent('#roomName');
+    check('floor indicator shows the Rooftop by day', roofLabelDay.includes('Floor R') && roofLabelDay.includes('Rooftop'));
+    await page2x.screenshot({ path: path.join(SCREENSHOT_DIR, '08-rooftop-day-2x.png') });
     await page2x.screenshot({ path: '/workspace/pixel-hotel-v060-highfloor.png' });
 
-    // Night screenshot: Floor 1 / Floor 3 at night with illuminated isometric city windows, streetlamps & warm emissive pools
+    // Rooftop at night: illuminated isometric city windows, streetlamps & warm emissive pools
     await page2x.evaluate(() => {
-      window.__pixelHotel.takeElevator('lobby');
       window.__pixelHotel.setDayPhase(0.04);
-      window.__pixelHotel.interactWith('sofa', true);
     });
     await page2x.waitForTimeout(550);
+    const roofLabelNight = await page2x.textContent('#roomName');
+    check('floor indicator shows the Rooftop by night', roofLabelNight.includes('Floor R') && roofLabelNight.includes('Rooftop'));
     await page2x.screenshot({ path: path.join(SCREENSHOT_DIR, '08-rooftop-night-2x.png') });
     await page2x.screenshot({ path: '/workspace/pixel-hotel-v060-night.png' });
 

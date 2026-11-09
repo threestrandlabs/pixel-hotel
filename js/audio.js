@@ -264,7 +264,7 @@ export function trackForRoom(roomId = 'lobby') {
 }
 
 export function getTrafficAttenuation(roomId = 'lobby', floor = 1) {
-  const f = Math.max(1, Number(floor) || 1);
+  const f = floor === 'R' ? 10 : Math.max(1, Number(floor) || 1);
   if (roomId === 'lobby' || f === 1) return 0.78;
   if (roomId === 'rooftop') return 0.26;
   return Math.max(0.1, Math.pow(0.74, f - 1) * 0.65);
@@ -707,7 +707,7 @@ export class ChiptuneAudio {
   setRoomMood(roomId, phase = this.phase, floor = this.floor) {
     const prevRoom = this.roomId;
     this.roomId = roomId || this.roomId;
-    this.floor = typeof floor === 'number' ? floor : this.floor;
+    this.floor = typeof floor === 'number' ? floor : (floor === 'R' ? 10 : this.floor);
     this.phase = typeof phase === 'number' ? phase : this.phase;
     this.isNight = this.phase < 0.22 || this.phase > 0.78;
     const nextMood = moodForRoom(this.roomId, this.phase);

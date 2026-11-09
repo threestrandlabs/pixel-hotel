@@ -12,7 +12,7 @@ import {
 import {
   initQuestState, advanceQuestsByType, setQuestProgress, claimReward, listQuests,
 } from '../js/quests.js';
-import { createDefaultState, loadState, saveState, resetState, SAVE_KEY } from '../js/save.js';
+import { createDefaultState, loadState, saveState, resetState, sanitizePlacedItemsForRoom, SAVE_KEY } from '../js/save.js';
 import { getCatalogueItem, TILE, SAVE_VERSION, ROOMS, NPCS, CATALOGUE, SEED_FURNITURE, ITEM_CATEGORIES } from '../js/data.js';
 import { respondToMessage, findWanderTarget, createNpcRuntime, tickNpc } from '../js/npc.js';
 import { LOOKS, renderCharacter, buildParts } from '../js/voxel.js';
@@ -1607,4 +1607,109 @@ test('v0.8.1 catalogue: every item has a valid shop/inventory category', () => {
   for (const item of CATALOGUE) {
     assert.ok(validIds.has(item.category), `${item.id} has an invalid category: ${item.category}`);
   }
+});
+
+// ======================= v0.8.2: floor expansion & rooftop rework =======================
+
+test('v0.8.2 room dimensions: 16x area for Lobby/Restaurant/Pool, 4x area for other public floors, My Room unchanged', () => {
+  // 16x area (4x width, 4x depth)
+  assert.equal(ROOMS.lobby.width, 64);
+  assert.equal(ROOMS.lobby.height, 48);
+  assert.equal(ROOMS.restaurant.width, 48);
+  assert.equal(ROOMS.restaurant.height, 36);
+  assert.equal(ROOMS.pool.width, 44);
+  assert.equal(ROOMS.pool.height, 36);
+
+  // 4x area (2x width, 2x depth)
+  assert.equal(ROOMS.cafe.width, 20);
+  assert.equal(ROOMS.cafe.height, 16);
+  assert.equal(ROOMS.gym.width, 22);
+  assert.equal(ROOMS.gym.height, 16);
+  assert.equal(ROOMS.arcade.width, 22);
+  assert.equal(ROOMS.arcade.height, 16);
+  assert.equal(ROOMS.library.width, 22);
+  assert.equal(ROOMS.library.height, 16);
+  assert.equal(ROOMS.garden.width, 22);
+  assert.equal(ROOMS.garden.height, 18);
+  assert.equal(ROOMS.rooftop.width, 20);
+  assert.equal(ROOMS.rooftop.height, 16);
+
+  // My Room unchanged
+  assert.equal(ROOMS.myroom.width, 9);
+  assert.equal(ROOMS.myroom.height, 8);
+});
+
+test('v0.8.2 rooftop rework: floor R, open-air balustrade, legacy lobby door removed, stairwell door pair with garden, elevator R button', () => {
+  assert.equal(ROOMS.rooftop.floor, 'R');
+  assert.equal(ROOMS.rooftop.isRooftop, true);
+  assert.equal(ROOMS.rooftop.shape, 'open-air-rooftop');
+
+  // Legacy Lobby(6,0) <-> Rooftop(4,0) door pair is gone
+  assert.ok(!ROOMS.lobby.doors.some((d) => d.to === 'rooftop'));
+  assert.ok(!ROOMS.rooftop.doors.some((d) => d.to === 'lobby' && !d.elevator));
+
+  // Stairwell door pair between top floor (garden) and rooftop
+  const gardenToRoof = ROOMS.garden.doors.find((d) => d.to === 'rooftop');
+  const roofToGarden = ROOMS.rooftop.doors.find((d) => d.to === 'garden');
+  assert.ok(gardenToRoof, 'Sky garden must have door to rooftop');
+  assert.ok(roofToGarden, 'Rooftop must have door to garden');
+  assert.equal(gardenToRoof.label, 'To Roof');
+  assert.equal(roofToGarden.label, 'To Sky Garden');
+  assert.equal(gardenToRoof.elevator, undefined);
+  assert.equal(roofToGarden.elevator, undefined);
+
+  // Elevator door exists on Rooftop
+  const roofElevator = ROOMS.rooftop.doors.find((d) => d.elevator);
+  assert.ok(roofElevator, 'Rooftop must have an elevator door');
+});
+
+test('v0.8.2 migration: v5 save migrates to v6, refreshing unmodified public seeds and returning unplaceable custom items to inventory', () => {
+  const v5Save = {
+    version: 5,
+    coins: 200,
+    unlocked: ['rug'],
+    inventory: [{ instanceId: 'inv-1', itemId: 'lamp' }],
+    rooms: {
+      lobby: {
+        placed: [
+          { instanceId: 'seed-lobby-0', itemId: 'reception_desk', x: 7, y: 2, rot: 0 },
+        ],
+      },
+      myroom: {
+        placed: [
+          { instanceId: 'custom-bed', itemId: 'suite_bed', x: 6, y: 2, rot: 0 },
+        ],
+      },
+      pool: {
+        placed: [
+          { instanceId: 'custom-towel', itemId: 'towel_rack', x: 2, y: 2, rot: 0 },
+          { instanceId: 'custom-overflow', itemId: 'armchair', x: 43, y: 35, rot: 0 },
+        ],
+      },
+    },
+    quests: {},
+    player: { room: 'lobby', x: 6, y: 0, dir: 'up', sitting: null }, // on the legacy removed door
+  };
+  const storage = makeFakeStorage({ [SAVE_KEY]: JSON.stringify(v5Save) });
+  const loaded = loadState(storage);
+  assert.equal(loaded.version, SAVE_VERSION);
+  // Unmodified lobby seed upgrades to new expanded seed
+  assert.ok(loaded.rooms.lobby.placed.length > 10);
+  // Custom item in pool preserved
+  assert.ok(loaded.rooms.pool.placed.some((p) => p.instanceId === 'custom-towel'));
+  // Player rescued from removed door tile (which is now WALL)
+  assert.deepEqual({ x: loaded.player.x, y: loaded.player.y }, ROOMS.lobby.spawn);
+});
+
+test('v0.8.2 multiplayer room snapshots: My Room unchanged dimensions preserve visitor scene and sanitization', () => {
+  const def = ROOMS.myroom;
+  assert.equal(def.width, 9);
+  assert.equal(def.height, 8);
+  const rawPlaced = [
+    { instanceId: 'snap-bed', itemId: 'suite_bed', x: 6, y: 2, rot: 0 },
+    { instanceId: 'snap-lamp', itemId: 'lamp', x: 8, y: 2, rot: 0 },
+  ];
+  const sanitized = sanitizePlacedItemsForRoom(def, rawPlaced, []);
+  assert.equal(sanitized.length, 2);
+  assert.equal(sanitized[0].instanceId, 'snap-bed');
 });
