@@ -1200,6 +1200,120 @@ test('v0.7.0 npc: tickNpc actually starts a walking step (not just assigning a p
   assert.notEqual(npc.toX, npc.fromX === npc.toX ? null : npc.fromX, 'a concrete step is queued');
 });
 
+// ======================= v0.8.4 NPC routines (role-based pathing) =======================
+
+// Rebuilds the same collision rules main.js's isBlockedFactory applies (walls/doors +
+// non-walkable furniture footprints), from the pure seed data, so routines can be
+// validated without importing the DOM-coupled main.js.
+function makeSeedBlocked(room, placedList) {
+  return (x, y) => {
+    if (x < 0 || y < 0 || x >= room.width || y >= room.height) return true;
+    const cell = room.grid[y][x];
+    if (cell === TILE.WALL || cell === TILE.WINDOW || cell === TILE.VOID) return true;
+    if (cell === TILE.DOOR && room.doors.find((d) => d.x === x && d.y === y)?.elevator) return true;
+    for (const p of placedList) {
+      const item = getCatalogueItem(p.itemId);
+      if (!item || isFurnitureWalkable(item)) continue;
+      if (item.seat || item.interaction === 'treadmill') continue; // steppable — matches main.js's isBlockedFactory
+      const cells = footprintCells(p.x, p.y, item.footprint, p.rot || 0);
+      if (cells.some((c) => c.x === x && c.y === y)) return true;
+    }
+    return false;
+  };
+}
+
+test('v0.8.4 npc routines: every routine stop exists, stays in bounds, and is never on a wall/void tile', () => {
+  for (const npc of NPCS) {
+    if (!npc.routine) continue;
+    const room = ROOMS[npc.room];
+    assert.ok(room, `${npc.id}: room ${npc.room} exists`);
+    for (const stop of npc.routine) {
+      assert.ok(stop.x >= 0 && stop.y >= 0 && stop.x < room.width && stop.y < room.height,
+        `${npc.id}: routine stop (${stop.x},${stop.y}) is within ${npc.room}`);
+      const cell = room.grid[stop.y][stop.x];
+      assert.notEqual(cell, TILE.WALL, `${npc.id}: stop (${stop.x},${stop.y}) is not a wall`);
+      assert.notEqual(cell, TILE.VOID, `${npc.id}: stop (${stop.x},${stop.y}) is not void`);
+      assert.notEqual(cell, TILE.WINDOW, `${npc.id}: stop (${stop.x},${stop.y}) is not a window`);
+      if (stop.activity === 'interact') {
+        const placed = (SEED_FURNITURE[npc.room] || []).find((p) => p.x === stop.x && p.y === stop.y);
+        assert.ok(placed, `${npc.id}: 'interact' stop (${stop.x},${stop.y}) must sit on a real seeded furniture item`);
+      }
+    }
+  }
+});
+
+test('v0.8.4 npc routines: every NPC can walk its full routine loop, in order, from its home tile, without crossing a blocked tile', () => {
+  for (const npc of NPCS) {
+    if (!npc.routine) continue;
+    const room = ROOMS[npc.room];
+    const placedList = (SEED_FURNITURE[npc.room] || []).map((p, i) => ({ ...p, instanceId: `${npc.room}-${i}` }));
+    const blocked = makeSeedBlocked(room, placedList);
+    const roomForInventory = { width: room.width, height: room.height, grid: room.grid, placed: placedList };
+    let pos = { x: npc.home.x, y: npc.home.y };
+    assert.ok(!blocked(pos.x, pos.y), `${npc.id}: home tile (${pos.x},${pos.y}) is not blocked`);
+    for (const stop of npc.routine) {
+      if (stop.activity === 'interact') {
+        const placed = placedList.find((p) => p.x === stop.x && p.y === stop.y);
+        const approach = findApproachTile(roomForInventory, placed, blocked, pos, [], []);
+        assert.ok(approach && approach.path && approach.path.length >= 1,
+          `${npc.id}: can reach interact stop (${stop.x},${stop.y}) from (${pos.x},${pos.y})`);
+        for (const step of approach.path) assert.ok(!blocked(step.x, step.y), `${npc.id}: path step (${step.x},${step.y}) is never blocked`);
+        pos = approach.tile;
+      } else {
+        const path = findPath(room.width, room.height, blocked, pos, { x: stop.x, y: stop.y });
+        assert.ok(path, `${npc.id}: can reach stand stop (${stop.x},${stop.y}) from (${pos.x},${pos.y})`);
+        for (const step of path) assert.ok(!blocked(step.x, step.y), `${npc.id}: path step (${step.x},${step.y}) is never blocked`);
+        pos = { x: stop.x, y: stop.y };
+      }
+    }
+  }
+});
+
+test('v0.8.4 npc routines: tickNpc advances routineIdx-driven dwell timers correctly (travel + dwell, instant-interact, and retry cases)', () => {
+  const mochi = NPCS.find((n) => n.id === 'mochi');
+
+  // A path target with an explicit dwellMs waits (at least) travel time + dwellMs before
+  // the NPC is willing to move again — long enough to actually look "purposeful" at the stop.
+  const npcA = { ...createNpcRuntime(mochi), def: mochi, nextWanderAt: 0 };
+  tickNpc(npcA, 1000, {
+    tryWander: () => ({ path: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 2, y: 0 }], dwellMs: 5000 }),
+    pickAmbientLine: () => null,
+    stepMs: 100,
+  });
+  assert.equal(npcA.walking, true);
+  assert.ok(npcA.nextWanderAt >= 1000 + 200 + 5000 - 1, 'nextWanderAt covers travel time plus the full dwell');
+
+  // handledDirectly (NPC already standing on its next routine stop, e.g. it never left a
+  // single-stop loop) must still respect the dwell timer without starting a walk.
+  const npcB = { ...createNpcRuntime(mochi), def: mochi, nextWanderAt: 0, walking: false };
+  tickNpc(npcB, 1000, {
+    tryWander: () => ({ handledDirectly: true, dwellMs: 4000 }),
+    pickAmbientLine: () => null,
+  });
+  assert.equal(npcB.walking, false, 'handledDirectly never starts a walk');
+  assert.equal(npcB.nextWanderAt, 5000, 'handledDirectly still schedules the next check after the dwell');
+
+  // A seated/busy NPC is not stuck forever: once nextWanderAt elapses, tickNpc must still
+  // call tryWander and let it reach a new routine stop (regression test for the old gate
+  // `npc.sitting === null`, which silently froze any NPC that had ever sat down).
+  const npcC = { ...createNpcRuntime(mochi), def: mochi, nextWanderAt: 0, sitting: 'some-chair-instance-id' };
+  let wanderCalled = false;
+  tickNpc(npcC, 1000, {
+    tryWander: () => { wanderCalled = true; return { path: [{ x: 0, y: 0 }, { x: 1, y: 0 }] }; },
+    pickAmbientLine: () => null,
+  });
+  assert.equal(wanderCalled, true, 'tickNpc calls tryWander for a seated NPC once its dwell timer elapses');
+  assert.equal(npcC.walking, true, 'the seated NPC starts walking to its next routine stop');
+
+  // No reachable target right now (e.g. stop momentarily occupied): retry soon, not instantly
+  // (which would spam pathfinding every frame) and not after a full dwell (which would make
+  // the NPC appear stuck).
+  const npcD = { ...createNpcRuntime(mochi), def: mochi, nextWanderAt: 0, walking: false };
+  tickNpc(npcD, 1000, { tryWander: () => null, pickAmbientLine: () => null });
+  assert.equal(npcD.walking, false);
+  assert.ok(npcD.nextWanderAt > 1000 && npcD.nextWanderAt <= 1000 + 3000, 'a missed target retries soon, bounded');
+});
+
 // ======================= v0.7.0 zoom, camera & pointer mapping =======================
 
 test('v0.7.0 zoom: clampZoom bounds the zoom level and DEFAULT_ZOOM sits within range', () => {

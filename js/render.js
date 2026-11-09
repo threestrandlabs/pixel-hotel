@@ -17,6 +17,13 @@ export const TOP_PADDING = 54;
 
 const canvasCache = new Map();
 
+// Reused across frames instead of allocated fresh each call — renderRoom runs
+// synchronously once per animation frame, so there's no re-entrancy risk.
+const drawablesBuf = [];
+const overheadDrawablesBuf = [];
+const nameTargetsBuf = [];
+const bubbleTargetsBuf = [];
+
 // Effective device-pixel density for baked bitmaps drawn under the camera transform.
 // The camera scales the world by `zoom`, so a sprite baked only at `dpr` gets upscaled
 // (blurry) when zoomed in. Baking at ceil(dpr*zoom) guarantees it is never upscaled,
@@ -44,10 +51,16 @@ function blitDeviceAligned(ctx, sourceCanvas, cssX, cssY, dpr) {
   ctx.restore();
 }
 
-function bakeSprite(key, sprite, dpr = 1) {
+// `spriteOrFactory` may be a pre-built sprite object or a zero-arg factory
+// function. Callers should pass a factory (e.g. `() => buildFloorTile(...)`)
+// so the (expensive, per-pixel) sprite construction only runs on a cache
+// miss — passing an already-invoked sprite object defeats the cache, since
+// the caller pays the full build cost on every call regardless of hit/miss.
+function bakeSprite(key, spriteOrFactory, dpr = 1) {
   const scale = Math.max(1, dpr);
   const cacheKey = `${key}@${scale}`;
   if (canvasCache.has(cacheKey)) return canvasCache.get(cacheKey);
+  const sprite = typeof spriteOrFactory === 'function' ? spriteOrFactory() : spriteOrFactory;
 
   const W = Math.max(1, Math.round(sprite.w * scale));
   const H = Math.max(1, Math.round(sprite.h * scale));
@@ -593,6 +606,7 @@ export function buildIsoCityLayout(room = { id: 'lobby', width: 12, height: 9, f
 let skylineCache = { key: '', canvas: null, beacons: [], ox: 0, oy: 0 };
 let foregroundCache = { key: '', canvas: null, ox: 0, oy: 0 };
 let cutawayCache = { key: '', canvas: null };
+let cutawayOverCache = { key: '', canvas: null };
 
 // ---------- Animated City Vehicles (Cars, Taxis, Buses, Scooters) ----------
 
@@ -1405,6 +1419,25 @@ function drawTowerCutawayUnder(ctx, room, originX, originY, height, phase) {
   }
 }
 
+// drawTowerCutawayOver only depends on room geometry/origin (no day-night or
+// animation state), so — like drawTowerCutawayUnderCached — it is safe to
+// bake once per room/zoom/origin and blit thereafter instead of re-walking
+// every polygon every frame.
+function drawTowerCutawayOverCached(ctx, room, originX, originY, width, height, dpr = 1) {
+  const key = `cutawayOver:${room.id}:${width}x${height}@${dpr}:${originX},${originY}`;
+  if (cutawayOverCache.key !== key) {
+    const off = cutawayOverCache.canvas || document.createElement('canvas');
+    off.width = Math.max(1, Math.round(width * dpr));
+    off.height = Math.max(1, Math.round(height * dpr));
+    const g = off.getContext('2d');
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.clearRect(0, 0, width, height);
+    drawTowerCutawayOver(g, room, originX, originY);
+    cutawayOverCache = { key, canvas: off };
+  }
+  blitDeviceAligned(ctx, cutawayOverCache.canvas, 0, 0, dpr);
+}
+
 function drawTowerCutawayOver(ctx, room, originX, originY) {
   if (room.isRooftop) {
     // Rooftop housing block standing structure: flat top roof slab, stone parapet coping, and side return wall
@@ -1652,8 +1685,7 @@ function furnitureCanvas(itemId, rot = 0, dpr = 1, off = false) {
   const r = ((rot % 4) + 4) % 4;
   const key = `furn:${itemId}:${r}`;
   const builder = FURNITURE_BUILDERS[toSpriteKey(itemId)];
-  const sprite = builder ? builder(r) : FURNITURE_BUILDERS.stool(r);
-  const canvas = bakeSprite(key, sprite, dpr);
+  const canvas = bakeSprite(key, () => (builder ? builder(r) : FURNITURE_BUILDERS.stool(r)), dpr);
   if (!off) return canvas;
   // A toggled-off lamp/light item renders its normal sprite darkened, so it visibly
   // reads as "off" without needing a second hand-authored sprite per light fixture.
@@ -1834,7 +1866,7 @@ export function renderRoom(ctx, opts) {
   const sky = { top: lerpColor('#1a2250', '#8fd0ff', wb), bottom: lerpColor('#ffd27a', '#fff6c9', wb) };
 
   // Tower cut-away shaft, concrete floor slab, and neighbouring floors
-  drawTowerCutawayUnder(ctx, room, originX, originY, height, phase);
+  drawTowerCutawayUnderCached(ctx, room, originX, originY, width, height, phase, ds);
 
   // Viewport bounds in world space for frustum culling on expanded floors
   const tl = screenToWorld(0, 0, camera, width, height);
@@ -1863,9 +1895,9 @@ export function renderRoom(ctx, opts) {
       const tileCol = inZone ? (zt.color || floorColor) : floorColor;
       let canvas;
       if (doorDef?.elevator) {
-        canvas = bakeSprite(`elevtile:${room.id}:${lightsTag}`, buildElevatorTile(floorColor), ds);
+        canvas = bakeSprite(`elevtile:${room.id}:${lightsTag}`, () => buildElevatorTile(floorColor), ds);
       } else if (doorDef) {
-        canvas = bakeSprite(`doortile:${room.id}:${lightsTag}`, buildDoorTile(floorColor), ds);
+        canvas = bakeSprite(`doortile:${room.id}:${lightsTag}`, () => buildDoorTile(floorColor), ds);
       } else {
         let mat = room.floorMaterial || 'default';
         if (inZone && zt?.material) mat = zt.material;
@@ -1873,7 +1905,7 @@ export function renderRoom(ctx, opts) {
           const matchZone = room.zones.find((z) => x >= z.x0 && x <= z.x1 && y >= z.y0 && y <= z.y1);
           if (matchZone?.material) mat = matchZone.material;
         }
-        canvas = bakeSprite(`floor:${room.id}:${inZone ? 'z' : 'b'}:${mat}:${variant}:${tileCol}:${lightsTag}`, buildFloorTile(tileCol, variant, mat), ds);
+        canvas = bakeSprite(`floor:${room.id}:${inZone ? 'z' : 'b'}:${mat}:${variant}:${tileCol}:${lightsTag}`, () => buildFloorTile(tileCol, variant, mat), ds);
       }
       blitDeviceAligned(ctx, canvas, sx - TILE_W / 2, sy - TILE_H / 2, ds);
       if (inZone && zt.riser && (x === zt.x0 || y === zt.y0)) {
@@ -1943,17 +1975,19 @@ export function renderRoom(ctx, opts) {
         key = `wall:${room.id}:${kind}:${lightsTag}`;
         sprite = () => buildWallSegment(wallColor, kind);
       }
-      const wallCanvas = bakeSprite(key, sprite(), ds);
+      const wallCanvas = bakeSprite(key, sprite, ds);
       blitDeviceAligned(ctx, wallCanvas, sx - TILE_W / 2, sy - WALL_ANCHOR_Y, ds);
     }
   }
 
   // Upper concrete ceiling slab / parapet over the top of the walls
-  drawTowerCutawayOver(ctx, room, originX, originY);
+  drawTowerCutawayOverCached(ctx, room, originX, originY, width, height, ds);
 
   // Pass 3: depth-sorted furniture + entities (with overhead items rendered above)
-  const drawables = [];
-  const overheadDrawables = [];
+  const drawables = drawablesBuf;
+  const overheadDrawables = overheadDrawablesBuf;
+  drawables.length = 0;
+  overheadDrawables.length = 0;
   for (const f of placedFurniture) {
     const item = getCatalogueItem(f.itemId);
     if (item?.flat) continue;
@@ -1970,8 +2004,10 @@ export function renderRoom(ctx, opts) {
   }
   drawables.sort((a, b) => a.depth - b.depth);
 
-  const nameTargets = [];
-  const bubbleTargets = [];
+  const nameTargets = nameTargetsBuf;
+  const bubbleTargets = bubbleTargetsBuf;
+  nameTargets.length = 0;
+  bubbleTargets.length = 0;
   for (const d of drawables) {
     if (d.type === 'furniture') {
       const fItem = getCatalogueItem(d.data.itemId);

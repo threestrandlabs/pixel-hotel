@@ -31,6 +31,7 @@ export function createNpcRuntime(def) {
     bubble: null, // { text, until }
     nextWanderAt: 1200 + Math.random() * 2500,
     nextAmbientAt: 3000 + Math.random() * 4000,
+    routineIdx: 0, // index into def.routine of the stop the NPC is currently at/heading to
   };
 }
 
@@ -38,9 +39,18 @@ export function directionBetween(from, to) {
   return directionForStep(from, to);
 }
 
+const DEFAULT_DWELL_MS = () => 3200 + Math.random() * 4200;
+const RETRY_DELAY_MS = () => 1500 + Math.random() * 1500;
+
 /**
  * Tick an NPC's wander/ambient timers. `now` is a ms timestamp.
- * `tryWander(npc)` should return a reachable target `{ path }` or null.
+ * `tryWander(npc)` should return a reachable target `{ path, dwellMs? }`, a
+ * `{ handledDirectly: true, dwellMs? }` result when the NPC acted in place
+ * without walking (e.g. it was already standing on its next routine stop),
+ * or null when no target is currently reachable.
+ *
+ * Gating is driven purely by `nextWanderAt` (not sitting/activity state) so
+ * a seated/busy NPC still wakes up once its dwell time at that stop elapses.
  */
 export function tickNpc(npc, now, { tryWander, pickAmbientLine, stepMs = 240 }) {
   if (npc.bubble && npc.bubble.until <= now) npc.bubble = null;
@@ -48,7 +58,7 @@ export function tickNpc(npc, now, { tryWander, pickAmbientLine, stepMs = 240 }) 
   const isStationary = !!(npc.stationary || npc.def?.stationary);
   const isPaused = npc.pausedUntil && now < npc.pausedUntil;
 
-  if (!isStationary && !isPaused && !npc.walking && !npc.path && npc.sitting === null && now >= npc.nextWanderAt) {
+  if (!isStationary && !isPaused && !npc.walking && !npc.path && now >= npc.nextWanderAt) {
     const target = tryWander ? tryWander(npc) : null;
     if (target && target.path && target.path.length > 1) {
       const next = target.path[1];
@@ -65,8 +75,13 @@ export function tickNpc(npc, now, { tryWander, pickAmbientLine, stepMs = 240 }) 
       npc.stepDuration = stepMs * Math.hypot(next.x - npc.x, next.y - npc.y);
       npc.stepStart = now;
       npc.walking = true;
+      const travelMs = stepMs * (target.path.length - 1);
+      npc.nextWanderAt = now + travelMs + (target.dwellMs ?? DEFAULT_DWELL_MS());
+    } else if (target && target.handledDirectly) {
+      npc.nextWanderAt = now + (target.dwellMs ?? DEFAULT_DWELL_MS());
+    } else {
+      npc.nextWanderAt = now + RETRY_DELAY_MS();
     }
-    npc.nextWanderAt = now + 3200 + Math.random() * 4200;
   }
 
   if (now >= npc.nextAmbientAt && !npc.bubble) {

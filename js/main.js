@@ -927,6 +927,99 @@ function npcIsBlocked(room, roomRuntime, npcId) {
   return isBlockedFactory(room, roomRuntime, occ);
 }
 
+function randRange([min, max]) {
+  return min + Math.random() * (max - min);
+}
+
+/**
+ * Role-driven movement: each NPC with a `def.routine` walks its stops in a
+ * fixed cycle (waypoints tied to real seats/stations/POIs for that floor —
+ * see data.js), dwelling at each stop for a role-appropriate duration
+ * instead of picking a new random tile every few seconds. `activity:
+ * 'interact'` stops reuse the same approach/seat machinery as the player's
+ * furniture interactions, so diners sit in their chair, chefs stand at
+ * their range, swimmers occupy a lap-pool tile, etc. NPCs without a
+ * routine (none, currently) fall back to the legacy random wander/furniture
+ * seeking behaviour below.
+ */
+function routineStepFor(npc, room, roomRuntime, now) {
+  const routine = npc.def?.routine;
+  if (Array.isArray(routine) && routine.length > 0) {
+    const occ = occupantTilesExcluding('npc', npc.id);
+    const res = reservedTilesExcluding('npc', npc.id);
+    const blocked = isBlockedFactory(room, roomRuntime, occ);
+    for (let attempt = 0; attempt < routine.length; attempt++) {
+      const idx = (npc.routineIdx + 1 + attempt) % routine.length;
+      const stop = routine[idx];
+      const dwellMs = stop.dwell ? randRange(stop.dwell) : 4000;
+      if (stop.activity === 'interact') {
+        const placed = roomRuntime.placed.find((p) => p.x === stop.x && p.y === stop.y);
+        if (!placed) continue;
+        if (npc.sitting === placed.instanceId || npc.activity?.instanceId === placed.instanceId) continue;
+        const approach = findApproachTile(roomForInventory(npc.room), placed, blocked, { x: npc.x, y: npc.y }, occ, res);
+        if (!approach || !approach.path || approach.path.length < 2) continue;
+        npc.routineIdx = idx;
+        npc.sitting = null;
+        npc.lying = false;
+        npc.activity = null;
+        npc.pendingInteract = {
+          instanceId: placed.instanceId,
+          itemId: placed.itemId,
+          targetTile: approach.tile,
+          dir: approach.dir,
+          kind: approach.kind,
+        };
+        return { path: approach.path, dwellMs };
+      }
+      const path = findPath(room.width, room.height, blocked, { x: npc.x, y: npc.y }, { x: stop.x, y: stop.y });
+      if (!path || path.length < 2) continue;
+      npc.routineIdx = idx;
+      npc.sitting = null;
+      npc.lying = false;
+      npc.activity = null;
+      return { path, dwellMs };
+    }
+    return null;
+  }
+
+  // Legacy fallback for any NPC without a routine: occasionally sit at a
+  // nearby piece of furniture, otherwise wander to a random reachable tile.
+  if ((npc.sitting || npc.activity) && Math.random() < 0.72) return null;
+  if (Math.random() < 0.32) {
+    const occ = occupantTilesExcluding('npc', npc.id);
+    const res = reservedTilesExcluding('npc', npc.id);
+    const blocked = isBlockedFactory(room, roomRuntime, occ);
+    const candidates = roomRuntime.placed.filter((p) => {
+      const item = getCatalogueItem(p.itemId);
+      if (!item) return false;
+      if (npc.sitting === p.instanceId || npc.activity?.instanceId === p.instanceId) return false;
+      return item.seat || item.interaction === 'treadmill' || item.interaction === 'swim' || item.interaction === 'use';
+    });
+    const targetFurn = pickRandom(candidates);
+    if (targetFurn) {
+      const approach = findApproachTile(roomForInventory(npc.room), targetFurn, blocked, { x: npc.x, y: npc.y }, occ, res);
+      if (approach && approach.path.length > 1) {
+        npc.sitting = null;
+        npc.lying = false;
+        npc.activity = null;
+        npc.pendingInteract = {
+          instanceId: targetFurn.instanceId,
+          itemId: targetFurn.itemId,
+          targetTile: approach.tile,
+          dir: approach.dir,
+          kind: approach.kind,
+        };
+        return { path: approach.path };
+      }
+    }
+  }
+  npc.sitting = null;
+  npc.lying = false;
+  npc.activity = null;
+  const blocked = npcIsBlocked(room, roomRuntime, npc.id);
+  return findWanderTarget(npc, room.width, room.height, blocked);
+}
+
 function tickNpcs(now) {
   for (const n of npcRuntimes) {
     if (n.room !== state.player.room) continue;
@@ -944,42 +1037,7 @@ function tickNpcs(now) {
       },
     });
     tickNpc(n, now, {
-      tryWander: (npc) => {
-        if ((npc.sitting || npc.activity) && Math.random() < 0.72) return null;
-        if (Math.random() < 0.32) {
-          const occ = occupantTilesExcluding('npc', npc.id);
-          const res = reservedTilesExcluding('npc', npc.id);
-          const blocked = isBlockedFactory(room, roomRuntime, occ);
-          const candidates = roomRuntime.placed.filter((p) => {
-            const item = getCatalogueItem(p.itemId);
-            if (!item) return false;
-            if (npc.sitting === p.instanceId || npc.activity?.instanceId === p.instanceId) return false;
-            return item.seat || item.interaction === 'treadmill' || item.interaction === 'swim' || item.interaction === 'use';
-          });
-          const targetFurn = pickRandom(candidates);
-          if (targetFurn) {
-            const approach = findApproachTile(roomForInventory(npc.room), targetFurn, blocked, { x: npc.x, y: npc.y }, occ, res);
-            if (approach && approach.path.length > 1) {
-              npc.sitting = null;
-              npc.lying = false;
-              npc.activity = null;
-              npc.pendingInteract = {
-                instanceId: targetFurn.instanceId,
-                itemId: targetFurn.itemId,
-                targetTile: approach.tile,
-                dir: approach.dir,
-                kind: approach.kind,
-              };
-              return { path: approach.path };
-            }
-          }
-        }
-        npc.sitting = null;
-        npc.lying = false;
-        npc.activity = null;
-        const blocked = npcIsBlocked(room, roomRuntime, npc.id);
-        return findWanderTarget(npc, room.width, room.height, blocked);
-      },
+      tryWander: (npc) => routineStepFor(npc, room, roomRuntime, now),
       pickAmbientLine: (npc) => pickRandom(npc.def.ambientLines),
     });
   }
@@ -1069,8 +1127,14 @@ function frame(now) {
   });
   if (player.walking && !ui.dragging) {
     const target = centerCameraOnTile(player.renderX, player.renderY, room0, ui.cssW, ui.cssH, ui.camera.zoom);
-    ui.camera.panX += (target.panX - ui.camera.panX) * 0.18;
-    ui.camera.panY += (target.panY - ui.camera.panY) * 0.18;
+    // Snapping the shared camera pan to whole device pixels (rather than letting
+    // it drift sub-pixel) keeps every sprite's `blitDeviceAligned` rounding
+    // consistent relative to each other frame-to-frame, which is what actually
+    // stops the 1px shimmer/wobble between furniture, floor and characters
+    // while the camera eases toward the walking player.
+    const dpr = ui.dpr || 1;
+    ui.camera.panX = Math.round((ui.camera.panX + (target.panX - ui.camera.panX) * 0.18) * dpr) / dpr;
+    ui.camera.panY = Math.round((ui.camera.panY + (target.panY - ui.camera.panY) * 0.18) * dpr) / dpr;
   }
   tickActiveDialogue(now);
   tickMultiplayer(now, player);

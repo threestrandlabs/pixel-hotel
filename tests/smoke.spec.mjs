@@ -1100,10 +1100,19 @@ async function runMultiplayerUiFlowTests(browser) {
 }
 
 // Safety net: never let a stuck page/browser handle hang the process forever.
+// This full suite (2 single-user passes at DPR 1x/2x plus the mocked-browser
+// multiplayer flow) legitimately takes ~95-110s end to end — there's no actual
+// hang. A 90s budget here was a race against that normal runtime, not a hang
+// detector, which is exactly why this test failed "about half the time" with
+// no error of its own (`DEBUG=pw:api` showed it always died mid-action, at
+// whatever step happened to be running at the 90s mark, with the Node process
+// forcibly exited before Playwright's own per-action timeout ever got a
+// chance to fire). 180s leaves real headroom above the ~110s baseline while
+// still catching a genuine hang well before CI would.
 const watchdog = setTimeout(() => {
-  console.error('Watchdog: smoke test exceeded 90s, forcing exit.');
+  console.error('Watchdog: smoke test exceeded 180s, forcing exit.');
   process.exit(1);
-}, 90000);
+}, 180000);
 watchdog.unref();
 
 main()

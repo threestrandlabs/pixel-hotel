@@ -4,6 +4,32 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.8.4] - 2026-11-10
+
+### Added
+
+- **Role-based NPC routines (`js/data.js`, `js/npc.js`, `js/main.js`)**: replaced the old 72%/32% random-wander-or-sit-at-random-furniture logic with authored, cyclic per-NPC routines of real waypoints (seats, kitchen stations, machines, shelves, lanes, plants) across every public floor:
+  - Restaurant: chefs/cooks loop between their own kitchen stations; waiters loop kitchen pass → tables → kitchen pass; the maître d' stays at the podium with brief greeting trips to the entrance; diners (Arthur, Sophia, Evelyn) sit at their table for a long dwell and occasionally step toward the entrance before returning.
+  - Gym: Coach Rex and Chloe move machine to machine with pauses.
+  - Pool & Spa: the stylist/masseuse alternate between their two chairs/beds; Marina swims a lap loop across eight pool tiles; the spa receptionist stays near her desk.
+  - Arcade: Zack cycles through the cabinets.
+  - Library: Clara browses two bookshelves, reads at the nook sofa, then returns to her desk.
+  - Garden: Flora strolls bench → pergola → tree → telescope.
+  - Rooftop: Lola alternates sofa/bar; Dr. Pix alternates telescope/deckchair.
+  - Lobby: Mochi patrols both lounges and the desk; Gus mostly sits, occasionally shuffling around.
+  - Every routine stop was validated against the real seeded furniture/collision data (new tests below) so NPCs never target a wall, void, or a tile that isn't actually reachable.
+- **`npc.js` dwell-aware tick engine**: `tickNpc` now gates on a single `nextWanderAt` timer that accounts for travel time plus a per-stop dwell duration (instead of a fixed 3-7s random repick), and supports a `handledDirectly` result for NPCs that are already standing on their next stop. This also fixes a latent bug where any NPC that sat down could never be picked to wander again (the old gate required `npc.sitting === null` before even considering a new target).
+- **Render-loop performance fixes (`js/render.js`, `js/data.js`, `js/main.js`)** — profiled with a new `tests/perf-profile.mjs` Playwright script (walks the player back and forth on the 11-NPC Restaurant floor for 480 frames):
+  - **Root cause of the reported lag/stutter**: `bakeSprite()`'s whole purpose is to cache baked pixel-art canvases, but every call site was invoking the (expensive, per-pixel) sprite-construction function *before* passing the result in, so the cache only ever saved the final canvas rasterization step — the costly `buildFloorTile`/`buildWallSegment`/furniture-builder work re-ran on literally every tile, every wall segment, and every placed furniture item, every single frame. Fixed by making `bakeSprite` accept a factory function and only invoke it on a cache miss.
+  - `drawTowerCutawayUnderCached` (the cached wrapper for the tower cut-away shaft) was defined but never actually called — the uncached `drawTowerCutawayUnder` was being redrawn from scratch every frame instead. Wired the cached version in.
+  - Added the equivalent cache for `drawTowerCutawayOver` (ceiling slab/parapet/rooftop housing), which has no day-night or animation dependency and was also being redrawn every frame.
+  - `getCatalogueItem()` did a linear `Array.find` over the whole catalogue on every call (hundreds of calls/frame across furniture rendering, collision checks, and NPC AI); switched to an id → item `Map`.
+  - Reused fixed buffers for the per-frame depth-sort/name-tag/bubble arrays in `renderRoom` instead of allocating new arrays every frame.
+  - Camera pan is now snapped to whole device pixels after each frame's follow-lerp, instead of drifting to arbitrary sub-pixel offsets — this keeps every sprite's rounding in `blitDeviceAligned` consistent with each other frame-to-frame, which is what was actually causing the 1px shimmer/tearing between furniture, floor and characters while the camera eased toward the walking player (confirmed `imageSmoothingEnabled = false` and the single `requestAnimationFrame` loop were already correct; frame drops from the sprite-rebuild bug above were the dominant source of visible tearing).
+  - **Measured**: average frame time on the Restaurant floor dropped from **83.0ms (12.0 fps)** to **28.9ms (34.5 fps)**; p95 from 283ms to 50ms; p50 (typical frame) from 66.6ms to 16.7ms — i.e. typical frames now render inside a 60fps budget.
+- **Deterministic `npm run test:smoke`**: the suite's own 90-second internal watchdog was racing its own legitimate ~95-110s runtime (two full single-user passes at 1x/2x DPR plus a mocked multiplayer flow), not detecting a real hang — roughly half the time the run would still be mid-action when the watchdog fired and force-exited the process. Raised the watchdog to 180s, which leaves real headroom above the baseline while still catching a genuine hang.
+- **Pathing tests (`tests/logic.test.mjs`)**: every NPC's routine stops are validated to be in-bounds, never on a wall/void tile, and (for furniture-interaction stops) anchored to a real seeded placement; every NPC's full routine loop is walked in order from its home tile through the real seeded collision data to confirm it's fully reachable without ever crossing a blocked tile; and `tickNpc`'s new dwell-timer gating is unit-tested for the travel+dwell, instant-interact, previously-seated, and no-target-found cases.
+
 ## [0.8.3] - 2026-11-09
 
 ### Added

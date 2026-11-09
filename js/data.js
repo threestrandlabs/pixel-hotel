@@ -562,8 +562,10 @@ export const CATALOGUE = [
   walkable: typeof item.walkable === 'boolean' ? item.walkable : Boolean(item.flat),
 }));
 
+const CATALOGUE_BY_ID = new Map(CATALOGUE.map((c) => [c.id, c]));
+
 export function getCatalogueItem(id) {
-  return CATALOGUE.find((c) => c.id === id) || null;
+  return CATALOGUE_BY_ID.get(id) || null;
 }
 
 // Furnishings a brand-new game starts with (old saves keep their own rooms).
@@ -993,6 +995,12 @@ export const NPCS = [
     room: 'lobby',
     home: { x: 5, y: 8 },
     pointsOfInterest: [{ x: 3, y: 8 }, { x: 5, y: 8 }, { x: 7, y: 4 }, { x: 3, y: 3 }],
+    routine: [
+      { x: 5, y: 8, dwell: [3000, 5000] },
+      { x: 3, y: 6, dwell: [2000, 4000] },
+      { x: 36, y: 8, dwell: [3000, 5000] },
+      { x: 9, y: 4, dwell: [2000, 4000] },
+    ],
     greetLines: ["Hiya! Welcome to Pixel Hotel's 42 storeys!", "Oh hello there, friend!"],
     ambientLines: [
       'Did you know the elevator travels all the way to Floor 42?',
@@ -1019,6 +1027,10 @@ export const NPCS = [
     personality: 'energetic barista',
     room: 'cafe',
     home: { x: 5, y: 4 },
+    routine: [
+      { x: 3, y: 2, activity: 'interact', dwell: [3000, 6000] },
+      { x: 14, y: 2, activity: 'interact', dwell: [3000, 6000] },
+    ],
     greetLines: ['Welcome to Starlight Cafe! Espresso or boba?', 'Hey there! Fresh roast just finished!'],
     ambientLines: [
       'Dialing in the perfect pixel espresso shot takes 19 seconds.',
@@ -1043,6 +1055,11 @@ export const NPCS = [
     personality: 'passionate head chef',
     room: 'restaurant',
     home: { x: 38, y: 3 },
+    routine: [
+      { x: 38, y: 2, activity: 'interact', dwell: [6000, 12000] },
+      { x: 42, y: 2, activity: 'interact', dwell: [6000, 12000] },
+      { x: 38, y: 8, activity: 'interact', dwell: [6000, 12000] },
+    ],
     greetLines: ['Bon appétit! Welcome to the Skyline Fine Dining kitchen!', 'Ah, a guest with refined taste!'],
     ambientLines: [
       'The secret to pixel glaze is a pinch of saffron and timing.',
@@ -1067,6 +1084,10 @@ export const NPCS = [
     personality: 'focused grill cook',
     room: 'restaurant',
     home: { x: 42, y: 3 },
+    routine: [
+      { x: 42, y: 2, activity: 'interact', dwell: [6000, 10000] },
+      { x: 42, y: 8, activity: 'interact', dwell: [6000, 10000] },
+    ],
     greetLines: ['Order up on grill two!', 'Hot pans, coming through!'],
     ambientLines: [
       'Searing steaks at 500 degrees — never a dull moment!',
@@ -1086,6 +1107,10 @@ export const NPCS = [
     personality: 'detail-oriented pastry cook',
     room: 'restaurant',
     home: { x: 38, y: 9 },
+    routine: [
+      { x: 38, y: 8, activity: 'interact', dwell: [6000, 10000] },
+      { x: 36, y: 16, activity: 'interact', dwell: [4000, 8000] },
+    ],
     greetLines: ['Plating chocolate soufflés right now!', 'Careful, delicate sugar sculptures here!'],
     ambientLines: [
       'Pastry is exact chemistry. Every gram matters.',
@@ -1104,6 +1129,10 @@ export const NPCS = [
     personality: 'hardworking dishwasher',
     room: 'restaurant',
     home: { x: 42, y: 17 },
+    routine: [
+      { x: 42, y: 16, activity: 'interact', dwell: [6000, 10000] },
+      { x: 44, y: 22, activity: 'interact', dwell: [5000, 9000] },
+    ],
     greetLines: ['Sparkling clean china coming through!', 'Soap suds and steam keep this kitchen running!'],
     ambientLines: [
       'Five hundred dishes an hour — that is a workout!',
@@ -1122,6 +1151,10 @@ export const NPCS = [
     personality: 'dignified host',
     room: 'restaurant',
     home: { x: 20, y: 3 },
+    routine: [
+      { x: 20, y: 5, activity: 'interact', dwell: [10000, 20000] },
+      { x: 20, y: 2, dwell: [3000, 6000] },
+    ],
     greetLines: ['Good evening. Welcome to Skyline Fine Dining.', 'A pleasure to welcome you to Floor 3.'],
     ambientLines: [
       'Our sommelier Pierre has prepared tonight’s vintage pairings.',
@@ -1141,6 +1174,12 @@ export const NPCS = [
     personality: 'attentive waiter',
     room: 'restaurant',
     home: { x: 24, y: 8 },
+    routine: [
+      { x: 34, y: 10, activity: 'interact', dwell: [2000, 4000] },
+      { x: 28, y: 14, dwell: [3000, 6000] },
+      { x: 34, y: 10, activity: 'interact', dwell: [2000, 4000] },
+      { x: 28, y: 24, dwell: [3000, 6000] },
+    ],
     greetLines: ['Good evening! Sparkling or still water for the table?', 'Allow me to present tonight’s specials.'],
     ambientLines: [
       'Carrying silver cloches between the kitchen pass and tables is an art.',
@@ -1159,6 +1198,12 @@ export const NPCS = [
     personality: 'cheerful server',
     room: 'restaurant',
     home: { x: 16, y: 16 },
+    routine: [
+      { x: 34, y: 10, activity: 'interact', dwell: [2000, 4000] },
+      { x: 16, y: 14, dwell: [3000, 6000] },
+      { x: 34, y: 10, activity: 'interact', dwell: [2000, 4000] },
+      { x: 6, y: 17, dwell: [3000, 6000] },
+    ],
     greetLines: ['Care for freshly ground pepper?', 'Can I bring you a dessert menu?'],
     ambientLines: [
       'The acoustics from the grand piano make dinner so romantic.',
@@ -1177,6 +1222,11 @@ export const NPCS = [
     personality: 'wine connoisseur',
     room: 'restaurant',
     home: { x: 10, y: 3 },
+    routine: [
+      { x: 8, y: 2, dwell: [4000, 8000] },
+      { x: 12, y: 2, dwell: [4000, 8000] },
+      { x: 16, y: 14, dwell: [3000, 5000] },
+    ],
     greetLines: ['Welcome to our cellar collection.', 'Every vintage tells a story.'],
     ambientLines: [
       'Our mahogany wine wall holds rare vintages from Bordeaux and Tuscany.',
@@ -1196,6 +1246,11 @@ export const NPCS = [
     personality: 'upbeat fitness trainer',
     room: 'gym',
     home: { x: 10, y: 5 },
+    routine: [
+      { x: 14, y: 2, activity: 'interact', dwell: [4000, 8000] },
+      { x: 3, y: 5, activity: 'interact', dwell: [4000, 8000] },
+      { x: 14, y: 5, activity: 'interact', dwell: [4000, 8000] },
+    ],
     greetLines: ['Let\'s gooo! Welcome to Pulse Fitness!', 'Ready to crush a workout, champ?'],
     ambientLines: [
       'Remember to hydrate at the water cooler between sets!',
@@ -1220,6 +1275,10 @@ export const NPCS = [
     personality: 'flamboyant salon artist',
     room: 'pool',
     home: { x: 30, y: 7 },
+    routine: [
+      { x: 30, y: 6, activity: 'interact', dwell: [8000, 15000] },
+      { x: 34, y: 6, activity: 'interact', dwell: [8000, 15000] },
+    ],
     greetLines: ['Bonjour darling! Looking for a fabulous new look?', 'Step into my salon chair on Floor 5!'],
     ambientLines: [
       'A fresh haircut and color can completely redefine your aura!',
@@ -1239,6 +1298,10 @@ export const NPCS = [
     personality: 'calming massage therapist',
     room: 'pool',
     home: { x: 32, y: 14 },
+    routine: [
+      { x: 34, y: 13, activity: 'interact', dwell: [8000, 15000] },
+      { x: 38, y: 13, activity: 'interact', dwell: [8000, 15000] },
+    ],
     greetLines: ['Namaste. Welcome to the Azure Spa sanctuary.', 'Rest your mind and body on our massage beds.'],
     ambientLines: [
       'Lie back on our massage bed for a gentle energy and mood restoration.',
@@ -1258,6 +1321,10 @@ export const NPCS = [
     personality: 'gentle receptionist',
     room: 'pool',
     home: { x: 29, y: 19 },
+    routine: [
+      { x: 28, y: 20, activity: 'interact', dwell: [10000, 20000] },
+      { x: 40, y: 22, dwell: [3000, 6000] },
+    ],
     greetLines: ['Welcome to Azure Spa & Salon.', 'Appointments for styling and massage are always available.'],
     ambientLines: [
       'Our cedar sauna and Olympic pool are open all day.',
@@ -1276,6 +1343,12 @@ export const NPCS = [
     personality: 'thoughtful archivist',
     room: 'library',
     home: { x: 5, y: 4 },
+    routine: [
+      { x: 3, y: 1, activity: 'interact', dwell: [4000, 7000] },
+      { x: 13, y: 1, activity: 'interact', dwell: [4000, 7000] },
+      { x: 3, y: 8, activity: 'interact', dwell: [15000, 25000] },
+      { x: 7, y: 4, activity: 'interact', dwell: [8000, 15000] },
+    ],
     greetLines: ['Shh... oh, hello! Welcome to the Quiet Library & Hub.', 'Good day! Looking for a quiet desk or a good book?'],
     ambientLines: [
       'We have every blueprint of our 42-storey skyscraper on the archives shelf.',
@@ -1304,6 +1377,11 @@ export const NPCS = [
     room: 'lobby',
     home: { x: 11, y: 8 },
     pointsOfInterest: [{ x: 11, y: 8 }, { x: 8, y: 8 }, { x: 11, y: 5 }, { x: 7, y: 9 }],
+    routine: [
+      { x: 1, y: 22, activity: 'interact', dwell: [20000, 40000] },
+      { x: 7, y: 9, dwell: [3000, 6000] },
+      { x: 11, y: 5, dwell: [3000, 6000] },
+    ],
     greetLines: ['Eh? Oh. Hello, I suppose.', "Hmph. Didn't see you there."],
     ambientLines: [
       "Back in my day we didn't need 42 storeys to have a good time.",
@@ -1329,6 +1407,10 @@ export const NPCS = [
     personality: 'tech nomad',
     room: 'cafe',
     home: { x: 7, y: 8 },
+    routine: [
+      { x: 7, y: 8, activity: 'interact', dwell: [15000, 30000] },
+      { x: 3, y: 2, activity: 'interact', dwell: [3000, 5000] },
+    ],
     greetLines: ['Hey! Working on my indie game here.', 'Need a caffeine reboot.'],
     ambientLines: [
       'I am staying in Room 1508 on Floor 15 — the Wi-Fi reaches all the way down here to the cafe.',
@@ -1349,6 +1431,11 @@ export const NPCS = [
     personality: 'yoga enthusiast',
     room: 'gym',
     home: { x: 14, y: 9 },
+    routine: [
+      { x: 14, y: 10, activity: 'interact', dwell: [15000, 30000] },
+      { x: 17, y: 10, activity: 'interact', dwell: [15000, 30000] },
+      { x: 19, y: 2, activity: 'interact', dwell: [3000, 5000] },
+    ],
     greetLines: ['Namaste! Great energy in this gym today.', 'Breathe deep and stretch!'],
     ambientLines: [
       'My superior suite is Room 1903 on Floor 19. The morning sun there is divine.',
@@ -1369,6 +1456,12 @@ export const NPCS = [
     personality: 'retro arcade champion',
     room: 'arcade',
     home: { x: 4, y: 4 },
+    routine: [
+      { x: 3, y: 2, activity: 'interact', dwell: [6000, 12000] },
+      { x: 5, y: 2, activity: 'interact', dwell: [6000, 12000] },
+      { x: 7, y: 2, activity: 'interact', dwell: [6000, 12000] },
+      { x: 16, y: 2, activity: 'interact', dwell: [5000, 10000] },
+    ],
     greetLines: ['Yo! Ready to challenge my Cosmic Bellhop high score?', 'Player Two has entered Floor 6!'],
     ambientLines: [
       'I just hit level 99 on a single token!',
@@ -1391,6 +1484,10 @@ export const NPCS = [
     personality: 'art collector guest',
     room: 'restaurant',
     home: { x: 14, y: 13 },
+    routine: [
+      { x: 14, y: 13, activity: 'interact', dwell: [20000, 40000] },
+      { x: 20, y: 2, dwell: [4000, 8000] },
+    ],
     greetLines: ['Good evening. The ambiance here is quite exquisite.', 'A delightful evening for dining.'],
     ambientLines: [
       'I am staying in Room 2607 on Floor 26 — splendid mid-tower vistas.',
@@ -1411,6 +1508,16 @@ export const NPCS = [
     personality: 'swimming enthusiast guest',
     room: 'pool',
     home: { x: 8, y: 8 },
+    routine: [
+      { x: 8, y: 10, activity: 'interact', dwell: [1500, 3000] },
+      { x: 8, y: 14, activity: 'interact', dwell: [1500, 3000] },
+      { x: 8, y: 18, activity: 'interact', dwell: [1500, 3000] },
+      { x: 8, y: 22, activity: 'interact', dwell: [1500, 3000] },
+      { x: 12, y: 22, activity: 'interact', dwell: [1500, 3000] },
+      { x: 12, y: 18, activity: 'interact', dwell: [1500, 3000] },
+      { x: 12, y: 14, activity: 'interact', dwell: [1500, 3000] },
+      { x: 12, y: 10, activity: 'interact', dwell: [1500, 3000] },
+    ],
     greetLines: ['The water in this Olympic lap pool is magnificent!', 'Hello! Remember to change into your swimsuit first.'],
     ambientLines: [
       'I swim twenty laps every morning before breakfast.',
@@ -1433,6 +1540,12 @@ export const NPCS = [
     personality: 'dreamy sky botanist',
     room: 'garden',
     home: { x: 14, y: 6 },
+    routine: [
+      { x: 11, y: 7, activity: 'interact', dwell: [15000, 25000] },
+      { x: 14, y: 10, dwell: [4000, 8000] },
+      { x: 18, y: 5, dwell: [3000, 6000] },
+      { x: 16, y: 14, activity: 'interact', dwell: [4000, 8000] },
+    ],
     greetLines: ['Oh, hello! Smell the sakura blossoms on Floor 9!', 'Welcome to the Cloud Nine Sky Garden!'],
     ambientLines: [
       'I live in Deluxe Room 2906 on Floor 29, right among the upper clouds.',
@@ -1455,6 +1568,10 @@ export const NPCS = [
     personality: 'discerning food critic',
     room: 'restaurant',
     home: { x: 26, y: 13 },
+    routine: [
+      { x: 26, y: 13, activity: 'interact', dwell: [20000, 40000] },
+      { x: 20, y: 2, dwell: [4000, 8000] },
+    ],
     greetLines: ['Taking notes on tonight’s tasting menu.', 'The truffle aroma is divine.'],
     ambientLines: [
       'I am staying in Junior Suite 3304 on Floor 33. The tower views are inspiring.',
@@ -1475,6 +1592,10 @@ export const NPCS = [
     personality: 'lounge singer',
     room: 'rooftop',
     home: { x: 2, y: 5 },
+    routine: [
+      { x: 4, y: 5, activity: 'interact', dwell: [20000, 35000] },
+      { x: 14, y: 11, activity: 'interact', dwell: [4000, 8000] },
+    ],
     greetLines: ['Well hello, darling~', 'Oh, a new audience member on Floor 42!'],
     ambientLines: [
       'Humming a little tune under these rooftop string lights...',
@@ -1497,6 +1618,10 @@ export const NPCS = [
     personality: 'distinguished VIP guest',
     room: 'restaurant',
     home: { x: 10, y: 21 },
+    routine: [
+      { x: 4, y: 23, activity: 'interact', dwell: [25000, 45000] },
+      { x: 20, y: 2, dwell: [4000, 8000] },
+    ],
     greetLines: ['Good evening. Fine dining at its finest.', 'A splendid vintage Pierre selected for me.'],
     ambientLines: [
       'I am occupying Presidential Suite 3908 on Floor 39. Exceptional service here.',
@@ -1517,6 +1642,10 @@ export const NPCS = [
     personality: 'eccentric scientist guest',
     room: 'rooftop',
     home: { x: 6, y: 3 },
+    routine: [
+      { x: 2, y: 12, activity: 'interact', dwell: [15000, 25000] },
+      { x: 14, y: 4, activity: 'interact', dwell: [6000, 12000] },
+    ],
     greetLines: ['Ah, a new test subject— I mean, friend! Hello!', 'Salutations from Floor 42!'],
     ambientLines: [
       "I'm calculating gravitational gradients from my suite in Room 4001 on Floor 40.",
