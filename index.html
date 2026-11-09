@@ -14,7 +14,8 @@
     <div id="coinsDisplay">💰 <span id="coinsValue">0</span></div>
     <div id="topButtons">
       <button id="btnElevator" class="pixel-btn" title="Elevator Directory (E)">🛗 Elevator</button>
-      <button id="btnMyRoom" class="pixel-btn" title="Go to My Room (Floor 8)">🔑 My Room</button>
+      <button id="btnMyRoom" class="pixel-btn" title="Go to My Room">🔑 My Room</button>
+      <button id="btnUpgradeRoom" class="pixel-btn" title="Upgrade Room Tier">⭐ Upgrade Room</button>
       <button id="btnInventory" class="pixel-btn" title="Inventory (I)">🛋️ Items</button>
       <button id="btnQuests" class="pixel-btn" title="Quests (Q)">📜 Quests</button>
       <button id="btnMultiplayer" class="pixel-btn" title="Multiplayer (friends &amp; party rooms)">🌐 Multiplayer</button>
@@ -49,11 +50,50 @@
           <span class="mp-eq-bar"></span>
           <span class="mp-eq-bar"></span>
         </div>
-        <button id="mpCollapse" class="pixel-btn mp-collapse-btn" title="Collapse / Expand Player">▼</button>
+        <button id="mpCollapse" class="pixel-btn mp-collapse-btn" title="Minimise Player">▼</button>
       </div>
       <div id="mpBody" class="mp-body">
-        <div class="mp-progress">
-          <div id="mpProgressFill" class="mp-progress-fill"></div>
+        <div id="mpCassette" class="mp-cassette" aria-hidden="true">
+          <div class="mp-cassette-shell">
+            <span class="mp-screw mp-screw-tl"></span>
+            <span class="mp-screw mp-screw-tr"></span>
+            <span class="mp-screw mp-screw-bl"></span>
+            <span class="mp-screw mp-screw-br"></span>
+            <div class="mp-cassette-label">
+              <div class="mp-label-top">
+                <span class="mp-label-side">SIDE A</span>
+                <span class="mp-label-type">STEREO • C-60</span>
+              </div>
+              <div id="mpCassetteTitle" class="mp-cassette-title">Velvet Grand Atrium</div>
+            </div>
+            <div class="mp-cassette-window">
+              <div class="mp-reel mp-reel-left">
+                <div class="mp-spool">
+                  <span class="mp-tooth t1"></span>
+                  <span class="mp-tooth t2"></span>
+                  <span class="mp-tooth t3"></span>
+                </div>
+              </div>
+              <div class="mp-tape-bridge">
+                <div class="mp-tape-guide"></div>
+              </div>
+              <div class="mp-reel mp-reel-right">
+                <div class="mp-spool">
+                  <span class="mp-tooth t1"></span>
+                  <span class="mp-tooth t2"></span>
+                  <span class="mp-tooth t3"></span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="mp-seek-row">
+          <span id="mpTimeCurrent" class="mp-time">0:00</span>
+          <div id="mpProgressBar" class="mp-progress" role="slider" aria-label="Seek track" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0">
+            <div id="mpProgressFill" class="mp-progress-fill"></div>
+            <div id="mpProgressThumb" class="mp-progress-thumb"></div>
+          </div>
+          <span id="mpTimeTotal" class="mp-time">0:00</span>
         </div>
         <div class="mp-controls">
           <button id="mpPrev" class="pixel-btn" title="Previous Track">⏮</button>
@@ -225,6 +265,56 @@
       </ul>
       <p class="kbd-hint">Shortcuts: <kbd>E</kbd> elevator · <kbd>I</kbd> inventory · <kbd>Q</kbd> quests · <kbd>M</kbd> mute · <kbd>H</kbd> help · <kbd>S</kbd> save · <kbd>R</kbd> rotate · <kbd>Esc</kbd> cancel</p>
       <button id="btnHelpClose" class="pixel-btn">Got it!</button>
+    </div>
+  </div>
+
+  <div id="poolPromptModal" class="overlay hidden">
+    <div class="overlay-box" style="max-width: 380px; text-align: center;">
+      <h2>🏊 Azure Olympic Pool</h2>
+      <p>Heated Olympic lap pool with 25m lanes. Choose an activity:</p>
+      <div style="display:flex; flex-direction:column; gap:10px; margin: 16px 0;">
+        <button id="btnPoolSwimLaps" class="pixel-btn">🏊 Swim Laps (Automatic Lap Routine)</button>
+        <button id="btnPoolFreeRoam" class="pixel-btn">🌊 Free Roam (Swim Anywhere)</button>
+        <button id="btnPoolExit" class="pixel-btn">🪜 Exit Pool via Deck</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="salonModal" class="overlay hidden">
+    <div class="overlay-box" style="max-width: 440px; text-align: center;">
+      <h2>💇 Antoine's Azure Salon</h2>
+      <p>Transform your look with a stylish haircut or vibrant dye! <b>Cost: 20 Coins</b></p>
+      <div style="margin: 14px 0; text-align: left;">
+        <h4 style="margin: 6px 0;">Select Hairstyle</h4>
+        <div id="salonHairStyles" style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px;">
+          <button class="pixel-btn salon-style-btn" data-style="classic">Classic</button>
+          <button class="pixel-btn salon-style-btn" data-style="bob">Bob Cut</button>
+          <button class="pixel-btn salon-style-btn" data-style="ponytail">Ponytail</button>
+          <button class="pixel-btn salon-style-btn" data-style="spiky">Spiky</button>
+          <button class="pixel-btn salon-style-btn" data-style="curls">Curls</button>
+        </div>
+        <h4 style="margin: 6px 0;">Select Hair Color</h4>
+        <div id="salonHairColors" style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px;">
+          <button class="pixel-btn salon-color-btn" data-color="#2c221e">Espresso</button>
+          <button class="pixel-btn salon-color-btn" data-color="#e6a15c">Golden</button>
+          <button class="pixel-btn salon-color-btn" data-color="#b83828">Auburn</button>
+          <button class="pixel-btn salon-color-btn" data-color="#4aa3df">Ocean</button>
+          <button class="pixel-btn salon-color-btn" data-color="#e75480">Rose</button>
+          <button class="pixel-btn salon-color-btn" data-color="#b088f0">Lavender</button>
+        </div>
+      </div>
+      <button id="btnSalonClose" class="pixel-btn">Close</button>
+    </div>
+  </div>
+
+  <div id="roomUpgradeModal" class="overlay hidden">
+    <div class="overlay-box" style="max-width: 540px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <h2>🏨 Room Upgrade Agency</h2>
+        <button class="panel-close" id="btnUpgradeClose">✕</button>
+      </div>
+      <p style="margin-bottom: 12px; font-size: 13px; color: #555;">Upgrade your private room to higher hotel floors with larger layouts and luxurious floorings. Placed furniture migrates safely.</p>
+      <div id="roomUpgradeList" style="display: flex; flex-direction: column; gap: 10px;"></div>
     </div>
   </div>
 </div>

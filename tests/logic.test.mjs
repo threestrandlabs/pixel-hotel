@@ -13,17 +13,17 @@ import {
   initQuestState, advanceQuestsByType, setQuestProgress, claimReward, listQuests,
 } from '../js/quests.js';
 import { createDefaultState, loadState, saveState, resetState, sanitizePlacedItemsForRoom, SAVE_KEY } from '../js/save.js';
-import { getCatalogueItem, TILE, SAVE_VERSION, ROOMS, NPCS, CATALOGUE, SEED_FURNITURE, ITEM_CATEGORIES } from '../js/data.js';
+import { getCatalogueItem, TILE, SAVE_VERSION, ROOMS, NPCS, CATALOGUE, SEED_FURNITURE, ITEM_CATEGORIES, ROOM_TIERS } from '../js/data.js';
 import { respondToMessage, findWanderTarget, createNpcRuntime, tickNpc } from '../js/npc.js';
 import { LOOKS, renderCharacter, buildParts } from '../js/voxel.js';
-import { buildWindowSegment, FURNITURE_BUILDERS } from '../js/sprites.js';
+import { buildWindowSegment, buildGlassBalustradeSegment, buildBookshelf, FURNITURE_BUILDERS } from '../js/sprites.js';
 import {
   tileToScreen, computeOrigin, computeGroundDy, computeCityGroundDy,
   projectIsoCityPoint, buildIsoCityLayout, computeCityVehicles, drawBackground,
   clampZoom, zoomAtPoint, centerCameraOnTile, screenToTile, worldToScreen,
   DEFAULT_ZOOM, MIN_ZOOM, MAX_ZOOM, deviceScale,
 } from '../js/render.js';
-import { ChiptuneAudio, MOOD_PROFILES, MUSIC_FILES, moodForRoom } from '../js/audio.js';
+import { ChiptuneAudio, MOOD_PROFILES, MUSIC_FILES, moodForRoom, formatTime } from '../js/audio.js';
 
 // ---------- fake localStorage ----------
 function makeFakeStorage(initial = {}) {
@@ -1639,8 +1639,8 @@ test('v0.8.2 room dimensions: 16x area for Lobby/Restaurant/Pool, 4x area for ot
   assert.equal(ROOMS.myroom.height, 8);
 });
 
-test('v0.8.2 rooftop rework: floor R, open-air balustrade, legacy lobby door removed, stairwell door pair with garden, elevator R button', () => {
-  assert.equal(ROOMS.rooftop.floor, 'R');
+test('v0.8.3 rooftop rework: floor 42, open-air balustrade, legacy lobby door removed, elevator reached, stair door decorative/staff only', () => {
+  assert.equal(ROOMS.rooftop.floor, 42);
   assert.equal(ROOMS.rooftop.isRooftop, true);
   assert.equal(ROOMS.rooftop.shape, 'open-air-rooftop');
 
@@ -1648,15 +1648,15 @@ test('v0.8.2 rooftop rework: floor R, open-air balustrade, legacy lobby door rem
   assert.ok(!ROOMS.lobby.doors.some((d) => d.to === 'rooftop'));
   assert.ok(!ROOMS.rooftop.doors.some((d) => d.to === 'lobby' && !d.elevator));
 
-  // Stairwell door pair between top floor (garden) and rooftop
+  // Sky Garden to roof stair door removed (roof is reached via elevator)
   const gardenToRoof = ROOMS.garden.doors.find((d) => d.to === 'rooftop');
-  const roofToGarden = ROOMS.rooftop.doors.find((d) => d.to === 'garden');
-  assert.ok(gardenToRoof, 'Sky garden must have door to rooftop');
-  assert.ok(roofToGarden, 'Rooftop must have door to garden');
-  assert.equal(gardenToRoof.label, 'To Roof');
-  assert.equal(roofToGarden.label, 'To Sky Garden');
-  assert.equal(gardenToRoof.elevator, undefined);
-  assert.equal(roofToGarden.elevator, undefined);
+  assert.equal(gardenToRoof, undefined, 'Sky garden has no stair door to rooftop');
+
+  // Decorative locked staff door on rooftop
+  const roofStair = ROOMS.rooftop.doors.find((d) => !d.elevator);
+  assert.ok(roofStair, 'Rooftop has housing stair door');
+  assert.equal(roofStair.label, 'Staff Only');
+  assert.equal(roofStair.locked, true);
 
   // Elevator door exists on Rooftop
   const roofElevator = ROOMS.rooftop.doors.find((d) => d.elevator);
@@ -1712,4 +1712,309 @@ test('v0.8.2 multiplayer room snapshots: My Room unchanged dimensions preserve v
   const sanitized = sanitizePlacedItemsForRoom(def, rawPlaced, []);
   assert.equal(sanitized.length, 2);
   assert.equal(sanitized[0].instanceId, 'snap-bed');
+});
+
+// ======================= v0.8.3 cassette player & rooftop railing bugfix =======================
+
+test('v0.8.3 rooftop railing: glass balustrade segments stay within their tile half (west x<32, north x>=32) and meet cleanly at corners without sticking out', () => {
+  const west = buildGlassBalustradeSegment('west');
+  const north = buildGlassBalustradeSegment('north');
+
+  let westOpaqueCount = 0;
+  let westOpaquePastCorner = 0;
+  let westHasCornerPost = false;
+  for (let y = 0; y < west.h; y++) {
+    for (let x = 0; x < west.w; x++) {
+      if (west.px[y][x]) {
+        westOpaqueCount++;
+        if (x >= 32) westOpaquePastCorner++;
+        if (x === 31) westHasCornerPost = true;
+      }
+    }
+  }
+
+  let northOpaqueCount = 0;
+  let northOpaqueBeforeCorner = 0;
+  let northHasCornerPost = false;
+  for (let y = 0; y < north.h; y++) {
+    for (let x = 0; x < north.w; x++) {
+      if (north.px[y][x]) {
+        northOpaqueCount++;
+        if (x < 32) northOpaqueBeforeCorner++;
+        if (x === 32) northHasCornerPost = true;
+      }
+    }
+  }
+
+  assert.ok(westOpaqueCount > 0, 'west balustrade has pixels');
+  assert.equal(westOpaquePastCorner, 0, 'west balustrade must not stick out beyond x=32 into empty sky/floor');
+  assert.ok(westHasCornerPost, 'west balustrade reaches the corner post at x=31');
+
+  assert.ok(northOpaqueCount > 0, 'north balustrade has pixels');
+  assert.equal(northOpaqueBeforeCorner, 0, 'north balustrade must not stick out before x=32 into empty sky/floor');
+  assert.ok(northHasCornerPost, 'north balustrade starts at the corner post at x=32');
+});
+
+test('v0.8.3 music player: formatTime formats seconds to M:SS with zero-padding and handles edge cases', () => {
+  assert.equal(formatTime(0), '0:00');
+  assert.equal(formatTime(5), '0:05');
+  assert.equal(formatTime(9), '0:09');
+  assert.equal(formatTime(10), '0:10');
+  assert.equal(formatTime(59), '0:59');
+  assert.equal(formatTime(60), '1:00');
+  assert.equal(formatTime(65), '1:05');
+  assert.equal(formatTime(125.8), '2:05');
+  assert.equal(formatTime(-10), '0:00');
+  assert.equal(formatTime(NaN), '0:00');
+  assert.equal(formatTime(Infinity), '0:00');
+  assert.equal(formatTime(null), '0:00');
+});
+
+test('v0.8.3 music player: seek and seekRatio clamp within [0, duration] and update audio currentTime', () => {
+  class FakeAudioElement {
+    constructor() {
+      this.currentTime = 0;
+      this.duration = 100;
+      this.paused = true;
+    }
+    addEventListener() {}
+    play() { this.paused = false; return Promise.resolve(); }
+    pause() { this.paused = true; }
+  }
+
+  global.Audio = FakeAudioElement;
+  let audio;
+  try {
+    audio = new ChiptuneAudio();
+    audio.setTrack('lobby');
+
+    // getDuration is positive
+    const dur = audio.getDuration();
+    assert.ok(dur > 0);
+
+    // seek clamps within [0, duration]
+    assert.equal(audio.seek(-20), 0);
+    assert.equal(audio.getCurrentTime(), 0);
+
+    assert.equal(audio.seek(42), 42);
+    assert.equal(audio.getCurrentTime(), 42);
+
+    assert.equal(audio.seek(9999), dur);
+    assert.equal(audio.getCurrentTime(), dur);
+
+    // seekRatio maps [0, 1] to [0, duration]
+    assert.equal(audio.seekRatio(0), 0);
+    assert.equal(audio.getCurrentTime(), 0);
+
+    const half = Math.round(dur * 0.5 * 100) / 100;
+    const seekHalf = audio.seekRatio(0.5);
+    assert.ok(Math.abs(seekHalf - half) < 0.1);
+
+    assert.equal(audio.seekRatio(1), dur);
+    assert.equal(audio.getCurrentTime(), dur);
+
+    // getMoodInfo contains currentTime and duration
+    const info = audio.getMoodInfo();
+    assert.equal(info.duration, dur);
+    assert.equal(info.currentTime, dur);
+  } finally {
+    if (audio) audio.stopLoop();
+    delete global.Audio;
+  }
+});
+
+test('v0.8.3 persistence: playerMinimized setting defaults to false and round-trips through saveState/loadState', () => {
+  const fresh = createDefaultState();
+  assert.equal(fresh.settings.playerMinimized, false);
+
+  const storage = makeFakeStorage();
+  fresh.settings.playerMinimized = true;
+  saveState(storage, fresh);
+
+  const loaded = loadState(storage);
+  assert.equal(loaded.settings.playerMinimized, true);
+
+  // An older save without playerMinimized should default to false
+  const oldSave = {
+    version: SAVE_VERSION,
+    settings: {
+      muted: false,
+      musicMuted: false,
+      sfxMuted: false,
+      zoom: 1.85,
+    },
+  };
+  const oldStorage = makeFakeStorage({ [SAVE_KEY]: JSON.stringify(oldSave) });
+  const loadedOld = loadState(oldStorage);
+  assert.equal(loadedOld.settings.playerMinimized, false);
+});
+
+test('v0.8.3 rooftop housing structure: elevator and stairwell "To Floor 9" door mounted on solid housing block (x=4..14, y=0) with windows and unblocked arrival routes', () => {
+  const roof = ROOMS.rooftop;
+  assert.equal(roof.isRooftop, true);
+
+  // Doors on the housing block
+  const stairDoor = roof.doors.find((d) => d.x === 6 && d.y === 0);
+  assert.ok(stairDoor);
+  assert.equal(stairDoor.x, 6);
+  assert.equal(stairDoor.y, 0);
+  assert.equal(stairDoor.label, 'Staff Only');
+  assert.equal(stairDoor.locked, true);
+
+  const elevDoor = roof.doors.find((d) => d.elevator);
+  assert.ok(elevDoor);
+  assert.equal(elevDoor.x, 12);
+  assert.equal(elevDoor.y, 0);
+
+  // Housing walls and windows along y = 0
+  assert.equal(roof.grid[0][4], TILE.WALL);
+  assert.equal(roof.grid[0][5], TILE.WINDOW);
+  assert.equal(roof.grid[0][6], TILE.DOOR);
+  assert.equal(roof.grid[0][7], TILE.WINDOW);
+  assert.equal(roof.grid[0][8], TILE.WALL);
+  assert.equal(roof.grid[0][9], TILE.WINDOW);
+  assert.equal(roof.grid[0][11], TILE.WINDOW);
+  assert.equal(roof.grid[0][12], TILE.DOOR);
+  assert.equal(roof.grid[0][13], TILE.WINDOW);
+  assert.equal(roof.grid[0][14], TILE.WALL);
+
+  // Open air balustrade edges (outside x=4..14)
+  assert.equal(roof.grid[0][1], TILE.WALL);
+  assert.equal(roof.grid[0][18], TILE.WALL);
+
+  // Door arrival routes stay clear
+  assert.ok(hasDoorArrivalRoute(roof, SEED_FURNITURE.rooftop));
+});
+
+test('v0.8.3 bookshelf model: solid closed side panels, top cornice, base plinth, and recessed books for rot 0 and 1', () => {
+  for (const rot of [0, 1]) {
+    const shelf = buildBookshelf(rot);
+    assert.ok(shelf.w > 0 && shelf.h > 0);
+    assert.equal(shelf.height, 74);
+
+    // Verify boxes include plinth base (z=0..4), back panel, upright side panels, shelves, and cornice (z=70..74)
+    const baseBox = shelf.boxes.find((b) => b.z0 === 0 && b.z1 === 4);
+    assert.ok(baseBox, `rot ${rot}: base plinth box must exist`);
+
+    const corniceBox = shelf.boxes.find((b) => b.z0 === 70 && b.z1 === 74);
+    assert.ok(corniceBox, `rot ${rot}: top cornice box must exist`);
+
+    const sidePanel = shelf.boxes.find((b) => b.z0 === 4 && b.z1 === 70);
+    assert.ok(sidePanel, `rot ${rot}: vertical upright side panel box must exist`);
+
+    // Verify books are recessed within the frame and do not exceed outer depth or cornice height
+    const bookBoxes = shelf.boxes.filter((b) => b.z0 > 0 && b.z1 - b.z0 <= 20 && b.z1 - b.z0 >= 10);
+    assert.ok(bookBoxes.length >= 15, `rot ${rot}: at least 15 book boxes expected across 3 shelves`);
+    for (const b of bookBoxes) {
+      if (rot % 2 === 0) {
+        assert.ok(b.v1 <= shelf.th - 0.08, `rot ${rot}: books must not protrude past front face`);
+      } else {
+        assert.ok(b.u1 <= shelf.tw - 0.08, `rot ${rot}: books must not protrude past front face`);
+      }
+    }
+  }
+});
+
+test('v0.8.3 library expansion: filled layout with bookshelf rows, study tables, reading nook, and librarian desk', () => {
+  const lib = ROOMS.library;
+  const placed = SEED_FURNITURE.library;
+
+  // Contains at least 25 items including bookshelves, study tables, chairs, lamps, desk, nook
+  assert.ok(placed.length >= 25, 'library should have an enriched collection of furniture');
+  const bookshelves = placed.filter((p) => p.itemId === 'bookshelf');
+  assert.ok(bookshelves.length >= 10, 'library should have multiple rows and wall stacks of bookshelves');
+
+  const desks = placed.filter((p) => /desk/i.test(p.itemId));
+  assert.ok(desks.length >= 2, 'library should have a librarian desk and workstation desk');
+
+  // No overlaps and all arrival routes clear
+  assert.ok(hasDoorArrivalRoute(lib, placed), 'elevator arrival route must be unblocked');
+
+  // NPC Clara's home tile is unblocked
+  const claraHome = NPCS.find((n) => n.id === 'clara')?.home;
+  assert.ok(claraHome);
+  const isOccupied = placed.some((p) => {
+    const item = getCatalogueItem(p.itemId);
+    if (isFurnitureWalkable(item)) return false;
+    return footprintCells(p.x, p.y, item.footprint, p.rot || 0).some((c) => c.x === claraHome.x && c.y === claraHome.y);
+  });
+  assert.equal(isOccupied, false, 'Clara home tile must be unblocked');
+});
+
+test('v0.8.3 npc rooms: every guest NPC has homeFloor 10-41 and a unique roomNumber', () => {
+  const guestNpcs = NPCS.filter((n) => !n.isStaff);
+  assert.ok(guestNpcs.length >= 6, 'should have multiple guest NPCs');
+  const roomNumbers = new Set();
+  for (const npc of guestNpcs) {
+    assert.ok(typeof npc.homeFloor === 'number', `${npc.id} must have numeric homeFloor`);
+    assert.ok(npc.homeFloor >= 10 && npc.homeFloor <= 41, `${npc.id} homeFloor must be between 10 and 41 (got ${npc.homeFloor})`);
+    assert.ok(npc.roomNumber, `${npc.id} must have roomNumber`);
+    assert.ok(!roomNumbers.has(npc.roomNumber), `roomNumber ${npc.roomNumber} for ${npc.id} must be unique`);
+    roomNumbers.add(npc.roomNumber);
+  }
+  const staffNpcs = NPCS.filter((n) => n.isStaff);
+  assert.ok(staffNpcs.length >= 6, 'should have staff NPCs');
+  for (const staff of staffNpcs) {
+    assert.equal(staff.isStaff, true);
+  }
+});
+
+test('v0.8.3 room tiers: 5 purchasable tiers with expanding dimensions, floor progression, and safe furniture migration', () => {
+  assert.equal(ROOM_TIERS.length, 5);
+  for (let i = 0; i < ROOM_TIERS.length; i++) {
+    const t = ROOM_TIERS[i];
+    assert.equal(t.tier, i + 1);
+    assert.ok(t.floor >= 11 && t.floor <= 41);
+    assert.ok(t.width >= 9);
+    assert.ok(t.height >= 8);
+    if (i > 0) {
+      assert.ok(t.floor > ROOM_TIERS[i - 1].floor, 'each tier moves up in tower');
+      assert.ok(t.cost > ROOM_TIERS[i - 1].cost, 'cost scales with tier');
+      assert.ok(t.width * t.height > ROOM_TIERS[i - 1].width * ROOM_TIERS[i - 1].height, 'area expands');
+    }
+  }
+
+  // Placed furniture migration test
+  const fakeRoom = {
+    width: 9,
+    height: 8,
+    grid: Array.from({ length: 8 }, () => Array(9).fill(TILE.FLOOR)),
+    cutouts: [],
+  };
+  const placedItems = [
+    { instanceId: 'p1', itemId: 'suite_bed', x: 2, y: 2, rot: 0 },
+    { instanceId: 'p2', itemId: 'sofa', x: 20, y: 20, rot: 0 },
+  ];
+  const returned = [];
+  const kept = sanitizePlacedItemsForRoom(fakeRoom, placedItems, returned);
+  assert.equal(kept.length, 1);
+  assert.equal(kept[0].instanceId, 'p1');
+  assert.equal(returned.length, 1);
+  assert.equal(returned[0].instanceId, 'p2');
+});
+
+test('v0.8.3 pool & spa: Olympic pool layout, changing cubicles, and swimsuit gating', () => {
+  const poolRoom = ROOMS.pool;
+  const placed = SEED_FURNITURE.pool;
+  assert.ok(poolRoom.width >= 40 && poolRoom.height >= 30, 'pool room expanded to 16x area');
+
+  const cubicles = placed.filter((p) => p.itemId === 'changing_cubicle');
+  assert.ok(cubicles.length >= 2, 'changing cubicles present');
+
+  const poolTiles = placed.filter((p) => p.itemId === 'pool_water');
+  assert.ok(poolTiles.length >= 10, 'sunken Olympic pool consists of multiple water rows/lanes');
+
+  const startingBlocks = placed.filter((p) => p.itemId === 'starting_block');
+  assert.ok(startingBlocks.length >= 4, 'Olympic starting blocks for lanes');
+
+  const loungers = placed.filter((p) => p.itemId === 'pool_lounger');
+  assert.ok(loungers.length >= 4, 'pool loungers on deck');
+
+  const salonChairs = placed.filter((p) => p.itemId === 'salon_chair');
+  assert.ok(salonChairs.length >= 1, 'salon chair in spa');
+
+  const massageBeds = placed.filter((p) => p.itemId === 'massage_bed');
+  assert.ok(massageBeds.length >= 1, 'massage beds in spa');
+
+  assert.ok(hasDoorArrivalRoute(poolRoom, placed), 'elevator landing is reachable');
 });

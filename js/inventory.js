@@ -101,7 +101,7 @@ export function findFreeInteractionSlot(placedItem, occupants = [], reservations
 }
 
 const DINING_SURFACES = new Set([
-  'dining_table', 'cafe_table', 'espresso_bar', 'boba_bar', 'buffet_counter', 'noodle_cart', 'bar_counter', 'chef_station',
+  'dining_table', 'round_dining_table', 'cafe_table', 'espresso_bar', 'boba_bar', 'buffet_counter', 'noodle_cart', 'bar_counter', 'chef_station', 'kitchen_pass',
 ]);
 
 /**

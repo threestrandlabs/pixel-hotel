@@ -352,11 +352,12 @@ async function main() {
     await page.mouse.click(4, 4);
     check('clicking outside closes the help overlay', (await helpOpen()) === 0);
     const seeded = await page.evaluate(() => window.__pixelHotel.getState().rooms);
-    check('lobby, gym, myroom, and rooftop start furnished',
+    check('lobby, gym, myroom, rooftop, and library start furnished',
       seeded.lobby.placed.length > 5 &&
       seeded.gym.placed.length > 5 &&
       seeded.myroom.placed.length >= 6 &&
-      seeded.rooftop.placed.length > 5
+      seeded.rooftop.placed.length > 5 &&
+      seeded.library.placed.length >= 25
     );
 
     // ---- v0.8.1: lamps are not toggleable on public floors (show a hint, no state change) ----
@@ -453,11 +454,32 @@ async function main() {
     await page.waitForTimeout(80);
     const mpAfterAuto = await page.evaluate(() => window.__pixelHotel.getMusicPlayerState());
     check('Auto: follow room toggle re-enables room-following', mpAfterAuto.info.autoFollowRoom === true);
+    // ---- v0.8.3: cassette player minimise toggle & seek bar ----
+    check('cassette tape view is visible in expanded player', await page.locator('#mpCassette').isVisible());
     await page.click('#mpCollapse');
     await page.waitForTimeout(80);
-    check('music player body collapses', await page.locator('#mpBody.hidden').count() === 1);
+    const mpMin = await page.evaluate(() => window.__pixelHotel.getMusicPlayerState());
+    check('music player minimise toggle collapses to compact size', mpMin.minimized === true && !(await page.locator('#mpCassette').isVisible()) && (await page.locator('#mpProgressBar').isVisible()));
     await page.click('#mpCollapse');
     await page.waitForTimeout(80);
+    const mpExp = await page.evaluate(() => window.__pixelHotel.getMusicPlayerState());
+    check('music player expands back to cassette view', mpExp.minimized === false && (await page.locator('#mpCassette').isVisible()));
+
+    // Seek check: seeking changes currentTime and updates elapsed time display
+    await page.evaluate(() => window.__pixelHotel.seekMusic(35));
+    await page.waitForTimeout(80);
+    const mpAfterSeek = await page.evaluate(() => window.__pixelHotel.getMusicPlayerState());
+    const curTimeLabel = await page.textContent('#mpTimeCurrent');
+    check('seeking changes currentTime and updates elapsed time display', Math.abs(mpAfterSeek.currentTime - 35) < 1.0 && curTimeLabel === '0:35');
+
+    // Seek via progress bar pointer interaction
+    const pBarBox = await page.locator('#mpProgressBar').boundingBox();
+    if (pBarBox) {
+      await page.mouse.click(pBarBox.x + pBarBox.width * 0.2, pBarBox.y + pBarBox.height * 0.5);
+      await page.waitForTimeout(80);
+      const mpAfterClickSeek = await page.evaluate(() => window.__pixelHotel.getMusicPlayerState());
+      check('clicking progress bar seeks track to target position', mpAfterClickSeek.currentTime > 0);
+    }
 
     // ---- v0.7.0: settings panel Master / Music / SFX / Ambience sliders ----
     await page.click('#btnMute');
@@ -638,13 +660,13 @@ async function main() {
     const restPlayer = await page.evaluate(() => window.__pixelHotel.getState().player);
     check('restaurant dining chair interaction sets player activity to eat', restPlayer.activity?.kind === 'eat' && !!restPlayer.sitting);
 
-    // ---- elevator travel to My Room (Floor 8) and furniture placement persistence ----
+    // ---- elevator travel to My Room (Floor 11) and furniture placement persistence ----
     await page.keyboard.press('e');
     await page.waitForTimeout(100);
     await page.click('[data-floor-room="myroom"]');
     await page.waitForTimeout(500);
     const stateInMyRoom = await page.evaluate(() => window.__pixelHotel.getState());
-    check('elevator travel to My Room works', stateInMyRoom.room === 'myroom' && stateInMyRoom.floor === 8);
+    check('elevator travel to My Room works', stateInMyRoom.room === 'myroom' && stateInMyRoom.floor === 11);
 
     // ---- v0.8.1: Shop opens on category tiles; a tile drills into its filtered item list ----
     await page.click('#btnInventory');
@@ -775,7 +797,7 @@ async function main() {
     await page2x.screenshot({ path: '/workspace/pixel-hotel-v060-gym.png' });
     await page2x.screenshot({ path: '/workspace/pixel-hotel-v070-gym.png' });
 
-    // High-floor screenshot (Floor R — Rooftop Lounge): open-air balustrade, lounge, bar,
+    // High-floor screenshot (Floor 42 — Rooftop Lounge): open-air balustrade, lounge, bar,
     // infinity pool, and neighbouring isometric rooftops & haze, by day and by night.
     await page2x.evaluate(() => {
       window.__pixelHotel.takeElevator('rooftop');
@@ -784,7 +806,7 @@ async function main() {
     });
     await page2x.waitForTimeout(550);
     const roofLabelDay = await page2x.textContent('#roomName');
-    check('floor indicator shows the Rooftop by day', roofLabelDay.includes('Floor R') && roofLabelDay.includes('Rooftop'));
+    check('floor indicator shows the Rooftop by day', roofLabelDay.includes('Floor 42') && roofLabelDay.includes('Rooftop'));
     await page2x.screenshot({ path: path.join(SCREENSHOT_DIR, '08-rooftop-day-2x.png') });
     await page2x.screenshot({ path: '/workspace/pixel-hotel-v060-highfloor.png' });
 
@@ -794,7 +816,7 @@ async function main() {
     });
     await page2x.waitForTimeout(550);
     const roofLabelNight = await page2x.textContent('#roomName');
-    check('floor indicator shows the Rooftop by night', roofLabelNight.includes('Floor R') && roofLabelNight.includes('Rooftop'));
+    check('floor indicator shows the Rooftop by night', roofLabelNight.includes('Floor 42') && roofLabelNight.includes('Rooftop'));
     await page2x.screenshot({ path: path.join(SCREENSHOT_DIR, '08-rooftop-night-2x.png') });
     await page2x.screenshot({ path: '/workspace/pixel-hotel-v060-night.png' });
 

@@ -266,19 +266,18 @@ export const SLAB_H = 16;
 export const STORY_H = 56;
 
 export function storiesBelowFloor(floor = 1) {
-  const f = floor === 'R' ? 10 : (Number(floor) || 1);
-  return Math.max(0, Math.min(10, Math.floor(f) - 1));
+  const f = (floor === 'R' || floor === 42 || floor === '42') ? 42 : (Number(floor) || 1);
+  return Math.max(0, Math.floor(f) - 1);
 }
 
 export function computeGroundDy(floor = 1) {
-  const f = floor === 'R' ? 10 : Math.max(1, Number(floor) || 1);
-  return SLAB_H + (f - 1) * STORY_H;
+  const f = (floor === 'R' || floor === 42 || floor === '42') ? 42 : Math.max(1, Number(floor) || 1);
+  if (f <= 5) return SLAB_H + (f - 1) * STORY_H;
+  return SLAB_H + 4 * STORY_H + (f - 5) * 32;
 }
 
 export function computeCityGroundDy(floor = 1) {
-  const f = floor === 'R' ? 10 : Math.max(1, Number(floor) || 1);
-  if (f <= 5) return computeGroundDy(f);
-  return computeGroundDy(5) + (f - 5) * 32;
+  return computeGroundDy(floor);
 }
 
 export function projectIsoCityPoint(u, v, z, originX, groundOriginY) {
@@ -299,13 +298,15 @@ function seededRand(seed) {
 export function buildIsoCityLayout(room = { id: 'lobby', width: 12, height: 9, floor: 1 }, width = 960, height = 600, phase = 0.5, padX = 480, padBottom = 320) {
   const W = room?.width || 12;
   const H = room?.height || 9;
+  const effW = Math.max(W, 64);
+  const effH = Math.max(H, 48);
   const floor = room?.floor || 1;
   const { originX, originY } = computeOrigin({ width: W, height: H }, width, height);
   const groundDy = computeGroundDy(floor);
   const cityGroundDy = computeCityGroundDy(floor);
   const groundOriginY = originY + cityGroundDy;
-  const floorNum = floor === 'R' ? 10 : (Number(floor) || 1);
-  const horizonY = Math.round(height * 0.26 + (floorNum - 1) * 3);
+  const floorNum = (floor === 'R' || floor === 42 || floor === '42') ? 42 : (Number(floor) || 1);
+  const horizonY = Math.round(height * 0.26 + Math.min(30, (floorNum - 1) * 2));
   const { day } = dayNightColors(phase);
   const nightFactor = Math.max(0, Math.min(1, (0.78 - day) * 1.55));
 
@@ -319,32 +320,32 @@ export function buildIsoCityLayout(room = { id: 'lobby', width: 12, height: 9, f
   const PITCH_V = BLK_V + ROAD_W;
 
   const uBounds = (bi) => {
-    if (bi === 0) return [-PAD, W + PAD];
+    if (bi === 0) return [-PAD, effW + PAD];
     if (bi < 0) {
       const u1 = -PAD - ROAD_W + (bi + 1) * PITCH_U;
       return [u1 - BLK_U, u1];
     }
-    const u0 = W + PAD + ROAD_W + (bi - 1) * PITCH_U;
+    const u0 = effW + PAD + ROAD_W + (bi - 1) * PITCH_U;
     return [u0, u0 + BLK_U];
   };
 
   const vBounds = (bj) => {
-    if (bj === 0) return [-PAD, H + PAD];
+    if (bj === 0) return [-PAD, effH + PAD];
     if (bj < 0) {
       const v1 = -PAD - ROAD_W + (bj + 1) * PITCH_V;
       return [v1 - BLK_V, v1];
     }
-    const v0 = H + PAD + ROAD_W + (bj - 1) * PITCH_V;
+    const v0 = effH + PAD + ROAD_W + (bj - 1) * PITCH_V;
     return [v0, v0 + BLK_V];
   };
 
   // Road corridors between block columns (v-axis avenues) and rows (u-axis avenues)
   const vRoads = [];
   const uRoads = [];
-  const effPadX = Math.max(padX, W * 24, H * 24);
-  const effPadBottom = Math.max(padBottom, (W + H) * 12);
-  const maxB = Math.max(12, Math.ceil(Math.max(W, H) / 5.8) + 6);
-  const maxSpan = Math.max(100, W + 60, H + 60);
+  const effPadX = Math.max(padX, effW * 24, effH * 24);
+  const effPadBottom = Math.max(padBottom, (effW + effH) * 12);
+  const maxB = Math.max(12, Math.ceil(Math.max(effW, effH) / 5.8) + 6);
+  const maxSpan = Math.max(100, effW + 60, effH + 60);
   for (let bi = -maxB; bi <= maxB - 1; bi++) {
     const [, leftU1] = uBounds(bi);
     const [rightU0] = uBounds(bi + 1);
@@ -1113,8 +1114,8 @@ function renderSkylineToCanvas(g, width, height, phase, floor, room = null, ox =
     }
 
     if (blk.kind === 'hotel') {
-      const W = roomSpec.width || 12;
-      const H = roomSpec.height || 9;
+      const W = Math.max(roomSpec.width || 12, 64);
+      const H = Math.max(roomSpec.height || 9, 48);
       fillPoly(
         g,
         [P(0.2, 0.2, 3), P(W - 0.2, 0.2, 3), P(W - 0.2, H - 0.2, 3), P(0.2, H - 0.2, 3)],
@@ -1283,11 +1284,9 @@ function drawTowerCutawayUnder(ctx, room, originX, originY, height, phase) {
   const colLeft = shadeColor(facadeLeft, 0.14);
   const colRight = shadeColor(facadeRight, 0.12);
   const storyH = STORY_H;
-  const floorNo = room.floor || 1;
+  const floorNo = (room.floor === 'R' || room.floor === 42 || room.floor === '42') ? 42 : (Number(room.floor) || 1);
   const groundDy = computeGroundDy(floorNo);
-  const grounded = southPt[1] + groundDy < height;
-  const bottomY = height + 20;
-  const gL = (pt) => (grounded ? pt[1] + groundDy : bottomY);
+  const gL = (pt) => pt[1] + groundDy;
 
   // Outer left & right structural corner columns
   const colTopOffset = room.isRooftop ? 0 : WALL_H;
@@ -1358,7 +1357,7 @@ function drawTowerCutawayUnder(ctx, room, originX, originY, height, phase) {
         fillPoly(ctx, [wPt, sPt, [sPt[0], gL(sPt)], [wPt[0], gL(wPt)]], facadeLeft);
         for (let story = 0; story < storiesBelow; story++) {
           const dy0 = SLAB_H + 8 + story * storyH;
-          if (wPt[1] + dy0 > height) continue;
+          if (dy0 + 26 > groundDy) break;
           const x0 = wPt[0] + (sPt[0] - wPt[0]) * 0.2;
           const y0 = wPt[1] + (sPt[1] - wPt[1]) * 0.2 + dy0;
           const x1 = wPt[0] + (sPt[0] - wPt[0]) * 0.8;
@@ -1377,7 +1376,7 @@ function drawTowerCutawayUnder(ctx, room, originX, originY, height, phase) {
         fillPoly(ctx, [sPt, ePt, [ePt[0], gL(ePt)], [sPt[0], gL(sPt)]], facadeRight);
         for (let story = 0; story < storiesBelow; story++) {
           const dy0 = SLAB_H + 8 + story * storyH;
-          if (sPt[1] + dy0 > height) continue;
+          if (dy0 + 26 > groundDy) break;
           const x0 = sPt[0] + (ePt[0] - sPt[0]) * 0.2;
           const y0 = sPt[1] + (ePt[1] - sPt[1]) * 0.2 + dy0;
           const x1 = sPt[0] + (ePt[0] - sPt[0]) * 0.8;
@@ -1407,7 +1406,55 @@ function drawTowerCutawayUnder(ctx, room, originX, originY, height, phase) {
 }
 
 function drawTowerCutawayOver(ctx, room, originX, originY) {
-  if (room.isRooftop) return;
+  if (room.isRooftop) {
+    // Rooftop housing block standing structure: flat top roof slab, stone parapet coping, and side return wall
+    const hx0 = 4;
+    const hx1 = 14;
+    // Front top and ground corners along north wall
+    const t4 = tileToScreen(hx0, 1, originX, originY);
+    const nwTop = [t4.sx - TILE_W / 2, t4.sy - WALL_ANCHOR_Y - 16];
+    const t14 = tileToScreen(hx1, 1, originX, originY);
+    const neTop = [t14.sx + TILE_W / 2, t14.sy - WALL_ANCHOR_Y + 16];
+    const neGround = [t14.sx + TILE_W / 2, t14.sy];
+    // Return side wall going back 1 tile (dx = -TILE_W / 2, dy = -TILE_H / 2)
+    const brTop = [neTop[0] - TILE_W / 2, neTop[1] - TILE_H / 2];
+    const brGround = [neGround[0] - TILE_W / 2, neGround[1] - TILE_H / 2];
+    const blTop = [nwTop[0] - TILE_W / 2, nwTop[1] - TILE_H / 2];
+
+    // 1. Right return wall facing south-east (towards pool deck)
+    const sideCol = shadeColor(room.wallColor, -0.22);
+    fillPoly(ctx, [neTop, brTop, brGround, neGround], sideCol);
+
+    // Window on the side return wall
+    const winW = 12;
+    const wTop0 = [neTop[0] - 8, neTop[1] - 4 + 14];
+    const wTop1 = [wTop0[0] - winW, wTop0[1] - winW / 2];
+    fillPoly(ctx, [
+      wTop0,
+      wTop1,
+      [wTop1[0], wTop1[1] + 24],
+      [wTop0[0], wTop0[1] + 24],
+    ], '#384e68');
+
+    // 2. Flat top roof slab of the housing block
+    fillPoly(ctx, [nwTop, blTop, brTop, neTop], '#5e5a6c');
+
+    // 3. Parapet stone coping along the top edges
+    const COP_H = 4;
+    fillPoly(ctx, [
+      [nwTop[0], nwTop[1] - COP_H],
+      [neTop[0], neTop[1] - COP_H],
+      neTop,
+      nwTop,
+    ], '#d0d4e0');
+    fillPoly(ctx, [
+      [neTop[0], neTop[1] - COP_H],
+      [brTop[0], brTop[1] - COP_H],
+      brTop,
+      neTop,
+    ], '#a0a6b8');
+    return;
+  }
   const last = { x: room.width - 1, y: room.height - 1 };
   const isFloorTile = (tx, ty) => (
     tx >= 1 && ty >= 1 && tx < room.width && ty < room.height && room.grid[ty][tx] !== TILE.VOID
@@ -1460,8 +1507,16 @@ function drawTowerCutawayOver(ctx, room, originX, originY) {
 
 // ---------- Entities, Furniture, Text & Overlays ----------
 
-function drawCharacter(ctx, e, screenX, screenY, dpr = 1) {
-  const look = LOOKS[e.spriteKey] || { ...LOOKS.player, shirt: e.color || LOOKS.player.shirt };
+function drawCharacter(ctx, e, screenX, screenY, dpr = 1, room = null) {
+  const isSwimsuit = e.outfit === 'swimsuit' || e.isWearingSwimsuit || (e.action === 'swim');
+  let baseLook = LOOKS[e.spriteKey] || { ...LOOKS.player, shirt: e.color || LOOKS.player.shirt };
+  if (e.look) {
+    baseLook = { ...baseLook, ...e.look };
+    if (e.look.hairColor) baseLook.hair = e.look.hairColor;
+  }
+  const look = isSwimsuit
+    ? { ...baseLook, outfit: 'swimsuit', bareArms: true, shirt: '#00b4d8', pants: '#0077b6' }
+    : baseLook;
   const stride = e.walking ? (e.frame % 2 ? 1 : -1) : 0;
   const pose = {
     stride,
@@ -1472,7 +1527,18 @@ function drawCharacter(ctx, e, screenX, screenY, dpr = 1) {
     action: e.action || null,
     actionFrame: e.actionFrame || 0,
   };
-  const { canvas, ox, oy, cssH } = getCharacterCanvas(`${e.spriteKey}:${e.color}`, look, e.dir, pose, dpr);
+  const key = `${e.spriteKey}:${e.color}:${isSwimsuit ? 'swim' : 'norm'}:${e.look ? JSON.stringify(e.look) : ''}`;
+  const { canvas, ox, oy, cssH } = getCharacterCanvas(key, look, e.dir, pose, dpr);
+
+  // Faint mirrored reflection of avatar in the gym mirror wall
+  if (room?.id === 'gym' && e.y <= 3.4 && e.x >= 2 && e.x <= 12) {
+    ctx.save();
+    ctx.globalAlpha = 0.25;
+    ctx.translate(screenX, screenY - 26);
+    ctx.scale(-0.85, 0.85);
+    blitDeviceAligned(ctx, canvas, -ox, -oy, dpr);
+    ctx.restore();
+  }
 
   // Treadmill belt motion lines beneath runner's feet
   if (e.action === 'treadmill') {
@@ -1767,8 +1833,8 @@ export function renderRoom(ctx, opts) {
   const wb = Math.round(day * 8) / 8;
   const sky = { top: lerpColor('#1a2250', '#8fd0ff', wb), bottom: lerpColor('#ffd27a', '#fff6c9', wb) };
 
-  // Tower cut-away shaft, concrete floor slab, and neighbouring floors (cached static layer)
-  drawTowerCutawayUnderCached(ctx, room, originX, originY, width, height, phase, ds);
+  // Tower cut-away shaft, concrete floor slab, and neighbouring floors
+  drawTowerCutawayUnder(ctx, room, originX, originY, height, phase);
 
   // Viewport bounds in world space for frustum culling on expanded floors
   const tl = screenToWorld(0, 0, camera, width, height);
@@ -1801,7 +1867,13 @@ export function renderRoom(ctx, opts) {
       } else if (doorDef) {
         canvas = bakeSprite(`doortile:${room.id}:${lightsTag}`, buildDoorTile(floorColor), ds);
       } else {
-        canvas = bakeSprite(`floor:${room.id}:${inZone ? 'z' : 'b'}:${variant}:${lightsTag}`, buildFloorTile(tileCol, variant), ds);
+        let mat = room.floorMaterial || 'default';
+        if (inZone && zt?.material) mat = zt.material;
+        if (room.zones) {
+          const matchZone = room.zones.find((z) => x >= z.x0 && x <= z.x1 && y >= z.y0 && y <= z.y1);
+          if (matchZone?.material) mat = matchZone.material;
+        }
+        canvas = bakeSprite(`floor:${room.id}:${inZone ? 'z' : 'b'}:${mat}:${variant}:${tileCol}:${lightsTag}`, buildFloorTile(tileCol, variant, mat), ds);
       }
       blitDeviceAligned(ctx, canvas, sx - TILE_W / 2, sy - TILE_H / 2, ds);
       if (inZone && zt.riser && (x === zt.x0 || y === zt.y0)) {
@@ -1848,7 +1920,8 @@ export function renderRoom(ctx, opts) {
       if (camera && (sx < viewMinX || sx > viewMaxX || sy < viewMinY || sy > viewMaxY)) continue;
       let sprite;
       let key;
-      if (room.isRooftop && cell !== TILE.DOOR) {
+      const isRooftopHousing = room.isRooftop && y === 0 && x >= 4 && x <= 14;
+      if (room.isRooftop && !isRooftopHousing) {
         key = `rooftop_rail:${kind}:${ds}`;
         sprite = () => buildGlassBalustradeSegment(kind);
       } else if (cell === TILE.WINDOW) {
@@ -1906,7 +1979,7 @@ export function renderRoom(ctx, opts) {
     } else {
       const e = d.data;
       const { sx, sy } = tileToScreen(e.x, e.y, originX, originY);
-      const bbox = drawCharacter(ctx, e, sx, sy, ds);
+      const bbox = drawCharacter(ctx, e, sx, sy, ds, room);
       const sPt = worldToScreen(bbox.x, bbox.y, camera, width, height);
       const hw = Math.round(20 * zoom);
       const hh = Math.round((bbox.h || 52) * zoom);
@@ -1933,38 +2006,49 @@ export function renderRoom(ctx, opts) {
     drawFurniture(ctx, f, originX, originY, ds, Boolean(oItem?.lightSource) && !lightsOn);
   }
 
-  // Night lighting tint over the tower & room + localized warm emissive light pools
-  if (tintAlpha > 0.02) {
+  // Ambient lighting & localized warm emissive light pools (both night-time and per-room ambient lighting)
+  const roomAmbient = room.ambientLighting;
+  const effectiveTintAlpha = Math.max(tintAlpha, roomAmbient ? (roomAmbient.darkness || 0.3) : 0);
+  const effectiveTintColor = (tintAlpha > 0.02)
+    ? (roomAmbient ? lerpColor('#5b6bb0', roomAmbient.tint || '#261420', 0.5) : '#5b6bb0')
+    : (roomAmbient?.tint || '#261420');
+
+  if (effectiveTintAlpha > 0.02) {
     ctx.save();
-    ctx.globalAlpha = tintAlpha;
-    ctx.fillStyle = '#5b6bb0';
+    ctx.globalAlpha = effectiveTintAlpha;
+    ctx.fillStyle = effectiveTintColor;
     ctx.globalCompositeOperation = 'multiply';
-    ctx.fillRect(0, 0, width, height);
+    ctx.fillRect(-1000, -1000, width + 2000, height + 2000);
     ctx.restore();
 
-    const nightStrength = Math.min(1, tintAlpha / 0.32);
-    ctx.save();
-    ctx.globalCompositeOperation = 'screen';
-    for (const f of placedFurniture) {
-      const item = getCatalogueItem(f.itemId);
-      if (!item?.emissive) continue;
-      if (item.lightSource && !lightsOn) continue;
-      const ax = f.x + f.footprint.w / 2 - 0.5;
-      const ay = f.y + f.footprint.h / 2 - 0.5;
-      const { sx, sy } = tileToScreen(ax, ay, originX, originY);
-      const rad = item.emissive.radius || 56;
-      const rgb = hexToRgb(item.emissive.color || '#ffd27a');
-      const alpha = ((item.emissive.intensity || 0.36) * nightStrength).toFixed(3);
-      const glow = ctx.createRadialGradient(sx, sy - 10, 4, sx, sy - 4, rad);
-      glow.addColorStop(0, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`);
-      glow.addColorStop(0.55, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${(Number(alpha) * 0.38).toFixed(3)})`);
-      glow.addColorStop(1, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0)`);
-      ctx.fillStyle = glow;
-      ctx.beginPath();
-      ctx.arc(sx, sy - 6, rad, 0, Math.PI * 2);
-      ctx.fill();
+    const lightStrength = Math.max(
+      Math.min(1, tintAlpha / 0.32),
+      roomAmbient?.warmGlow ? (roomAmbient.darkness || 0.35) * 2.2 : 0,
+    );
+    if (lightStrength > 0.01) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'screen';
+      for (const f of placedFurniture) {
+        const item = getCatalogueItem(f.itemId);
+        if (!item?.emissive) continue;
+        if (item.lightSource && !lightsOn) continue;
+        const ax = f.x + f.footprint.w / 2 - 0.5;
+        const ay = f.y + f.footprint.h / 2 - 0.5;
+        const { sx, sy } = tileToScreen(ax, ay, originX, originY);
+        const rad = item.emissive.radius || 56;
+        const rgb = hexToRgb(item.emissive.color || '#ffd27a');
+        const alpha = Math.min(1, (item.emissive.intensity || 0.36) * lightStrength).toFixed(3);
+        const glow = ctx.createRadialGradient(sx, sy - 10, 4, sx, sy - 4, rad);
+        glow.addColorStop(0, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`);
+        glow.addColorStop(0.55, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${(Number(alpha) * 0.38).toFixed(3)})`);
+        glow.addColorStop(1, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0)`);
+        ctx.fillStyle = glow;
+        ctx.beginPath();
+        ctx.arc(sx, sy - 6, rad, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
     }
-    ctx.restore();
   }
 
   // Restore camera transform so UI text, speech bubbles and dialog overlays render in native screen pixels

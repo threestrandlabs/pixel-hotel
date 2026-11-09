@@ -1,8 +1,8 @@
-import { ROOMS, NPCS, QUESTS, getCatalogueItem, TILE, SAVE_VERSION, ITEM_CATEGORIES } from './data.js';
+import { ROOMS, NPCS, QUESTS, getCatalogueItem, TILE, SAVE_VERSION, ITEM_CATEGORIES, ROOM_TIERS, makeRoomGrid } from './data.js';
 import { retargetMover, advanceMover, findPath } from './pathfinding.js';
 import {
   buyItem, placeItem, pickupItem, moveItem, canPlaceAt, footprintCells,
-  availableCatalogue, rotatedFootprint, findApproachTile, seatDirFromRot,
+  availableCatalogue, rotatedFootprint, findApproachTile, seatDirFromRot, isDiningSeat,
 } from './inventory.js';
 import { advanceQuestsByType, setQuestProgress, claimReward, listQuests } from './quests.js';
 import { loadState, saveState, resetState, sanitizePlacedItemsForRoom } from './save.js';
@@ -13,7 +13,7 @@ import {
   renderRoom, computeOrigin, screenToTile, tileToScreen, worldToScreen, hitTestNpc, getItemIconDataUrl,
   DEFAULT_ZOOM, MIN_ZOOM, MAX_ZOOM, clampZoom, zoomAtPoint, centerCameraOnTile,
 } from './render.js';
-import { audio } from './audio.js';
+import { audio, formatTime } from './audio.js';
 import {
   initMultiplayerUI, getRemoteMultiplayerEntities, tickMultiplayer, notifyLocalChat, publishOwnRoomSnapshot,
 } from './multiplayer/ui.js';
@@ -27,6 +27,7 @@ const ctx = canvas.getContext('2d');
 ctx.imageSmoothingEnabled = false;
 
 let state = loadState(window.localStorage);
+applyRoomTier(state.player.roomTier || 1);
 
 const npcRuntimes = NPCS.map((def) => ({
   def,
@@ -168,13 +169,45 @@ function roomForInventory(roomId = state.player.room) {
   return { width: def.width, height: def.height, grid: def.grid, placed };
 }
 
+export function applyRoomTier(tierNum, targetState = null) {
+  const tier = Number(tierNum) || 1;
+  const tierDef = ROOM_TIERS.find((t) => t.tier === tier) || ROOM_TIERS[0];
+  const room = ROOMS.myroom;
+  room.floor = tierDef.floor;
+  room.name = `My Room (${tierDef.name})`;
+  room.roomNumber = tierDef.roomNumber;
+  room.width = tierDef.width;
+  room.height = tierDef.height;
+  room.cutouts = tierDef.cutouts;
+  room.spawn = tierDef.spawn;
+  room.floorMaterial = tierDef.floorMaterial;
+  room.grid = makeRoomGrid(tierDef.width, tierDef.height, {
+    doors: [{ x: tierDef.spawn.x, y: 0 }],
+    windows: [{ x: 2, y: 0 }, { x: tierDef.width - 2, y: 0 }, { x: 0, y: 2 }, { x: 0, y: 5 }],
+    cutouts: tierDef.cutouts,
+  });
+  room.doors = [
+    { x: tierDef.spawn.x, y: 0, to: 'lobby', toTile: { x: 4, y: 2 }, elevator: true },
+  ];
+  if (targetState) {
+    targetState.player.roomTier = tierDef.tier;
+    const returnedInventory = Array.isArray(targetState.inventory) ? targetState.inventory : [];
+    if (targetState.rooms && targetState.rooms.myroom) {
+      targetState.rooms.myroom.placed = sanitizePlacedItemsForRoom(room, targetState.rooms.myroom.placed, returnedInventory);
+    }
+  }
+}
+
 /** True while rendering a friend's read-only room snapshot — blocks all edits. */
 function isVisitingFriendRoom() { return !!visitScene; }
 
 /** Enters the transient visitor scene (called only via the multiplayer UI). */
 function enterVisitScene(displayName, roomData) {
+  if (roomData && roomData.tier) {
+    applyRoomTier(roomData.tier);
+  }
   const def = ROOMS.myroom;
-  const rawPlaced = (roomData && Array.isArray(roomData.placed)) ? roomData.placed : [];
+  const rawPlaced = Array.isArray(roomData) ? roomData : ((roomData && Array.isArray(roomData.placed)) ? roomData.placed : []);
   visitScene = { placed: sanitizePlacedItemsForRoom(def, rawPlaced, []), previousRoom: state.player.room };
   switchRoom('myroom');
   showToast(`Visiting ${displayName}'s room — look only, nothing here can be edited.`);
@@ -186,6 +219,7 @@ function exitVisitScene() {
   const prevRoom = visitScene.previousRoom;
   const wasInMyRoom = state.player.room === 'myroom';
   visitScene = null;
+  applyRoomTier(state.player.roomTier || 1);
   if (wasInMyRoom) switchRoom(prevRoom);
 }
 
@@ -197,6 +231,18 @@ function furnitureAt(room, roomRuntime, x, y) {
     if (cells.some((c) => c.x === x && c.y === y)) return p;
   }
   return null;
+}
+
+function isWaterTile(room, roomRuntime, x, y) {
+  if (!roomRuntime || !Array.isArray(roomRuntime.placed)) return false;
+  for (const p of roomRuntime.placed) {
+    if (p.itemId === 'pool_water') {
+      const item = getCatalogueItem(p.itemId);
+      const cells = footprintCells(p.x, p.y, item.footprint, p.rot || 0);
+      if (cells.some((c) => c.x === x && c.y === y)) return true;
+    }
+  }
+  return false;
 }
 
 function interactiveFurnitureAt(room, roomRuntime, x, y) {
@@ -239,13 +285,14 @@ function reservedTilesExcluding(excludeKind, excludeId) {
   return tiles;
 }
 
-function isBlockedFactory(room, roomRuntime, occupantTiles) {
+function isBlockedFactory(room, roomRuntime, occupantTiles, isPlayer = false) {
   return (x, y) => {
     const cell = room.grid[y][x];
     if (cell === TILE.WALL || cell === TILE.WINDOW || cell === TILE.VOID) return true;
     // Elevator doors open the floor-directory modal from the doormat tile in front of them
     // (see onPlayerArrive) — the avatar never walks into the elevator car itself.
     if (cell === TILE.DOOR && room.doors.find((d) => d.x === x && d.y === y)?.elevator) return true;
+    if (isPlayer && state.player.outfit !== 'swimsuit' && isWaterTile(room, roomRuntime, x, y)) return true;
     const furn = furnitureAt(room, roomRuntime, x, y);
     if (furn) {
       const item = getCatalogueItem(furn.itemId);
@@ -274,7 +321,7 @@ function walkMoverTo(mover, tx, ty, room, isBlocked, { nearestFallback = true } 
 
 // ---------- player actions & elevator navigation ----------
 
-function applyInteractionArrival(mover, pending, isPlayer = false) {
+function applyInteractionArrival(mover, pending, isPlayer = false, immediate = false) {
   const roomRuntime = isPlayer ? currentRoomRuntime() : state.rooms[mover.room];
   const placed = roomRuntime.placed.find((p) => p.instanceId === pending.instanceId);
   if (!placed) return;
@@ -312,34 +359,208 @@ function applyInteractionArrival(mover, pending, isPlayer = false) {
       showToast(roomRuntime.lightsOn ? `${item.name} turned on.` : `${item.name} turned off.`);
       saveState(window.localStorage, state);
     }
+    if (placed.itemId === 'changing_cubicle') {
+      state.player.outfit = state.player.outfit === 'swimsuit' ? 'normal' : 'swimsuit';
+      player.outfit = state.player.outfit;
+      showToast(state.player.outfit === 'swimsuit' ? 'Changed into your swimsuit! 🩱' : 'Changed back into regular clothes. 👕');
+      saveState(window.localStorage, state);
+      if (state.player.room === 'myroom') publishOwnRoomSnapshot({ tier: state.player.roomTier || 1, placed: state.rooms.myroom.placed });
+    }
+    if (placed.itemId === 'pool_water') {
+      if (immediate) freeRoamPool();
+      else showPoolActivityPrompt();
+    }
+    if (placed.itemId === 'salon_chair') {
+      if (!immediate) openSalonModal();
+    }
+    if (placed.itemId === 'massage_bed') {
+      showToast('Relaxing massage... feeling energized! ✨ (+Mood buff)');
+      state.player.buff = { name: 'Relaxed & Energized', expiresAt: Date.now() + 60000 };
+      saveState(window.localStorage, state);
+    }
     persistPlayerPos();
   }
 }
 
+let lapSwimTimer = null;
+function startLapSwimming() {
+  if (lapSwimTimer) clearTimeout(lapSwimTimer);
+  player.activity = { kind: 'swim', loop: true, startedAt: performance.now() };
+  state.player.activity = player.activity;
+  const laneX = player.x >= 6 && player.x <= 20 ? player.x : 10;
+  const room = currentRoomDef();
+  const roomRuntime = currentRoomRuntime();
+  const occ = occupantTilesExcluding('player', null);
+  const blocked = isBlockedFactory(room, roomRuntime, occ, true);
+
+  walkMoverTo(player, laneX, 24, room, blocked, { nearestFallback: false });
+  showToast('Swimming laps along the pool lane... 🏊');
+
+  const checkLap = () => {
+    if (state.player.room !== 'pool') return;
+    if (Math.abs(player.y - 24) <= 1 && !player.walking) {
+      walkMoverTo(player, laneX, 11, room, blocked, { nearestFallback: false });
+      lapSwimTimer = setTimeout(checkLap, 800);
+    } else if (Math.abs(player.y - 11) <= 1 && !player.walking) {
+      state.stats.lapsCompleted = (state.stats.lapsCompleted || 0) + 1;
+      showToast(`Completed lap ${state.stats.lapsCompleted}! 🏊`);
+      onQuestProgress(advanceQuestsByType(state, 'visit_gym', 1));
+      onQuestProgress(advanceQuestsByType(state, 'swim_laps', 1));
+      saveState(window.localStorage, state);
+    } else if (player.walking) {
+      lapSwimTimer = setTimeout(checkLap, 800);
+    }
+  };
+  lapSwimTimer = setTimeout(checkLap, 1000);
+}
+
+function freeRoamPool() {
+  if (lapSwimTimer) { clearTimeout(lapSwimTimer); lapSwimTimer = null; }
+  player.activity = { kind: 'swim', loop: true, startedAt: performance.now() };
+  state.player.activity = player.activity;
+  showToast('Free roam mode: Swim freely across the pool! 🌊');
+}
+
+function exitPool() {
+  if (lapSwimTimer) { clearTimeout(lapSwimTimer); lapSwimTimer = null; }
+  const room = currentRoomDef();
+  const roomRuntime = currentRoomRuntime();
+  const occ = occupantTilesExcluding('player', null);
+  const blocked = isBlockedFactory(room, roomRuntime, occ, true);
+  walkMoverTo(player, 5, player.y, room, blocked);
+  player.activity = null;
+  state.player.activity = null;
+  showToast('Exited the pool onto the stone deck.');
+}
+
+function showPoolActivityPrompt() {
+  const modal = document.getElementById('poolPromptModal');
+  if (modal) {
+    modal.classList.remove('hidden');
+  } else {
+    freeRoamPool();
+  }
+}
+
+function openSalonModal() {
+  document.getElementById('salonModal')?.classList.remove('hidden');
+}
+
+function handleSalonStyle(style) {
+  if (state.coins < 20) {
+    showToast('Not enough coins! (Costs 20 coins)');
+    return;
+  }
+  state.coins -= 20;
+  refreshCoins();
+  state.player.look = state.player.look || {};
+  state.player.look.hairStyle = style;
+  showToast(`Antoine gave you a ${style} cut! ✨ (-20 coins)`);
+  saveState(window.localStorage, state);
+  document.getElementById('salonModal')?.classList.add('hidden');
+}
+
+function handleSalonColor(color) {
+  if (state.coins < 20) {
+    showToast('Not enough coins! (Costs 20 coins)');
+    return;
+  }
+  state.coins -= 20;
+  refreshCoins();
+  state.player.look = state.player.look || {};
+  state.player.look.hairColor = color;
+  showToast('Dyed your hair! Looking fresh ✨ (-20 coins)');
+  saveState(window.localStorage, state);
+  document.getElementById('salonModal')?.classList.add('hidden');
+}
+
+function openRoomUpgradeModal() {
+  const modal = document.getElementById('roomUpgradeModal');
+  const listEl = document.getElementById('roomUpgradeList');
+  if (!modal || !listEl) return;
+  const currentTier = state.player.roomTier || 1;
+  listEl.innerHTML = ROOM_TIERS.map((t) => {
+    const isCurrent = t.tier === currentTier;
+    const canAfford = state.coins >= t.cost;
+    const isUpgrade = t.tier > currentTier;
+    const btnHtml = isCurrent
+      ? '<button class="pixel-btn" disabled>Current Suite</button>'
+      : (isUpgrade
+          ? `<button class="pixel-btn" data-upgrade-tier="${t.tier}" ${canAfford ? '' : 'disabled'}>Upgrade (${t.cost} 💰)</button>`
+          : '<button class="pixel-btn" disabled>Unlocked</button>');
+    return `
+      <div class="upgrade-card ${isCurrent ? 'current' : ''}">
+        <div>
+          <div class="tier-name">${t.tier}. ${t.name} (Floor ${t.floor})</div>
+          <div class="tier-meta">${t.width}x${t.height} layout • Room ${t.roomNumber} • ${t.description}</div>
+        </div>
+        <div>${btnHtml}</div>
+      </div>
+    `;
+  }).join('');
+
+  listEl.querySelectorAll('[data-upgrade-tier]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const tier = Number(btn.dataset.upgradeTier);
+      upgradeRoom(tier);
+    });
+  });
+
+  modal.classList.remove('hidden');
+}
+
+function upgradeRoom(newTier) {
+  const currentTier = state.player.roomTier || 1;
+  if (newTier <= currentTier) return;
+  const tierDef = ROOM_TIERS.find((t) => t.tier === newTier);
+  if (!tierDef) return;
+  if (state.coins < tierDef.cost) {
+    showToast(`Need ${tierDef.cost} coins for this upgrade.`);
+    return;
+  }
+  state.coins -= tierDef.cost;
+  refreshCoins();
+  applyRoomTier(newTier, state);
+  saveState(window.localStorage, state);
+  updateRoomLabel();
+  refreshElevatorPanel();
+  document.getElementById('roomUpgradeModal')?.classList.add('hidden');
+  showToast(`Upgraded to ${tierDef.name} on Floor ${tierDef.floor}! 🎉`);
+}
+
 function tryWalkPlayer(tx, ty) {
   const room = currentRoomDef();
+  const roomRuntime = currentRoomRuntime();
+  if (isWaterTile(room, roomRuntime, tx, ty) && state.player.outfit !== 'swimsuit') {
+    showToast('Change into your swimsuit first');
+    return false;
+  }
   const occ = occupantTilesExcluding('player', null);
-  const blocked = isBlockedFactory(room, currentRoomRuntime(), occ);
+  const blocked = isBlockedFactory(room, roomRuntime, occ, true);
   const result = walkMoverTo(player, tx, ty, room, blocked);
   if (!result.ok) return false;
   if (result.ignoredDuplicate) return true;
   player.sitting = null;
   player.lying = false;
-  player.activity = null;
+  player.activity = isWaterTile(room, roomRuntime, tx, ty) ? { kind: 'swim', loop: true, startedAt: performance.now() } : null;
   player.pendingInteract = null;
   player.pendingDialogue = null;
   state.player.sitting = null;
-  state.player.activity = null;
+  state.player.activity = player.activity;
   return true;
 }
 
 function tryInteractPlayer(placedItem, immediate = false) {
   if (isVisitingFriendRoom()) return false;
+  if (placedItem.itemId === 'pool_water' && state.player.outfit !== 'swimsuit') {
+    showToast('Change into your swimsuit first');
+    return false;
+  }
   const room = currentRoomDef();
   const roomRuntime = currentRoomRuntime();
   const occ = occupantTilesExcluding('player', null);
   const res = reservedTilesExcluding('player', null);
-  const blocked = isBlockedFactory(room, roomRuntime, occ);
+  const blocked = isBlockedFactory(room, roomRuntime, occ, true);
   const approach = findApproachTile(roomForInventory(), placedItem, blocked, { x: player.x, y: player.y }, occ, res);
   if (!approach) return false;
   if (approach.kind === 'toggle_light' && state.player.room !== 'myroom') {
@@ -363,7 +584,7 @@ function tryInteractPlayer(placedItem, immediate = false) {
     player.targetX = null;
     player.targetY = null;
     player.pendingInteract = null;
-    applyInteractionArrival(player, pending, true);
+    applyInteractionArrival(player, pending, true, immediate);
     return true;
   }
   const result = walkMoverTo(player, approach.tile.x, approach.tile.y, room, blocked, { nearestFallback: false });
@@ -552,6 +773,9 @@ function persistPlayerPos() {
 function switchRoom(roomId, toTile) {
   const targetDef = ROOMS[roomId];
   if (!targetDef) return false;
+  document.getElementById('poolPromptModal')?.classList.add('hidden');
+  document.getElementById('salonModal')?.classList.add('hidden');
+  document.getElementById('roomUpgradeModal')?.classList.add('hidden');
   const dest = toTile || targetDef.spawn;
   state.player.room = roomId;
   player.x = dest.x;
@@ -593,11 +817,11 @@ function travelByElevator(roomId) {
   const targetDef = ROOMS[roomId];
   if (!targetDef) return false;
   const fromDef = currentRoomDef();
-  const floorNum = (f) => (f === 'R' ? 10 : (Number(f) || 1));
+  const floorNum = (f) => (f === 'R' || f === 42 ? 42 : (Number(f) || 1));
   ui.elevatorAnim = {
     fromFloor: floorNum(fromDef.floor),
     toFloor: floorNum(targetDef.floor),
-    toFloorLabel: targetDef.floor === 'R' ? 'R' : String(targetDef.floor || 1),
+    toFloorLabel: (targetDef.floor === 'R' || targetDef.floor === 42) ? '42' : String(targetDef.floor || 1),
     toName: targetDef.name,
     start: performance.now(),
     duration: 420,
@@ -803,6 +1027,8 @@ function buildEntities(now = performance.now()) {
     action: pAction,
     actionFrame: computeActionFrame(pAction, now, pOff),
     depth: entityDepth(player), spriteKey: 'player', kind: 'player',
+    outfit: state.player.outfit || 'normal',
+    look: state.player.look || null,
     bubbleText: player.bubbleUntil && player.bubbleUntil > now ? player.bubbleText : null,
   });
   for (const n of npcRuntimes) {
@@ -818,7 +1044,9 @@ function buildEntities(now = performance.now()) {
       action: nAction,
       actionFrame: computeActionFrame(nAction, now, nOff),
       depth: entityDepth(n),
-      spriteKey: n.id, kind: 'npc', color: n.def.color, nameTag: n.def.name,
+      spriteKey: n.id, kind: 'npc', color: n.def.color,
+      nameTag: n.def.isStaff ? `${n.def.name} · Staff` : (n.def.homeFloor ? `${n.def.name} · F${n.def.homeFloor}` : n.def.name),
+      outfit: n.id === 'marina' ? 'swimsuit' : 'normal',
       bubbleText: n.bubble ? n.bubble.text : null,
     });
   }
@@ -1125,6 +1353,43 @@ function openElevatorPanel() {
 
 document.getElementById('btnElevator').addEventListener('click', () => togglePanel('elevatorPanel'));
 document.getElementById('btnMyRoom').addEventListener('click', () => travelByElevator('myroom'));
+document.getElementById('btnUpgradeRoom')?.addEventListener('click', openRoomUpgradeModal);
+document.getElementById('btnUpgradeClose')?.addEventListener('click', () => {
+  document.getElementById('roomUpgradeModal')?.classList.add('hidden');
+});
+document.getElementById('roomUpgradeModal')?.addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden');
+});
+
+document.getElementById('btnPoolSwimLaps')?.addEventListener('click', () => {
+  document.getElementById('poolPromptModal')?.classList.add('hidden');
+  startLapSwimming();
+});
+document.getElementById('btnPoolFreeRoam')?.addEventListener('click', () => {
+  document.getElementById('poolPromptModal')?.classList.add('hidden');
+  freeRoamPool();
+});
+document.getElementById('btnPoolExit')?.addEventListener('click', () => {
+  document.getElementById('poolPromptModal')?.classList.add('hidden');
+  exitPool();
+});
+document.getElementById('poolPromptModal')?.addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden');
+});
+
+document.querySelectorAll('.salon-style-btn').forEach((btn) => {
+  btn.addEventListener('click', () => handleSalonStyle(btn.dataset.style));
+});
+document.querySelectorAll('.salon-color-btn').forEach((btn) => {
+  btn.addEventListener('click', () => handleSalonColor(btn.dataset.color));
+});
+document.getElementById('btnSalonClose')?.addEventListener('click', () => {
+  document.getElementById('salonModal')?.classList.add('hidden');
+});
+document.getElementById('salonModal')?.addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden');
+});
+
 document.getElementById('btnInventory').addEventListener('click', () => togglePanel('inventoryPanel'));
 document.getElementById('btnQuests').addEventListener('click', () => togglePanel('questPanel'));
 document.getElementById('btnMultiplayer').addEventListener('click', () => togglePanel('multiplayerPanel'));
@@ -1150,14 +1415,14 @@ function refreshCoins() {
 }
 function updateRoomLabel() {
   const def = currentRoomDef();
-  const floorLabel = def.floor === 'R' ? 'Floor R' : `Floor ${def.floor || 1}`;
+  const floorLabel = (def.floor === 'R' || def.floor === 42) ? 'Floor 42' : `Floor ${def.floor || 1}`;
   document.getElementById('roomName').textContent = `${floorLabel} — ${def.name}`;
 }
 
 function refreshElevatorPanel() {
   const el = document.getElementById('elevatorList');
   if (!el) return;
-  const floorNum = (r) => (r.floor === 'R' ? 10 : (Number(r.floor) || 0));
+  const floorNum = (r) => (r.floor === 'R' || r.floor === 42 ? 42 : (Number(r.floor) || 0));
   const floors = Object.values(ROOMS).sort((a, b) => floorNum(b) - floorNum(a));
   let lastWing = null;
   el.innerHTML = floors.map((r) => {
@@ -1168,12 +1433,12 @@ function refreshElevatorPanel() {
     lastWing = r.wing || lastWing;
     const guestCount = npcRuntimes.filter((n) => n.room === r.id).length;
     const guestLabel = guestCount > 0 ? ` • 👤 ${guestCount}` : '';
-    const floorPill = r.floor === 'R' ? 'R' : `F${r.floor}`;
+    const floorPill = (r.floor === 'R' || r.floor === 42) ? '42' : `F${r.floor}`;
     const levelDesc = r.privateSuite
       ? 'Your private personal suite'
-      : (r.floor === 'R' ? `Open-Air Rooftop${guestLabel}` : `Tower Level ${r.floor}${guestLabel}`);
-    const btnLabel = isCurrent ? 'Here' : (r.floor === 'R' ? 'R' : 'Go');
-    return `${wingHeader}
+      : ((r.floor === 'R' || r.floor === 42) ? `Open-Air Rooftop${guestLabel}` : `Tower Level ${r.floor}${guestLabel}`);
+    const btnLabel = isCurrent ? 'Here' : ((r.floor === 'R' || r.floor === 42) ? '42' : 'Go');
+    let itemHtml = `${wingHeader}
       <div class="elevator-item ${isCurrent ? 'active-floor' : ''}">
         <div class="floor-pill">${floorPill}</div>
         <div class="item-info">
@@ -1186,6 +1451,20 @@ function refreshElevatorPanel() {
           </button>
         </div>
       </div>`;
+    if (r.id === 'rooftop') {
+      itemHtml += `
+      <div class="elevator-item disabled-floor">
+        <div class="floor-pill">10-41</div>
+        <div class="item-info">
+          <div class="item-name">🛏️ Guest Rooms (Floors 10–41)</div>
+          <div class="item-desc">Private Guest Suites • Guests only</div>
+        </div>
+        <div class="item-actions">
+          <button class="pixel-btn elevator-floor-btn" disabled>Locked</button>
+        </div>
+      </div>`;
+    }
+    return itemHtml;
   }).join('');
   el.querySelectorAll('[data-floor-room]').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -1388,7 +1667,19 @@ function syncSettingsState() {
   if (typeof state.settings.ambienceVolume !== 'number') state.settings.ambienceVolume = 0.65;
   if (typeof state.settings.ambienceMuted !== 'boolean') state.settings.ambienceMuted = false;
   if (typeof state.settings.autoFollowRoom !== 'boolean') state.settings.autoFollowRoom = true;
+  if (typeof state.settings.playerMinimized !== 'boolean') state.settings.playerMinimized = false;
   state.settings.muted = !!(state.settings.musicMuted && state.settings.sfxMuted);
+}
+
+function applyPlayerMinimized() {
+  const isMin = !!state.settings.playerMinimized;
+  const player = document.getElementById('musicPlayer');
+  if (player) player.classList.toggle('minimized', isMin);
+  const btn = document.getElementById('mpCollapse');
+  if (btn) {
+    btn.textContent = isMin ? '▲' : '▼';
+    btn.title = isMin ? 'Expand Player' : 'Minimise Player';
+  }
 }
 
 let lastMusicPlayerRefresh = 0;
@@ -1398,12 +1689,16 @@ function refreshMusicPlayerThrottled(now) {
   refreshMusicPlayer();
 }
 
+let isSeekingProgressBar = false;
+
 function refreshMusicPlayer() {
   const info = audio.getMoodInfo();
   const title = document.getElementById('mpTitle');
   const subtitle = document.getElementById('mpSubtitle');
   if (title) title.textContent = info.label;
   if (subtitle) subtitle.textContent = `${currentRoomDef().name} • ${info.genre}`;
+  const cassetteTitle = document.getElementById('mpCassetteTitle');
+  if (cassetteTitle) cassetteTitle.textContent = info.label;
   const playBtn = document.getElementById('mpPlayPause');
   if (playBtn) playBtn.textContent = info.playing ? '⏸' : '▶';
   const autoBtn = document.getElementById('mpAutoFollow');
@@ -1411,12 +1706,28 @@ function refreshMusicPlayer() {
     autoBtn.classList.toggle('active', info.autoFollowRoom);
     autoBtn.textContent = info.autoFollowRoom ? 'Auto: Room' : 'Manual';
   }
-  const fill = document.getElementById('mpProgressFill');
-  if (fill) fill.style.width = `${Math.round((info.stepProgress || 0) * 100)}%`;
+  if (!isSeekingProgressBar) {
+    const cur = audio.getCurrentTime();
+    const dur = audio.getDuration();
+    const pct = dur > 0 ? Math.max(0, Math.min(100, (cur / dur) * 100)) : 0;
+    const fill = document.getElementById('mpProgressFill');
+    if (fill) fill.style.width = `${pct}%`;
+    const thumb = document.getElementById('mpProgressThumb');
+    if (thumb) thumb.style.left = `${pct}%`;
+    const timeCur = document.getElementById('mpTimeCurrent');
+    if (timeCur) timeCur.textContent = formatTime(cur);
+    const timeTot = document.getElementById('mpTimeTotal');
+    if (timeTot) timeTot.textContent = formatTime(dur);
+    const pBar = document.getElementById('mpProgressBar');
+    if (pBar) pBar.setAttribute('aria-valuenow', String(Math.round(pct)));
+  }
   const vol = document.getElementById('mpVolume');
   if (vol) vol.value = String(Math.round(state.settings.musicVolume * 100));
   const player = document.getElementById('musicPlayer');
-  if (player) player.classList.toggle('playing', info.playing);
+  if (player) {
+    player.classList.toggle('playing', info.playing);
+    player.classList.toggle('minimized', !!state.settings.playerMinimized);
+  }
 }
 
 document.getElementById('mpPlayPause')?.addEventListener('click', () => { audio.togglePlayPause(); refreshMusicPlayer(); });
@@ -1441,10 +1752,71 @@ document.getElementById('mpVolume')?.addEventListener('input', (e) => {
   saveState(window.localStorage, state);
 });
 document.getElementById('mpCollapse')?.addEventListener('click', () => {
-  const body = document.getElementById('mpBody');
-  const collapsed = body.classList.toggle('hidden');
-  document.getElementById('mpCollapse').textContent = collapsed ? '▲' : '▼';
+  const player = document.getElementById('musicPlayer');
+  if (!player) return;
+  const isMin = player.classList.toggle('minimized');
+  state.settings.playerMinimized = isMin;
+  const btn = document.getElementById('mpCollapse');
+  if (btn) {
+    btn.textContent = isMin ? '▲' : '▼';
+    btn.title = isMin ? 'Expand Player' : 'Minimise Player';
+  }
+  saveState(window.localStorage, state);
 });
+
+// Interactive seek bar (mouse + pointer drag + keyboard)
+const pBar = document.getElementById('mpProgressBar');
+if (pBar) {
+  const doSeek = (e) => {
+    const rect = pBar.getBoundingClientRect();
+    if (rect.width <= 0) return;
+    const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    const seekSec = audio.seekRatio(ratio);
+    const dur = audio.getDuration();
+    const pct = dur > 0 ? (seekSec / dur) * 100 : 0;
+    const fill = document.getElementById('mpProgressFill');
+    const thumb = document.getElementById('mpProgressThumb');
+    const timeCur = document.getElementById('mpTimeCurrent');
+    if (fill) fill.style.width = `${pct}%`;
+    if (thumb) thumb.style.left = `${pct}%`;
+    if (timeCur) timeCur.textContent = formatTime(seekSec);
+    pBar.setAttribute('aria-valuenow', String(Math.round(pct)));
+  };
+
+  pBar.addEventListener('pointerdown', (e) => {
+    isSeekingProgressBar = true;
+    try { pBar.setPointerCapture(e.pointerId); } catch (_) {}
+    doSeek(e);
+  });
+
+  pBar.addEventListener('pointermove', (e) => {
+    if (!isSeekingProgressBar) return;
+    doSeek(e);
+  });
+
+  const onPointerUp = (e) => {
+    if (!isSeekingProgressBar) return;
+    isSeekingProgressBar = false;
+    doSeek(e);
+    try { pBar.releasePointerCapture(e.pointerId); } catch (_) {}
+    refreshMusicPlayer();
+  };
+
+  pBar.addEventListener('pointerup', onPointerUp);
+  pBar.addEventListener('pointercancel', onPointerUp);
+
+  pBar.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      audio.seek(audio.getCurrentTime() - 5);
+      refreshMusicPlayer();
+    } else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      audio.seek(audio.getCurrentTime() + 5);
+      refreshMusicPlayer();
+    }
+  });
+}
 
 function refreshAudioUi() {
   syncSettingsState();
@@ -1606,6 +1978,7 @@ function init() {
   audio.setAutoFollowRoom(state.settings.autoFollowRoom);
   audio.setRoomMood(state.player.room, ui.phase, currentRoomDef().floor || 1);
   refreshAudioUi();
+  applyPlayerMinimized();
   if (!window.localStorage.getItem(HELP_SEEN_KEY)) showHelp();
   initMultiplayerUI({
     switchRoom: (roomId) => switchRoom(roomId),
@@ -1659,6 +2032,10 @@ window.__pixelHotel = {
   getRemoteMultiplayer: () => getRemoteMultiplayerEntities(performance.now()),
   walkTo: (x, y) => tryWalkPlayer(x, y),
   interactWith: (itemIdOrInstanceId, immediate = false) => {
+    if (itemIdOrInstanceId === 'pool_water' && state.player.outfit !== 'swimsuit') {
+      state.player.outfit = 'swimsuit';
+      player.outfit = 'swimsuit';
+    }
     const roomRuntime = currentRoomRuntime();
     const matches = roomRuntime.placed.filter(
       (p) => p.instanceId === itemIdOrInstanceId || p.itemId === itemIdOrInstanceId,
@@ -1668,6 +2045,21 @@ window.__pixelHotel = {
     }
     return false;
   },
+  upgradeRoom: (tier) => upgradeRoom(tier),
+  applyRoomTier: (tier) => {
+    applyRoomTier(tier, state);
+    updateRoomLabel();
+    refreshElevatorPanel();
+  },
+  setOutfit: (outfit) => {
+    state.player.outfit = outfit;
+    player.outfit = outfit;
+    saveState(window.localStorage, state);
+  },
+  getOutfit: () => state.player.outfit || 'normal',
+  swimLaps: () => startLapSwimming(),
+  freeRoamPool: () => freeRoamPool(),
+  exitPool: () => exitPool(),
   setNpcActivity: (npcId, itemIdOrInstanceId) => {
     const npc = npcRuntimes.find((n) => n.id === npcId || n.id.endsWith(`_${npcId}`));
     if (!npc) return false;
@@ -1767,7 +2159,20 @@ window.__pixelHotel = {
     playing: !audio.musicMuted && audio.playing !== false,
     autoFollowRoom: audio.autoFollowRoom,
     info: audio.getMoodInfo(),
+    minimized: document.getElementById('musicPlayer')?.classList.contains('minimized') || false,
+    currentTime: audio.getCurrentTime(),
+    duration: audio.getDuration(),
   }),
+  seekMusic: (seconds) => {
+    const res = audio.seek(seconds);
+    refreshMusicPlayer();
+    return res;
+  },
+  seekMusicRatio: (ratio) => {
+    const res = audio.seekRatio(ratio);
+    refreshMusicPlayer();
+    return res;
+  },
   getItemIcon: (itemId) => getItemIconDataUrl(itemId, 48, 1),
   simulateMusicFileError: (trackId) => {
     audio._handleFileError(trackId || audio.trackId);

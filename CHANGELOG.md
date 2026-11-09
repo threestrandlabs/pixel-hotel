@@ -4,6 +4,51 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.8.3] - 2026-11-09
+
+### Added
+
+- **Full Public Floor Layout Redesign & Zone System (`js/data.js`, `js/sprites.js`, `js/render.js`)**:
+  - Redesigned every expanded public floor with purposeful zones, partition counters, rugs, columns, dense furniture groupings, and clear walking paths:
+    - **Grand Lobby (64x48)**: Reception zone with Celeste & Mochi behind a curved marble front desk, luggage staging, central circular rug with grand floral display, four corner conversation salons, concierge counter, and luggage carts.
+    - **Starlight Cafe & Bar (20x16)**: Bar counter with barista Milo, espresso machine, pastry display, intimate cafe tables, and corner lounge.
+    - **Skyline Restaurant (48x36 [16x area])**: Posh fine dining featuring dark parquet floor with warm amber ambient lighting and radial glow pools; Maître D' Jean-Luc at entrance podium; Sommelier Pierre at grand wine wall display; grand piano with pianist; round white-tablecloth dining tables with candlelight; private velvet dining booths; waiters Luca & Claire carrying trays between tables; and a walk-in commercial kitchen behind pass window with Chef Sora, line cooks Marco (grill) & Kenji (pastry), and dishwasher Sammy.
+    - **Pulse Fitness Gym (22x16)**: Rubber athletic floor with full mirror wall showing avatar sheen and reflections, dual treadmills, spin bikes, rowers, free weight benches, squat rack, dumbbell racks, yoga mats, and water cooler.
+    - **Azure Pool & Spa (44x36 [16x area])**: Sunken Olympic-style lap pool with stone deck rim, starting blocks, lane dividers, ladders, and poolside loungers with umbrellas; gendered changing cubicles requiring swimsuit change before swimming; swimming activity prompts ("Swim laps" with lap counter advancing fitness quests vs "Free roam"); and an enclosed Spa & Salon room with Antoine's styling salon chair (hairstyle & hair color changes), massage beds (+mood/energy buff), and staff NPCs Elena, Antoine, and Yuki.
+    - **Pixel Arcade & Games (22x16)**: Neon floor tiles, dance machine, air hockey, pinball machines, capsule gachas, retro seating lounge, and clearly marked open reserved floor area for upcoming cabinets, pool table, and gumball machine.
+    - **Quiet Library & Hub (22x16)**: Herringbone library carpet with warm dim lighting, 14 bookshelf rows and wall stacks, study carrels, computer desks, reading lounge with starburst rug, and librarian desk with Clara.
+    - **Cloud Nine Sky Garden (22x18)**: Indoor glasshouse conservatory with koi pond, orchids, ferns, wisteria pergola, and garden benches; outdoor open-air sky terrace with stone path, sakura trees, hedges, and flower planters.
+- **42-Storey Hotel Tower Architecture & NPC Rooms (`js/data.js`, `js/main.js`, `tests/logic.test.mjs`)**:
+  - Hotel tower exterior and directory structured to 42 storeys: Lobby 1 ... Sky Garden 9, My Room on Floor 11 (tier 1), and Rooftop on Floor 42 (relabelled from 'R' to 42 everywhere).
+  - Floors 10–41 designated as non-explorable Hotel Guest Rooms; elevator directory includes a disabled entry for "Guest Rooms (Floors 10–41) • Guests only".
+  - Assigned every guest NPC a stable home floor in the F10–F41 band and a unique room number (e.g., Lola Room 3512 · F35, Gus Room 1405 · F14), shown in their hover/nametag and mentioned in dialogue. Hotel staff NPCs clearly designated with "· Staff".
+- **Player Room Tiers & Upgrades (`js/data.js`, `js/main.js`, `js/save.js`, `index.html`, `css/style.css`)**:
+  - Added 5 purchasable room tiers progressing upwards through tower floor bands: Standard Room (Tier 1, F11, 9x8, 0 coins), Superior Room (Tier 2, F18, 11x9, 250 coins), Deluxe Room (Tier 3, F25, 13x10, 500 coins), Junior Suite (Tier 4, F32, 15x11, 1000 coins), and Presidential Suite (Tier 5, F38, 18x13, 2000 coins).
+  - Top Bar "Upgrade Room" button opens upgrade agency modal with tier previews and purchase buttons; placed furniture safely migrates with unplaceable items returned to inventory; multiplayer snapshot sharing reflects the player's active tier.
+- **Per-Room Floor Materials & Ambient Lighting Multiply Pass (`js/sprites.js`, `js/render.js`)**:
+  - Implemented 11 distinct isometric floor tile materials (`lobby_marble`, `dark_parquet`, `gym_rubber`, `spa_stone`, `arcade_neon`, `arcade_reserved`, `library_carpet`, `grass`, `glasshouse_tile`, `stone_path`, `kitchen_tile`).
+  - Added per-room ambient lighting engine with darkness multiply blending and radial warm emissive glow pools for chandeliers, sconces, and table candles.
+- **27 New Voxel Catalogue & Furniture Models (`js/data.js`, `js/sprites.js`)**:
+  - Built volumetric models for starting blocks, changing cubicles, salon chairs, massage beds, kitchen ranges, prep counters, commercial sinks, dishwashers, kitchen fridges, kitchen pass, maitre d' podium, grand pianos, round tablecloth tables, wine walls, gym mirror wall, squat racks, dumbbell racks, workout benches, spin bikes, rowers, wisteria pergolas, sakura trees, flower planters, and dance machines.
+- **Cassette Music Player (`index.html`, `css/style.css`, `js/audio.js`, `js/main.js`, `js/save.js`)**:
+  - Restyled the expanded music widget into a retro pixel-art cassette player with code/CSS-drawn cassette shell, vintage tape label showing the current track title, corner screws, and dual tape reels with gear teeth that spin while playing and stop when paused.
+  - Implemented live interactive seek bar showing elapsed and total time (`M:SS`) with live progress updates. Supports clicking and dragging via mouse and pointer events (with pointer capture for touch support) and keyboard arrow navigation.
+  - Added track seeking engine methods (`seek`, `seekRatio`, `getCurrentTime`, `getDuration`, `formatTime`) supporting file-backed soundtrack audio elements and procedural synth loops.
+  - Added minimise toggle (existing `▼`/`▲` button) that collapses the player to compact size (track title, room subtitle, seek bar, transport controls) and expands back to the full cassette view; persists minimised/expanded state in save settings (`state.settings.playerMinimized`).
+  - Styled with non-overlapping bounds above the chat dock, crisp at DPR 1x and 2x.
+- **Rooftop Elevator & Stairwell Housing Structure (`js/data.js`, `js/render.js`, `tests/logic.test.mjs`)**:
+  - Replaced floating elevator and stairwell doors on the open-air glass railing with a solid rooftop housing box (`x = 4..14, y = 0`) with solid building walls, windows, and flat top parapet coping.
+  - Mounted elevator door and locked decorative stair door ("Staff Only") on the housing walls, keeping all other roof perimeter edges open-air with glass balustrade railings.
+
+### Fixed
+
+- **Tower Exterior & Floor Overhang Fix (`js/render.js`)**:
+  - Fixed expanded floor slabs protruding beyond tower base and hovering over streets; city footprint expanded to 64x48 min parcel and facade/cut-away edges render unclipped at all camera zoom levels.
+- **Rooftop Glass Railing Corner Bug (`js/sprites.js`)**:
+  - Fixed `buildGlassBalustradeSegment` to strictly constrain pixel generation to its own tile half (columns 0..31 for west, columns 32..63 for north), meeting cleanly with a unified corner post at all roof edges.
+- **Library Bookshelf Sprite Model Bug (`js/sprites.js`, `tests/logic.test.mjs`)**:
+  - Redrew `buildBookshelf` model for both rotations (0 and 1) with solid upright side panels enclosing the bookcase, recessed book rows with gilded spines, solid base plinth, back panel, and molded top cornice.
+
 ## [0.8.2] - 2026-11-09
 
 ### Added

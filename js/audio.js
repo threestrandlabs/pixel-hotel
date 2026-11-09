@@ -270,6 +270,14 @@ export function getTrafficAttenuation(roomId = 'lobby', floor = 1) {
   return Math.max(0.1, Math.pow(0.74, f - 1) * 0.65);
 }
 
+export function formatTime(sec) {
+  if (typeof sec !== 'number' || isNaN(sec) || !isFinite(sec) || sec < 0) return '0:00';
+  const total = Math.floor(sec);
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}:${s < 10 ? '0' : ''}${s}`;
+}
+
 export class ChiptuneAudio {
   constructor(audioContextFactory = null) {
     this._acFactory = audioContextFactory;
@@ -761,7 +769,93 @@ export class ChiptuneAudio {
       usingFile,
       fallback,
       src: fileDef ? fileDef.src : null,
+      currentTime: this.getCurrentTime(),
+      duration: this.getDuration(),
     };
+  }
+
+  getCurrentTime() {
+    const activeId = this.activeFileTrackId || this.trackId;
+    const node = this.fileNodes[activeId];
+    if (node) {
+      if (typeof node._seekTime === 'number') {
+        if (node.el && typeof node.el.currentTime === 'number' && !isNaN(node.el.currentTime)) {
+          if (Math.abs(node.el.currentTime - node._seekTime) < 1.0) {
+            return node.el.currentTime;
+          }
+          const delta = Math.max(0, node.el.currentTime - (node._seekBase || 0));
+          return Math.min(this.getDuration(), node._seekTime + delta);
+        }
+        return node._seekTime;
+      }
+      if (typeof node._pendingSeek === 'number') return node._pendingSeek;
+      if (node.el && typeof node.el.currentTime === 'number' && !isNaN(node.el.currentTime)) {
+        return node.el.currentTime;
+      }
+    }
+    const profile = this.getTrackProfile();
+    const stepSec = (profile.stepMs || 200) / 1000;
+    const loopSteps = (profile.chords?.length || 4) * 8;
+    return ((this.step % loopSteps) * stepSec);
+  }
+
+  getDuration() {
+    const activeId = this.activeFileTrackId || this.trackId;
+    const isFileTrack = !!MUSIC_FILES[activeId] && !this.fileFallback[activeId];
+    const node = this.fileNodes[activeId];
+    if (node && node.el && typeof node.el.duration === 'number' && !isNaN(node.el.duration) && isFinite(node.el.duration) && node.el.duration > 0) {
+      return node.el.duration;
+    }
+    if (isFileTrack) {
+      return 120;
+    }
+    const profile = this.getTrackProfile();
+    const stepSec = (profile.stepMs || 200) / 1000;
+    const loopSteps = (profile.chords?.length || 4) * 8;
+    return loopSteps * stepSec;
+  }
+
+  seek(seconds) {
+    const dur = this.getDuration();
+    const maxDur = dur > 0 ? dur : 120;
+    const clamped = Math.max(0, Math.min(maxDur, Number(seconds) || 0));
+    const activeId = this.activeFileTrackId || this.trackId;
+    const node = this._getFileTrack(activeId) || this.fileNodes[activeId];
+    if (node) {
+      node._seekTime = clamped;
+      node._seekBase = (node.el && !isNaN(node.el.currentTime)) ? node.el.currentTime : 0;
+      if (node.el) {
+        if (typeof node.el.readyState === 'number' && node.el.readyState < 1) {
+          node._pendingSeek = clamped;
+          node.el.addEventListener('loadedmetadata', () => {
+            if (typeof node._pendingSeek === 'number') {
+              try { node.el.currentTime = node._pendingSeek; } catch (e) {}
+              node._pendingSeek = null;
+            }
+          }, { once: true });
+        } else {
+          try {
+            node.el.currentTime = clamped;
+            node._pendingSeek = null;
+          } catch (e) {
+            node._pendingSeek = clamped;
+          }
+        }
+      }
+    }
+    const profile = this.getTrackProfile();
+    const stepSec = (profile.stepMs || 200) / 1000;
+    if (stepSec > 0) {
+      const loopSteps = (profile.chords?.length || 4) * 8;
+      this.step = Math.floor(clamped / stepSec) % loopSteps;
+    }
+    return clamped;
+  }
+
+  seekRatio(ratio) {
+    const r = Math.max(0, Math.min(1, Number(ratio) || 0));
+    const dur = this.getDuration();
+    return this.seek(r * dur);
   }
 
   getTrackInfo() {

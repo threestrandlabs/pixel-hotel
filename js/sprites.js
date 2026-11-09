@@ -107,14 +107,235 @@ function shade(hex, amt) {
 
 export const ISO = { TILE_W: 64, TILE_H: 32, WALL_H: 56 };
 
-export function buildFloorTile(baseColor, variant = 0) {
+export function buildFloorTile(baseColor, variant = 0, material = 'default') {
   const w = ISO.TILE_W;
   const h = ISO.TILE_H;
   const s = makeGrid(w, h);
   fillDiamond(s, w / 2, h / 2 - 0.5, w / 2 - 0.5, h / 2 - 0.5, baseColor);
   const light = shade(baseColor, 0.18);
   const dark = shade(baseColor, -0.16);
-  // subtle facets: lighten top-left half, darken bottom-right half
+
+  if (material === 'lobby_marble' || material === 'marble') {
+    // Polished ivory marble with subtle brass inlay diamond lines
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        if (!s.px[y][x]) continue;
+        const nx = Math.abs(x - w / 2);
+        const ny = Math.abs(y - h / 2);
+        const d = nx + ny * 2;
+        if (d >= 24 && d <= 26) {
+          s.px[y][x] = '#cca442'; // warm polished brass
+        } else if (d > 26) {
+          s.px[y][x] = shade(baseColor, -0.06);
+        } else {
+          if ((x * 3 + y * 7) % 19 === 0) s.px[y][x] = shade(baseColor, 0.12);
+          else if ((x * 5 + y * 2) % 23 === 0) s.px[y][x] = shade(baseColor, -0.08);
+        }
+      }
+    }
+    if (variant % 2 === 0) {
+      setPixel(s, w / 2, h / 2, '#d8b454');
+    }
+    return s;
+  }
+
+  if (material === 'dark_parquet' || material === 'dark_marble') {
+    // Posh dark espresso mahogany parquet with golden brass inlay edge
+    const darkWood = '#281a16';
+    const midWood = '#34221c';
+    const lightWood = '#402a22';
+    const gold = '#c69a48';
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        if (!s.px[y][x]) continue;
+        const nx = Math.abs(x - w / 2);
+        const ny = Math.abs(y - h / 2);
+        const d = nx + ny * 2;
+        if (d >= 28) {
+          s.px[y][x] = '#1a100e';
+        } else if (d >= 25 && d <= 26) {
+          s.px[y][x] = gold;
+        } else {
+          const plank = variant % 2 === 0 ? ((x + y * 2) % 6) : ((x - y * 2 + 100) % 6);
+          s.px[y][x] = plank < 2 ? darkWood : (plank < 4 ? midWood : lightWood);
+        }
+      }
+    }
+    return s;
+  }
+
+  if (material === 'gym_rubber') {
+    // Heavy-duty textured gym rubber matting with cool blue & white flecks
+    const rubberBase = '#26282c';
+    const rubberDark = '#1c1e22';
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        if (!s.px[y][x]) continue;
+        const nx = Math.abs(x - w / 2);
+        const ny = Math.abs(y - h / 2);
+        if (nx + ny * 2 >= 29) {
+          s.px[y][x] = '#141418';
+          continue;
+        }
+        const hash = (x * 37 + y * 59 + variant * 17) & 0xff;
+        if (hash < 12) s.px[y][x] = '#5c8ea8';
+        else if (hash < 20) s.px[y][x] = '#c8d4dc';
+        else if (hash < 80) s.px[y][x] = rubberDark;
+        else s.px[y][x] = rubberBase;
+      }
+    }
+    return s;
+  }
+
+  if (material === 'spa_stone') {
+    // Serene natural slate/travertine pavers with bevelled grout
+    const stoneBase = '#789492';
+    const stoneLight = '#8aa6a4';
+    const stoneDark = '#627c7a';
+    const grout = '#445a58';
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        if (!s.px[y][x]) continue;
+        const nx = Math.abs(x - w / 2);
+        const ny = Math.abs(y - h / 2);
+        const d = nx + ny * 2;
+        if (d >= 27) s.px[y][x] = grout;
+        else if (d >= 25) s.px[y][x] = stoneDark;
+        else {
+          const h = (x * 29 + y * 43) % 17;
+          s.px[y][x] = h < 4 ? stoneLight : (h < 12 ? stoneBase : stoneDark);
+        }
+      }
+    }
+    return s;
+  }
+
+  if (material === 'library_carpet') {
+    // Deep burgundy woven wool carpet with golden diamond lattice
+    const burgDark = '#3e121e';
+    const burgMid = '#521828';
+    const gold = '#b89248';
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        if (!s.px[y][x]) continue;
+        const nx = Math.abs(x - w / 2);
+        const ny = Math.abs(y - h / 2);
+        const d = nx + ny * 2;
+        if (d >= 28) s.px[y][x] = '#2c0c16';
+        else if (d === 16 || d === 17) s.px[y][x] = gold;
+        else s.px[y][x] = (nx + ny) % 3 === 0 ? burgMid : burgDark;
+      }
+    }
+    return s;
+  }
+
+  if (material === 'arcade_neon') {
+    // Retro cyber neon carpet: dark indigo with vibrant magenta and cyan pixel accents
+    const bg = '#161226';
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        if (!s.px[y][x]) continue;
+        const nx = Math.abs(x - w / 2);
+        const ny = Math.abs(y - h / 2);
+        const d = nx + ny * 2;
+        if (d >= 29) { s.px[y][x] = '#0e0a1a'; continue; }
+        if ((x + y) % 11 === 0 && d < 22) s.px[y][x] = '#ff2a8c';
+        else if ((x - y + 60) % 13 === 0 && d < 22) s.px[y][x] = '#00e5ff';
+        else if (d === 14) s.px[y][x] = '#4a2878';
+        else s.px[y][x] = bg;
+      }
+    }
+    return s;
+  }
+
+  if (material === 'glasshouse_tile' || material === 'terracotta') {
+    // Warm terracotta ceramic tile with ivory grout
+    const terra = '#b86244';
+    const terraDark = '#984e36';
+    const grout = '#e2d8c6';
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        if (!s.px[y][x]) continue;
+        const nx = Math.abs(x - w / 2);
+        const ny = Math.abs(y - h / 2);
+        const d = nx + ny * 2;
+        if (d >= 28) s.px[y][x] = grout;
+        else if (d >= 26) s.px[y][x] = terraDark;
+        else s.px[y][x] = (x + y * 3) % 7 === 0 ? terraDark : terra;
+      }
+    }
+    return s;
+  }
+
+  if (material === 'grass') {
+    // Lush lawn grass
+    const g0 = '#3e8a42';
+    const g1 = '#4ea052';
+    const g2 = '#327236';
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        if (!s.px[y][x]) continue;
+        const h = (x * 41 + y * 73) % 19;
+        s.px[y][x] = h < 5 ? g1 : (h < 13 ? g0 : g2);
+      }
+    }
+    return s;
+  }
+
+  if (material === 'stone_path') {
+    // Flagstone garden path
+    const stone = '#7e848c';
+    const stoneDark = '#5e646c';
+    const seam = '#3a5c36';
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        if (!s.px[y][x]) continue;
+        const nx = Math.abs(x - w / 2);
+        const ny = Math.abs(y - h / 2);
+        const d = nx + ny * 2;
+        if (d >= 27) s.px[y][x] = seam;
+        else s.px[y][x] = (x * 7 + y * 13) % 11 < 4 ? stoneDark : stone;
+      }
+    }
+    return s;
+  }
+
+  if (material === 'timber_deck') {
+    // Teak outdoor decking boards
+    const teak = '#98683e';
+    const teakDark = '#7c522e';
+    const seam = '#4a301a';
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        if (!s.px[y][x]) continue;
+        const plank = (y * 2) % 6;
+        if (plank === 0) s.px[y][x] = seam;
+        else s.px[y][x] = (x * 3 + y) % 9 === 0 ? teakDark : teak;
+      }
+    }
+    return s;
+  }
+
+  if (material === 'kitchen_tile') {
+    // Commercial white kitchen floor tile
+    const tile = '#e6ecf0';
+    const tileShade = '#d4dce2';
+    const grout = '#a4b0b8';
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        if (!s.px[y][x]) continue;
+        const nx = Math.abs(x - w / 2);
+        const ny = Math.abs(y - h / 2);
+        const d = nx + ny * 2;
+        if (d >= 28) s.px[y][x] = grout;
+        else if (d >= 26) s.px[y][x] = tileShade;
+        else s.px[y][x] = tile;
+      }
+    }
+    return s;
+  }
+
+  // Default subtle diamond facets
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       if (!s.px[y][x]) continue;
@@ -358,8 +579,10 @@ export function buildGlassBalustradeSegment(kind = 'north') {
   const s = makeGrid(w, h);
   const baseY = (x) => Math.round(ISO.WALL_H + (kind === 'north' ? (x - w / 2) / 2 : (w / 2 - x) / 2));
   const RAIL_H = 18;
+  const startX = kind === 'north' ? w / 2 : 0;
+  const endX = kind === 'north' ? w : w / 2;
 
-  for (let x = 0; x < w; x++) {
+  for (let x = startX; x < endX; x++) {
     const base = baseY(x);
     // Base mounting shoe (dark metal channel)
     setPixel(s, x, base, '#242b35');
@@ -725,35 +948,83 @@ export function buildReceptionDesk(rot = 0) {
 export function buildBookshelf(rot = 0) {
   const [tw, th] = rot % 2 ? [1, 2] : [2, 1];
   const FRAME = ['#a86834', '#8a5024', '#663614'];
+  const BASE = ['#824e22', '#6c3e18', '#502a10'];
+  const CORNICE = ['#ba7840', '#9c5e2a', '#744018'];
+  const BACK = ['#72421c', '#5e3414', '#46240c'];
   const bookColors = [
     ['#d2506b', '#aa3850', '#7c2036'],
     ['#4f8fd6', '#3470b4', '#204c84'],
     ['#e8c04a', '#c49e32', '#90721c'],
     ['#5cb06a', '#428e50', '#2a6436'],
     ['#9a6ad0', '#784eb0', '#543082'],
+    ['#e27a3c', '#be5e26', '#8e4016'],
+    ['#44b8a8', '#2e9686', '#1c6e62'],
   ];
 
   return isoSprite(tw, th, 74, (box) => {
-    // Outer wooden casing (z = 0 .. 74)
-    box(0.05, 0.08, tw - 0.05, th - 0.08, 0, 74, ...FRAME);
-    // 3 shelves of volumetric book rows
-    for (let row = 0; row < 3; row++) {
-      const z = 8 + row * 20;
-      // Shelf board
-      box(0.06, 0.09, tw - 0.06, th - 0.09, z - 2, z, ...FRAME);
-      const n = (rot % 2 ? th : tw) * 4;
-      for (let i = 0; i < n; i++) {
-        const col = bookColors[(i + row * 2) % bookColors.length];
-        const t0 = 0.10 + (i / n) * ((rot % 2 ? th : tw) - 0.20);
-        const t1 = t0 + 0.14;
-        const bH = 12 + ((i * 7 + row * 11) % 5);
-        if (rot % 2) {
-          box(tw - 0.08, t0, tw - 0.02, t1, z, z + bH, ...col);
-        } else {
-          box(t0, th - 0.08, t1, th - 0.02, z, z + bH, ...col);
+    // 1. Plinth / bottom base molding (z = 0 .. 4)
+    box(0.04, 0.06, tw - 0.04, th - 0.06, 0, 4, ...BASE);
+
+    if (rot % 2 === 0) {
+      // 2x1: front face is south-west (v = th - 0.06), side face is south-east (u = tw - 0.04)
+      // Solid back panel
+      box(0.06, 0.08, tw - 0.06, 0.22, 4, 70, ...BACK);
+      // Left side upright panel
+      box(0.04, 0.06, 0.16, th - 0.06, 4, 70, ...FRAME);
+      // Right side upright panel (fully encloses the side face from back to front)
+      box(tw - 0.16, 0.06, tw - 0.04, th - 0.06, 4, 70, ...FRAME);
+
+      // 3 shelves with books
+      for (let row = 0; row < 3; row++) {
+        const shelfZ = 4 + row * 22;
+        if (shelfZ > 4) {
+          box(0.16, 0.08, tw - 0.16, th - 0.08, shelfZ - 2, shelfZ, ...FRAME);
+        }
+        const n = 7;
+        const span = tw - 0.36;
+        for (let i = 0; i < n; i++) {
+          const col = bookColors[(i + row * 3) % bookColors.length];
+          const t0 = 0.18 + (i / n) * span;
+          const t1 = t0 + span / n - 0.02;
+          const bH = 13 + ((i * 5 + row * 7) % 6);
+          box(t0, 0.20, t1, th - 0.10, shelfZ, shelfZ + bH, ...col);
+          if (i % 2 === 0) {
+            box(t0 + 0.02, th - 0.11, t1 - 0.02, th - 0.09, shelfZ + 3, shelfZ + bH - 3, '#fbe088', '#e2be52', '#a88626');
+          }
+        }
+      }
+    } else {
+      // 1x2: front face is south-east (u = tw - 0.06), side face is south-west (v = th - 0.04)
+      // Solid back panel
+      box(0.08, 0.06, 0.22, th - 0.06, 4, 70, ...BACK);
+      // Rear side upright panel
+      box(0.06, 0.04, tw - 0.06, 0.16, 4, 70, ...FRAME);
+      // Front side upright panel (fully encloses the side face from back to front)
+      box(0.06, th - 0.16, tw - 0.06, th - 0.04, 4, 70, ...FRAME);
+
+      // 3 shelves with books
+      for (let row = 0; row < 3; row++) {
+        const shelfZ = 4 + row * 22;
+        if (shelfZ > 4) {
+          box(0.08, 0.16, tw - 0.08, th - 0.16, shelfZ - 2, shelfZ, ...FRAME);
+        }
+        const n = 7;
+        const span = th - 0.36;
+        for (let i = 0; i < n; i++) {
+          const col = bookColors[(i + row * 3) % bookColors.length];
+          const t0 = 0.18 + (i / n) * span;
+          const t1 = t0 + span / n - 0.02;
+          const bH = 13 + ((i * 5 + row * 7) % 6);
+          box(0.20, t0, tw - 0.10, t1, shelfZ, shelfZ + bH, ...col);
+          if (i % 2 === 0) {
+            box(tw - 0.11, t0 + 0.02, tw - 0.09, t1 - 0.02, shelfZ + 3, shelfZ + bH - 3, '#fbe088', '#e2be52', '#a88626');
+          }
         }
       }
     }
+
+    // Top molded cornice / capping slab (z = 70 .. 74) with subtle overhang
+    box(0.02, 0.04, tw - 0.02, th - 0.04, 70, 74, ...CORNICE);
   });
 }
 
@@ -1204,14 +1475,24 @@ export function buildChefStationSprite(rot = 0) {
 }
 
 export function buildPoolWaterSprite(rot = 0) {
-  const RIM = ['#e8f4f8', '#c4dce4', '#92aeb8'];
-  const WATER = ['#48d4e8', '#2ab0c8', '#187c94'];
-  const FOAM = ['#b8f6ff', '#84e2f4', '#50b4c8'];
-  return isoSprite(2, 2, 8, (box) => {
-    box(0.02, 0.02, 1.98, 1.98, 0, 4, ...RIM);
-    box(0.14, 0.14, 1.86, 1.86, 0, 5, ...WATER);
-    box(0.36, 0.44, 0.92, 0.62, 5, 6, ...FOAM);
-    box(1.10, 1.22, 1.64, 1.40, 5, 6, ...FOAM);
+  const WATER = ['#40d0e4', '#24a8c0', '#14748c'];
+  const DEEP = ['#2090ac', '#146e84', '#0c485c'];
+  const FOAM = ['#c8f8ff', '#94e8f6', '#64c0d4'];
+  const LANE_LINE = ['#ffffff', '#d8f0f6', '#a4d4e0'];
+  return isoSprite(2, 2, 7, (box) => {
+    // Deep water basin bottom
+    box(0.01, 0.01, 1.99, 1.99, 0, 2, ...DEEP);
+    // Translucent shimmering pool water
+    box(0.01, 0.01, 1.99, 1.99, 2, 5, ...WATER);
+    // Pool lane bottom marker line
+    if (rot % 2 === 0) {
+      box(0.85, 0.02, 1.15, 1.98, 1, 2, ...LANE_LINE);
+    } else {
+      box(0.02, 0.85, 1.98, 1.15, 1, 2, ...LANE_LINE);
+    }
+    // Animated surface ripples / caustics
+    box(0.30, 0.40, 0.90, 0.60, 5, 6, ...FOAM);
+    box(1.10, 1.30, 1.70, 1.50, 5, 6, ...FOAM);
   });
 }
 
@@ -1454,6 +1735,413 @@ export function buildLobbyRunnerSprite(rot = 0) {
   });
 }
 
+// ---------- v0.8.3 Hotel Layout Expansion Models ----------
+
+export function buildGymMirror(rot = 0) {
+  const [tw, th] = rot % 2 ? [1, 2] : [2, 1];
+  const FRAME = ['#d8e0e8', '#b0b8c4', '#848c98'];
+  const GLASS = ['#c8e8f4', '#a0ccde', '#7aa4b6'];
+  const SHEEN = ['#ffffff', '#e8f4fc', '#b8d8ec'];
+  return isoSprite(tw, th, 46, (box) => {
+    box(0.04, 0.04, tw - 0.04, th - 0.04, 6, 44, ...FRAME);
+    box(0.10, 0.10, tw - 0.10, th - 0.10, 8, 42, ...GLASS);
+    // Diagonal glass highlight / reflection streak
+    box(tw * 0.2, th * 0.2, tw * 0.45, th * 0.45, 14, 38, ...SHEEN);
+  });
+}
+
+export function buildExerciseBike(rot = 0) {
+  const [tw, th] = rot % 2 ? [1, 1] : [1, 1];
+  const FRAME = ['#444c5c', '#303644', '#1e222c'];
+  const ACCENT = ['#00e5ff', '#00b4d8', '#0077b6'];
+  return isoSprite(tw, th, 38, (box) => {
+    box(0.25, 0.25, 0.75, 0.75, 0, 4, ...FRAME); // Base
+    box(0.35, 0.35, 0.65, 0.65, 4, 18, ...FRAME); // Flywheel housing
+    box(0.42, 0.42, 0.58, 0.58, 18, 30, ...FRAME); // Post
+    box(0.32, 0.28, 0.68, 0.45, 28, 32, '#202228', '#14161a', '#0a0c0e'); // Saddle
+    box(0.30, 0.60, 0.70, 0.75, 30, 36, ...ACCENT); // Handlebars & digital display
+  });
+}
+
+export function buildRowingMachine(rot = 0) {
+  const [tw, th] = rot % 2 ? [1, 2] : [2, 1];
+  const FRAME = ['#505868', '#383e4c', '#242a34'];
+  return isoSprite(tw, th, 28, (box) => {
+    box(0.12, 0.12, tw - 0.12, th - 0.12, 0, 4, ...FRAME); // Long track
+    box(0.20 * tw, 0.20 * th, 0.55 * tw, 0.55 * th, 4, 26, ...FRAME); // Flywheel housing
+    box(0.60 * tw, 0.35 * th, 0.85 * tw, 0.65 * th, 4, 10, '#e85042', '#b83428', '#802018'); // Sliding seat
+  });
+}
+
+export function buildSquatRack(rot = 0) {
+  const [tw, th] = rot % 2 ? [1, 2] : [2, 1];
+  const STEEL = ['#8892a0', '#646c78', '#444a54'];
+  const PLATES = ['#282c34', '#1a1d22', '#101216'];
+  return isoSprite(tw, th, 54, (box) => {
+    box(0.10, 0.10, tw - 0.10, th - 0.10, 0, 4, ...STEEL); // Base frame
+    // Upright posts
+    box(0.12, 0.12, 0.24, 0.24, 4, 52, ...STEEL);
+    box(tw - 0.24, th - 0.24, tw - 0.12, th - 0.12, 4, 52, ...STEEL);
+    // Overhead pull-up bar
+    box(0.12, 0.12, tw - 0.12, th - 0.12, 50, 53, ...STEEL);
+    // Barbell resting on safety pins with weight plates
+    box(0.04, 0.20 * th, tw - 0.04, 0.40 * th, 28, 30, '#d8e0ea', '#b0b8c4', '#7c8490');
+    box(0.06, 0.15 * th, 0.14, 0.45 * th, 23, 35, ...PLATES);
+    box(tw - 0.14, 0.15 * th, tw - 0.06, 0.45 * th, 23, 35, ...PLATES);
+  });
+}
+
+export function buildGymLockers(rot = 0) {
+  const [tw, th] = rot % 2 ? [1, 2] : [2, 1];
+  const STEEL = ['#647082', '#4a5464', '#323c4a'];
+  const HANDLE = ['#e0e4ec', '#b4bcc8', '#808894'];
+  return isoSprite(tw, th, 50, (box) => {
+    box(0.08, 0.10, tw - 0.08, th - 0.10, 0, 48, ...STEEL);
+    box(0.15 * tw, 0.20 * th, 0.25 * tw, 0.35 * th, 22, 28, ...HANDLE);
+    box(0.65 * tw, 0.20 * th, 0.75 * tw, 0.35 * th, 22, 28, ...HANDLE);
+  });
+}
+
+export function buildWaterCooler(rot = 0) {
+  const WHITE = ['#f4f6fa', '#d4d8e2', '#a8b0c0'];
+  const BOTTLE = ['#50c8ff', '#28a0e0', '#1074b0'];
+  return isoSprite(1, 1, 42, (box) => {
+    box(0.20, 0.20, 0.80, 0.80, 0, 22, ...WHITE); // Base cabinet
+    box(0.30, 0.30, 0.70, 0.70, 22, 38, ...BOTTLE); // Inverted water bottle
+    box(0.40, 0.72, 0.60, 0.82, 14, 18, '#e03040', '#b81828', '#800c18'); // Spigot
+  });
+}
+
+export function buildRoundDiningTable(rot = 0) {
+  const LINEN = ['#faf8f4', '#dedad0', '#b8b2a4'];
+  const CANDLE = ['#ffdf78', '#e8b834', '#b08418'];
+  const PLATE = ['#ffffff', '#e8e6e2', '#c0bcb4'];
+  return isoSprite(2, 2, 32, (box) => {
+    // Pedestal base
+    box(0.60, 0.60, 1.40, 1.40, 0, 6, '#4a2818', '#341a0e', '#200e06');
+    box(0.85, 0.85, 1.15, 1.15, 6, 20, '#4a2818', '#341a0e', '#200e06');
+    // Tabletop draped in crisp white linen
+    box(0.15, 0.15, 1.85, 1.85, 18, 24, ...LINEN);
+    box(0.10, 0.10, 1.90, 1.90, 23, 25, ...LINEN);
+    // Table place settings (plates)
+    box(0.35, 0.85, 0.65, 1.15, 25, 26, ...PLATE);
+    box(1.35, 0.85, 1.65, 1.15, 25, 26, ...PLATE);
+    box(0.85, 0.35, 1.15, 0.65, 25, 26, ...PLATE);
+    box(0.85, 1.35, 1.15, 1.65, 25, 26, ...PLATE);
+    // Center glowing candle in crystal holder
+    box(0.90, 0.90, 1.10, 1.10, 25, 30, '#f0f4f8', '#c8d4e0', '#94a4b4');
+    box(0.94, 0.94, 1.06, 1.06, 30, 34, ...CANDLE);
+  });
+}
+
+export function buildDiningBooth(rot = 0) {
+  const [tw, th] = rot % 2 ? [1, 2] : [2, 1];
+  const VELVET = ['#c82442', '#a01830', '#740c20'];
+  const WALNUT = ['#381c14', '#26120c', '#160804'];
+  return isoSprite(tw, th, 38, (box) => {
+    box(0.06, 0.08, tw - 0.06, th - 0.08, 0, 8, ...WALNUT); // Plinth
+    box(0.08, 0.10, tw - 0.08, th - 0.10, 8, 16, ...VELVET); // Cushioned seat
+    // High-backed tufted velvet backrest
+    if (rot % 2 === 0) {
+      box(0.08, 0.10, tw - 0.08, 0.35, 16, 36, ...VELVET);
+    } else {
+      box(0.10, 0.08, 0.35, th - 0.08, 16, 36, ...VELVET);
+    }
+  });
+}
+
+export function buildWineWall(rot = 0) {
+  const [tw, th] = rot % 2 ? [1, 3] : [3, 1];
+  const WOOD = ['#341a12', '#24100a', '#140804'];
+  const GLOW = ['#ffc860', '#d89830', '#986414'];
+  const BOTTLE = ['#285436', '#1a3c24', '#0e2414'];
+  return isoSprite(tw, th, 64, (box) => {
+    box(0.06, 0.08, tw - 0.06, th - 0.08, 0, 62, ...WOOD);
+    // Backlit glass racks
+    box(0.10, 0.12, tw - 0.10, th - 0.12, 6, 58, ...GLOW);
+    // Rows of wine bottles
+    for (let r = 0; r < 4; r++) {
+      const z0 = 10 + r * 12;
+      box(0.14 * tw, 0.18 * th, 0.86 * tw, 0.82 * th, z0, z0 + 8, ...BOTTLE);
+    }
+  });
+}
+
+export function buildMaitreDPodium(rot = 0) {
+  const WALNUT = ['#442216', '#30160c', '#1e0c06'];
+  const BRASS = ['#f0c454', '#c89c30', '#906c14'];
+  return isoSprite(1, 1, 40, (box) => {
+    box(0.20, 0.20, 0.80, 0.80, 0, 6, ...WALNUT);
+    box(0.35, 0.35, 0.65, 0.65, 6, 28, ...WALNUT);
+    box(0.18, 0.18, 0.82, 0.82, 28, 34, ...WALNUT); // Slanted reading surface
+    box(0.30, 0.30, 0.70, 0.70, 34, 37, '#e8dcbc', '#c4b898', '#988c70'); // Open reservation book
+    box(0.65, 0.25, 0.75, 0.35, 34, 40, ...BRASS); // Brass reading lamp
+  });
+}
+
+export function buildGrandPiano(rot = 0) {
+  const [tw, th] = [2, 2];
+  const EBONY = ['#1a1c22', '#101216', '#080a0c'];
+  const KEYS = ['#f8f8fc', '#d8d8e0', '#a4a4b0'];
+  return isoSprite(tw, th, 42, (box) => {
+    // 3 tapered legs
+    box(0.18, 0.18, 0.35, 0.35, 0, 16, ...EBONY);
+    box(1.65, 0.18, 1.82, 0.35, 0, 16, ...EBONY);
+    box(0.90, 1.65, 1.07, 1.82, 0, 16, ...EBONY);
+    // Piano body casing
+    box(0.10, 0.10, 1.90, 1.90, 16, 28, ...EBONY);
+    // Keyboard
+    box(0.25, 0.12, 1.75, 0.38, 22, 25, ...KEYS);
+    // Prop stick and open wing lid
+    box(0.12, 0.12, 1.88, 1.88, 28, 36, ...EBONY);
+    box(0.80, 0.40, 1.20, 0.50, 36, 42, '#f0e8d0', '#c8be9e', '#948868'); // Sheet music
+  });
+}
+
+export function buildWallSconce(rot = 0) {
+  const BRASS = ['#f4ca5c', '#c89e34', '#947018'];
+  const FROSTED = ['#fff4cc', '#e8d498', '#b8a068'];
+  return isoSprite(1, 1, 30, (box) => {
+    box(0.35, 0.08, 0.65, 0.25, 14, 22, ...BRASS); // Backplate
+    box(0.42, 0.25, 0.58, 0.45, 16, 20, ...BRASS); // Arm
+    box(0.35, 0.35, 0.65, 0.65, 18, 28, ...FROSTED); // Glowing tulip shade
+  });
+}
+
+export function buildKitchenRange(rot = 0) {
+  const [tw, th] = rot % 2 ? [1, 2] : [2, 1];
+  const STEEL = ['#a0aab8', '#788290', '#505864'];
+  const BURNER = ['#282c34', '#181b20', '#0e1014'];
+  const FLAME = ['#ff9030', '#e04018', '#a01808'];
+  return isoSprite(tw, th, 38, (box) => {
+    box(0.06, 0.08, tw - 0.06, th - 0.08, 0, 24, ...STEEL); // Heavy base
+    box(0.10, 0.12, tw - 0.10, th - 0.12, 24, 26, ...BURNER); // Cast iron grates
+    // Cookware & animated cooking flames
+    box(0.20 * tw, 0.30 * th, 0.45 * tw, 0.70 * th, 26, 32, '#d47038', '#aa4e20', '#743010'); // Copper pot
+    box(0.28 * tw, 0.38 * th, 0.38 * tw, 0.62 * th, 32, 38, ...FLAME); // Flame
+    box(0.60 * tw, 0.25 * th, 0.85 * tw, 0.75 * th, 26, 30, '#505866', '#383e4a', '#222630'); // Saute pan
+  });
+}
+
+export function buildKitchenPrepTable(rot = 0) {
+  const [tw, th] = rot % 2 ? [1, 2] : [2, 1];
+  const STEEL = ['#c8d2de', '#9aa4b0', '#6c7480'];
+  const BOARD = ['#d8a468', '#b48048', '#805428'];
+  return isoSprite(tw, th, 34, (box) => {
+    // 4 stainless legs
+    box(0.08, 0.10, 0.18, 0.20, 0, 24, ...STEEL);
+    box(tw - 0.18, 0.10, tw - 0.08, 0.20, 0, 24, ...STEEL);
+    box(0.08, th - 0.20, 0.18, th - 0.10, 0, 24, ...STEEL);
+    box(tw - 0.18, th - 0.20, tw - 0.08, th - 0.10, 0, 24, ...STEEL);
+    // Lower shelf & worktop
+    box(0.08, 0.10, tw - 0.08, th - 0.10, 4, 7, ...STEEL);
+    box(0.04, 0.06, tw - 0.04, th - 0.06, 24, 27, ...STEEL);
+    // Cutting board & ingredients
+    box(0.18 * tw, 0.25 * th, 0.55 * tw, 0.75 * th, 27, 29, ...BOARD);
+    box(0.65 * tw, 0.35 * th, 0.82 * tw, 0.65 * th, 27, 32, '#48c454', '#2ca038', '#1c6c22'); // Fresh herbs bowl
+  });
+}
+
+export function buildKitchenSink(rot = 0) {
+  const [tw, th] = rot % 2 ? [1, 2] : [2, 1];
+  const STEEL = ['#b8c4d2', '#8e9aa8', '#646e7a'];
+  const WATER = ['#48c4e8', '#2a98b8', '#186880'];
+  return isoSprite(tw, th, 44, (box) => {
+    box(0.06, 0.08, tw - 0.06, th - 0.08, 0, 26, ...STEEL); // Body
+    box(0.15 * tw, 0.20 * th, 0.45 * tw, 0.80 * th, 16, 22, ...WATER); // Left basin
+    box(0.55 * tw, 0.20 * th, 0.85 * tw, 0.80 * th, 16, 22, ...WATER); // Right basin
+    // Gooseneck pre-rinse faucet
+    box(0.46 * tw, 0.12 * th, 0.54 * tw, 0.22 * th, 26, 42, ...STEEL);
+  });
+}
+
+export function buildKitchenFridge(rot = 0) {
+  const [tw, th] = rot % 2 ? [1, 2] : [2, 1];
+  const STEEL = ['#b0bcc8', '#86929e', '#5a646e'];
+  const HANDLE = ['#e8edf4', '#bcc4ce', '#848c96'];
+  return isoSprite(tw, th, 58, (box) => {
+    box(0.06, 0.08, tw - 0.06, th - 0.08, 0, 56, ...STEEL);
+    box(0.12 * tw, 0.20 * th, 0.20 * tw, 0.30 * th, 24, 38, ...HANDLE);
+    box(0.80 * tw, 0.20 * th, 0.88 * tw, 0.30 * th, 24, 38, ...HANDLE);
+  });
+}
+
+export function buildKitchenPass(rot = 0) {
+  const [tw, th] = rot % 2 ? [1, 3] : [3, 1];
+  const STEEL = ['#c0cbd8', '#949ea8', '#66707c'];
+  const HEAT = ['#ff5030', '#d82810', '#901004'];
+  return isoSprite(tw, th, 46, (box) => {
+    box(0.04, 0.06, tw - 0.04, th - 0.06, 0, 24, ...STEEL); // Counter
+    // Overhead shelf with heat lamps
+    box(0.10, 0.12, 0.20, 0.22, 24, 42, ...STEEL);
+    box(tw - 0.20, th - 0.22, tw - 0.10, th - 0.12, 24, 42, ...STEEL);
+    box(0.08, 0.10, tw - 0.08, th - 0.10, 40, 44, ...STEEL);
+    // Red heat lamp bulbs
+    box(0.25 * tw, 0.40 * th, 0.35 * tw, 0.60 * th, 37, 40, ...HEAT);
+    box(0.65 * tw, 0.40 * th, 0.75 * tw, 0.60 * th, 37, 40, ...HEAT);
+  });
+}
+
+export function buildStartingBlock(rot = 0) {
+  const BLOCK = ['#3888d8', '#2064aa', '#124478'];
+  const TOP = ['#f4f8fc', '#d0e0f0', '#9cb4cc'];
+  return isoSprite(1, 1, 24, (box) => {
+    box(0.20, 0.20, 0.80, 0.80, 0, 16, ...BLOCK);
+    box(0.16, 0.16, 0.84, 0.84, 16, 20, ...TOP); // Grippy platform
+    // Stainless step handle
+    box(0.35, 0.10, 0.65, 0.20, 16, 24, '#d8e0e8', '#b0b8c2', '#7c848e');
+  });
+}
+
+export function buildLaneRope(rot = 0) {
+  const [tw, th] = rot % 2 ? [1, 2] : [2, 1];
+  const RED = ['#e83848', '#b82030', '#80101c'];
+  const WHITE = ['#ffffff', '#dce4ec', '#a4b0bc'];
+  const BLUE = ['#2880d8', '#1a5ea0', '#103e6c'];
+  return isoSprite(tw, th, 8, (box) => {
+    if (rot % 2 === 0) {
+      box(0.10, 0.35, 0.60, 0.65, 3, 7, ...RED);
+      box(0.70, 0.35, 1.20, 0.65, 3, 7, ...WHITE);
+      box(1.30, 0.35, 1.80, 0.65, 3, 7, ...BLUE);
+    } else {
+      box(0.35, 0.10, 0.65, 0.60, 3, 7, ...RED);
+      box(0.35, 0.70, 0.65, 1.20, 3, 7, ...WHITE);
+      box(0.35, 1.30, 0.65, 1.80, 3, 7, ...BLUE);
+    }
+  });
+}
+
+export function buildPoolLadder(rot = 0) {
+  const STEEL = ['#e4ecf4', '#b8c4d2', '#8490a0'];
+  return isoSprite(1, 1, 38, (box) => {
+    // Curved rails extending up
+    box(0.20, 0.20, 0.32, 0.32, 0, 36, ...STEEL);
+    box(0.68, 0.20, 0.80, 0.32, 0, 36, ...STEEL);
+    // Ladder rungs
+    box(0.32, 0.22, 0.68, 0.30, 8, 11, ...STEEL);
+    box(0.32, 0.22, 0.68, 0.30, 18, 21, ...STEEL);
+    box(0.32, 0.22, 0.68, 0.30, 28, 31, ...STEEL);
+  });
+}
+
+export function buildPoolLounger(rot = 0) {
+  const [tw, th] = rot % 2 ? [1, 2] : [2, 1];
+  const FRAME = ['#f4f6fa', '#d8dce6', '#aab2c0'];
+  const CUSHION = ['#00b4d8', '#0096c7', '#0077b6'];
+  return isoSprite(tw, th, 24, (box) => {
+    box(0.10, 0.12, tw - 0.10, th - 0.12, 0, 8, ...FRAME);
+    box(0.12, 0.14, tw - 0.12, th - 0.14, 8, 14, ...CUSHION);
+    // Raised angled headrest
+    if (rot % 2 === 0) {
+      box(0.12, 0.14, 0.65, th - 0.14, 14, 22, ...CUSHION);
+    } else {
+      box(0.12, 0.14, tw - 0.12, 0.65, 14, 22, ...CUSHION);
+    }
+  });
+}
+
+export function buildPoolUmbrella(rot = 0) {
+  const POLE = ['#e8edf4', '#b8c2cc', '#84909c'];
+  const CANOPY = ['#00b4d8', '#0077b6', '#03045e'];
+  const WHITE = ['#ffffff', '#e0e6ed', '#b0bcc8'];
+  return isoSprite(1, 1, 62, (box) => {
+    box(0.44, 0.44, 0.56, 0.56, 0, 48, ...POLE); // Pole
+    // Striped cabana canopy
+    box(0.04, 0.04, 0.96, 0.96, 48, 54, ...CANOPY);
+    box(0.16, 0.16, 0.84, 0.84, 54, 58, ...WHITE);
+    box(0.30, 0.30, 0.70, 0.70, 58, 62, ...CANOPY);
+  });
+}
+
+export function buildChangingCubicle(rot = 0) {
+  const WALL = ['#e6ecf2', '#c0ccd8', '#94a0ae'];
+  const CURTAIN = ['#20b2aa', '#188e88', '#106460'];
+  return isoSprite(1, 1, 52, (box) => {
+    // Back and side privacy walls
+    box(0.06, 0.06, 0.94, 0.20, 0, 50, ...WALL);
+    box(0.06, 0.20, 0.20, 0.94, 0, 50, ...WALL);
+    box(0.80, 0.20, 0.94, 0.94, 0, 50, ...WALL);
+    // Privacy front drape curtain
+    box(0.20, 0.80, 0.80, 0.92, 4, 46, ...CURTAIN);
+  });
+}
+
+export function buildSalonChair(rot = 0) {
+  const CHROME = ['#dce4ec', '#b0bac8', '#808c9a'];
+  const LEATHER = ['#24262c', '#181a1e', '#101214'];
+  const MIRROR = ['#b8e8f8', '#8cc4d8', '#649eb0'];
+  return isoSprite(1, 1, 48, (box) => {
+    // Round pedestal & hydraulic column
+    box(0.25, 0.25, 0.75, 0.75, 0, 4, ...CHROME);
+    box(0.42, 0.42, 0.58, 0.58, 4, 14, ...CHROME);
+    // Black leather salon chair
+    box(0.22, 0.22, 0.78, 0.78, 14, 20, ...LEATHER);
+    box(0.22, 0.18, 0.78, 0.36, 20, 34, ...LEATHER); // Backrest
+    // Attached vanity mirror station behind
+    box(0.12, 0.04, 0.88, 0.16, 0, 46, ...CHROME);
+    box(0.18, 0.06, 0.82, 0.14, 16, 44, ...MIRROR);
+  });
+}
+
+export function buildMassageBed(rot = 0) {
+  const [tw, th] = rot % 2 ? [1, 2] : [2, 1];
+  const WOOD = ['#6c442c', '#503220', '#342014'];
+  const LINEN = ['#f8f8fc', '#dce0e8', '#b0b8c4'];
+  const TOWEL = ['#c8a2c8', '#a87ca8', '#805480'];
+  return isoSprite(tw, th, 28, (box) => {
+    // 4 sturdy timber legs
+    box(0.10, 0.12, 0.22, 0.24, 0, 16, ...WOOD);
+    box(tw - 0.22, 0.12, tw - 0.10, 0.24, 0, 16, ...WOOD);
+    box(0.10, th - 0.24, 0.22, th - 0.12, 0, 16, ...WOOD);
+    box(tw - 0.22, th - 0.24, tw - 0.10, th - 0.12, 0, 16, ...WOOD);
+    // Padded mattress & soft linen
+    box(0.08, 0.10, tw - 0.08, th - 0.10, 14, 22, ...LINEN);
+    // Folded lavender treatment towel & face cradle
+    if (rot % 2 === 0) {
+      box(0.20, 0.30, 0.65, 0.70, 22, 26, ...TOWEL);
+    } else {
+      box(0.30, 0.20, 0.70, 0.65, 22, 26, ...TOWEL);
+    }
+  });
+}
+
+export function buildPergola(rot = 0) {
+  const [tw, th] = rot % 2 ? [1, 2] : [2, 1];
+  const CEDAR = ['#9e6438', '#7c4c28', '#58341a'];
+  const VINES = ['#38843c', '#28682c', '#18481c'];
+  const FLOWER = ['#f472b6', '#db2777', '#9d174d'];
+  return isoSprite(tw, th, 54, (box) => {
+    // 4 trellis posts
+    box(0.10, 0.10, 0.22, 0.22, 0, 48, ...CEDAR);
+    box(tw - 0.22, 0.10, tw - 0.10, 0.22, 0, 48, ...CEDAR);
+    box(0.10, th - 0.22, 0.22, th - 0.10, 0, 48, ...CEDAR);
+    box(tw - 0.22, th - 0.22, tw - 0.10, th - 0.10, 0, 48, ...CEDAR);
+    // Roof rafters
+    box(0.04, 0.04, tw - 0.04, th - 0.04, 48, 52, ...CEDAR);
+    // Climbing green vines & pink blossoms
+    box(0.06, 0.06, tw - 0.06, th - 0.06, 51, 54, ...VINES);
+    box(tw * 0.3, th * 0.3, tw * 0.45, th * 0.45, 53, 55, ...FLOWER);
+    box(tw * 0.7, th * 0.6, tw * 0.85, th * 0.75, 53, 55, ...FLOWER);
+  });
+}
+
+export function buildArcadeReserved(rot = 0) {
+  const [tw, th] = [2, 2];
+  const DARK = ['#1a1028', '#120a1c', '#0a0610'];
+  const NEON_YEL = ['#fde047', '#eab308', '#ca8a04'];
+  const NEON_CYAN = ['#22d3ee', '#06b6d4', '#0891b2'];
+  return isoSprite(tw, th, 4, (box) => {
+    box(0.04, 0.04, tw - 0.04, th - 0.04, 0, 2, ...DARK);
+    // Diagonal neon hazard stripes / marked reserved boundary
+    box(0.10, 0.10, tw - 0.10, 0.25, 1, 3, ...NEON_YEL);
+    box(0.10, th - 0.25, tw - 0.10, th - 0.10, 1, 3, ...NEON_YEL);
+    box(0.10, 0.25, 0.25, th - 0.25, 1, 3, ...NEON_YEL);
+    box(tw - 0.25, 0.25, tw - 0.10, th - 0.25, 1, 3, ...NEON_YEL);
+    // Center glowing badge
+    box(0.60, 0.60, 1.40, 1.40, 2, 4, ...NEON_CYAN);
+  });
+}
+
 export const FURNITURE_BUILDERS = {
   stool: (rot) => buildStoolSprite(rot),
   sofa: (rot) => buildSofaSprite('#e2607a', rot),
@@ -1506,6 +2194,34 @@ export const FURNITURE_BUILDERS = {
   luggageTrolley: (rot) => buildLuggageTrolleySprite(rot),
   conciergeDesk: (rot) => buildConciergeDeskSprite(rot),
   lobbyRunner: (rot) => buildLobbyRunnerSprite(rot),
+  // v0.8.3 Hotel Layout Expansion Models
+  gymMirror: (rot) => buildGymMirror(rot),
+  exerciseBike: (rot) => buildExerciseBike(rot),
+  rowingMachine: (rot) => buildRowingMachine(rot),
+  squatRack: (rot) => buildSquatRack(rot),
+  gymLockers: (rot) => buildGymLockers(rot),
+  waterCooler: (rot) => buildWaterCooler(rot),
+  roundDiningTable: (rot) => buildRoundDiningTable(rot),
+  diningBooth: (rot) => buildDiningBooth(rot),
+  wineWall: (rot) => buildWineWall(rot),
+  maitreDPodium: (rot) => buildMaitreDPodium(rot),
+  grandPiano: (rot) => buildGrandPiano(rot),
+  wallSconce: (rot) => buildWallSconce(rot),
+  kitchenRange: (rot) => buildKitchenRange(rot),
+  kitchenPrepTable: (rot) => buildKitchenPrepTable(rot),
+  kitchenSink: (rot) => buildKitchenSink(rot),
+  kitchenFridge: (rot) => buildKitchenFridge(rot),
+  kitchenPass: (rot) => buildKitchenPass(rot),
+  startingBlock: (rot) => buildStartingBlock(rot),
+  laneRope: (rot) => buildLaneRope(rot),
+  poolLadder: (rot) => buildPoolLadder(rot),
+  poolLounger: (rot) => buildPoolLounger(rot),
+  poolUmbrella: (rot) => buildPoolUmbrella(rot),
+  changingCubicle: (rot) => buildChangingCubicle(rot),
+  salonChair: (rot) => buildSalonChair(rot),
+  massageBed: (rot) => buildMassageBed(rot),
+  pergola: (rot) => buildPergola(rot),
+  arcadeReserved: (rot) => buildArcadeReserved(rot),
 };
 
 export function shadeColor(hex, amt) {
