@@ -4,6 +4,42 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.8.7] - 2026-11-11
+
+### Added
+
+- **Arcade Games & Leaderboards (Floor 6)**:
+  - **3 Original Classic Game Engines (`js/arcade/games.js`)**:
+    - **Noodle Snake**: Snake-style game navigating a 16×16 grid, collecting noodle broth toppings (dumplings, eggs, scallions), growing in length with self-collision and wall-collision detection.
+    - **Brick Bash**: Retro paddle/breakout game with paddle physics (deflection angle based on hit offset), ball reflections, multi-color pixel brick destruction with point tiers, multi-wave respawning, and 3-life tracking.
+    - **Block Drop**: Classic falling-block line clearer with 7 polyomino tetrominoes, rotation with wall kicks, soft/hard drop, line completion and clearing, and multi-line scoring (100, 300, 500, 800).
+  - **6 New Original Arcade Cabinets & Matching Sprites (`js/sprites.js`, `js/data.js`)**:
+    - 2 cabinets for Noodle Snake: Classic (`arcade_snake_1`, jade chassis) and Neon (`arcade_snake_2`, magenta chassis).
+    - 2 cabinets for Brick Bash: Retro (`arcade_breakout_1`, cobalt chassis) and Turbo (`arcade_breakout_2`, gunmetal chassis).
+    - 2 cabinets for Block Drop: Puzzle (`arcade_drop_1`, indigo chassis) and Deluxe (`arcade_drop_2`, cyberpunk chassis).
+    - Placed along Floor 6 north wall in non-overlapping positions while keeping elevator arrival route completely clear.
+    - Updated NPC Zack's routine to loop through and play all three arcade cabinet pairs.
+  - **Arcade Hall of Fame Digital Scoreboard (`arcade_leaderboard`)**:
+    - Free-standing 2×1 digital scoreboard placed in the Floor 6 arcade hall.
+    - Interacting with the board opens the Arcade Leaderboard modal directly.
+  - **Centered Arcade Game & Leaderboard Modals (`index.html`, `css/style.css`, `js/arcade/ui.js`)**:
+    - Walking up and Using any arcade cabinet opens a centered modal game screen with retro bezel styling.
+    - Keyboard play (<kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd> / <kbd>WASD</kbd>, <kbd>Space</kbd>, <kbd>Esc</kbd> to quit).
+    - Live score display during gameplay and game-over summary with replay option.
+    - **Daily coin rewards capped per day**: Modest coin rewards awarded upon completing runs, capped at 50 coins/day (`ARCADE_DAILY_COIN_CAP = 50`), tracking daily earnings and resetting on new days.
+    - **Leaderboard modal with Global, Mine, and Local tabs**: Local top 10 always available offline; Global top 10 and personal bests loaded via Supabase RPC with graceful offline degradation.
+  - **Supabase Migration (`supabase/migrations/0003_v087_arcade_scores.sql`)**:
+    - `arcade_scores` table with Row Level Security (RLS) enabled.
+    - Disallows direct client UPDATE and DELETE.
+    - `submit_arcade_score(game, score)` SECURITY DEFINER RPC validating user (`auth.uid()`), game ID, sane score bounds per game, and 20s rate limit per user.
+    - `get_arcade_leaderboard(game, mine_only, limit)` read RPC returning top 10 joined to `profiles.display_name`.
+    - Executable only by `authenticated` users with client publishable key.
+  - **Save Migration & Persistence (`js/save.js`, `js/data.js`)**:
+    - Bumped save version to 8 with migration 7 initializing `arcade` state (daily coins, last reward date, local high scores) and updating unmodified Floor 6 rooms.
+  - **Comprehensive Unit & Smoke Tests (`tests/arcade.unit.test.mjs`, `tests/smoke.spec.mjs`)**:
+    - 28 unit tests covering all 3 game mechanics, score bounds validation, daily coin caps, leaderboard sorting, and mocked Supabase RPCs.
+    - Playwright smoke test verifying Floor 6 travel, cabinet interaction, modal display, Esc close, leaderboard screen interaction, and Supabase RPC integration.
+
 ## [0.8.6] - 2026-11-11
 
 ### Added

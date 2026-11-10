@@ -318,6 +318,72 @@
       <div id="roomUpgradeList" style="display: flex; flex-direction: column; gap: 10px;"></div>
     </div>
   </div>
+
+  <!-- v0.8.7 Arcade Game Centered Modal -->
+  <div id="arcadeGameModal" class="overlay hidden">
+    <div class="overlay-box arcade-game-box" style="max-width: 380px; text-align: center; position: relative;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+        <h2 id="arcadeGameTitle" style="margin: 0; font-size: 16px;">🕹️ Arcade Game</h2>
+        <button class="panel-close" id="btnArcadeClose">✕</button>
+      </div>
+
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-size: 13px; background: rgba(0,0,0,0.3); padding: 4px 10px; border-radius: 4px;">
+        <div>Score: <b id="arcadeScore" style="color: #00e5ff;">0</b></div>
+        <div>🪙 Daily: <b id="arcadeDailyCoins" style="color: #ffd27a;">0/50</b></div>
+      </div>
+
+      <div style="position: relative; width: 320px; height: 320px; margin: 0 auto; background: #000; border: 2px solid #5c4a96; border-radius: 4px; overflow: hidden;">
+        <canvas id="arcadeCanvas" width="320" height="320" style="display: block; image-rendering: pixelated; width: 320px; height: 320px;"></canvas>
+
+        <div id="arcadeGameOverOverlay" class="hidden" style="position: absolute; inset: 0; background: rgba(10, 6, 24, 0.88); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 16px;">
+          <h3 style="color: #ff4081; margin: 0; font-size: 22px;">GAME OVER</h3>
+          <div style="font-size: 14px; color: #fff;">Final Score: <b id="arcadeFinalScore" style="color: #00e5ff; font-size: 18px;">0</b></div>
+          <div id="arcadeRewardText" style="font-size: 13px; color: #ffd27a; min-height: 18px;"></div>
+          <div style="display: flex; gap: 8px; margin-top: 6px;">
+            <button id="btnArcadePlayAgain" class="pixel-btn">Play Again</button>
+            <button id="btnArcadeOpenLeaderboard" class="pixel-btn">Leaderboard</button>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top: 10px; display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: #aaa;">
+        <span>Controls: <kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd> / <kbd>WASD</kbd></span>
+        <span><kbd>Esc</kbd> to quit</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- v0.8.7 Arcade Leaderboard Centered Modal -->
+  <div id="arcadeLeaderboardModal" class="overlay hidden">
+    <div class="overlay-box" style="max-width: 440px; width: 90%;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <h2 style="margin: 0; font-size: 17px;">🏆 Arcade Hall of Fame</h2>
+        <button class="panel-close" id="btnLeaderboardClose">✕</button>
+      </div>
+
+      <!-- Game Tabs -->
+      <div class="arcade-tabs" style="display: flex; gap: 6px; margin-bottom: 10px;">
+        <button class="pixel-btn active" data-arcade-game="noodle_snake">Noodle Snake</button>
+        <button class="pixel-btn" data-arcade-game="brick_bash">Brick Bash</button>
+        <button class="pixel-btn" data-arcade-game="block_drop">Block Drop</button>
+      </div>
+
+      <!-- Scope Sub-tabs -->
+      <div class="arcade-subtabs" style="display: flex; gap: 6px; margin-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.12); padding-bottom: 8px;">
+        <button class="pixel-btn active" data-leaderboard-scope="local">Local Top 10</button>
+        <button class="pixel-btn" data-leaderboard-scope="global">Global Top 10</button>
+        <button class="pixel-btn" data-leaderboard-scope="mine">Mine</button>
+      </div>
+
+      <!-- Rows -->
+      <div id="arcadeLeaderboardRows" style="background: rgba(0,0,0,0.3); border-radius: 6px; padding: 6px; min-height: 200px; max-height: 280px; overflow-y: auto;">
+      </div>
+
+      <div style="margin-top: 10px; font-size: 11px; color: #888; text-align: right;" id="arcadeLeaderboardStatus">
+        Offline Local Top 10
+      </div>
+    </div>
+  </div>
 </div>
 
 <script type="module" src="js/main.js"></script>

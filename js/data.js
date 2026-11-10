@@ -8,7 +8,7 @@ export const TILE = {
   VOID: 4,
 };
 
-export const SAVE_VERSION = 7;
+export const SAVE_VERSION = 8;
 
 // Grid is row-major: grid[y][x]
 export function makeRoomGrid(w, h, { doors = [], windows = [], cutouts = [] } = {}) {
@@ -557,6 +557,14 @@ export const CATALOGUE = [
   { id: 'massage_bed', name: 'Spa Massage Bed', price: 70, category: 'seating', footprint: { w: 1, h: 2 }, seat: true, sitDir: 0, interaction: 'spa_massage', seatOffsets: [{ dx: 0, dy: 0 }, { dx: 0, dy: 1 }], spriteKey: 'massageBed', unlockRequires: null, description: 'Padded treatment table draped in white linens with lavender aromatherapy.' },
   { id: 'pergola', name: 'Garden Pergola with Vines', price: 85, category: 'plants', footprint: { w: 2, h: 2 }, seat: false, flat: true, walkable: true, spriteKey: 'pergola', unlockRequires: null, description: 'Timber garden arbor draped with flowering wisteria and jasmine vines.' },
   { id: 'arcade_reserved', name: 'Reserved Arcade Zone', price: 0, category: 'decor', footprint: { w: 4, h: 2 }, seat: false, flat: true, walkable: true, spriteKey: 'arcadeReserved', unlockRequires: null, description: 'Marked open floor area reserved for upcoming arcade cabinets and games.' },
+  // v0.8.7 Arcade Cabinets & Leaderboard
+  { id: 'arcade_snake_1', name: 'Noodle Snake (Classic)', price: 100, category: 'entertainment', footprint: { w: 1, h: 1 }, seat: false, interaction: 'arcade_noodle_snake', arcadeGame: 'noodle_snake', emissive: { color: '#ffb300', radius: 52, intensity: 0.38 }, spriteKey: 'arcadeSnake1', unlockRequires: null, description: 'Retro upright arcade cabinet running Noodle Snake.' },
+  { id: 'arcade_snake_2', name: 'Noodle Snake (Neon)', price: 100, category: 'entertainment', footprint: { w: 1, h: 1 }, seat: false, interaction: 'arcade_noodle_snake', arcadeGame: 'noodle_snake', emissive: { color: '#00e676', radius: 52, intensity: 0.38 }, spriteKey: 'arcadeSnake2', unlockRequires: null, description: 'Cyberpunk edition upright cabinet running Noodle Snake.' },
+  { id: 'arcade_breakout_1', name: 'Brick Bash (Retro)', price: 100, category: 'entertainment', footprint: { w: 1, h: 1 }, seat: false, interaction: 'arcade_brick_bash', arcadeGame: 'brick_bash', emissive: { color: '#ff6d00', radius: 52, intensity: 0.38 }, spriteKey: 'arcadeBreakout1', unlockRequires: null, description: 'Vintage coin-op paddle machine running Brick Bash.' },
+  { id: 'arcade_breakout_2', name: 'Brick Bash (Turbo)', price: 100, category: 'entertainment', footprint: { w: 1, h: 1 }, seat: false, interaction: 'arcade_brick_bash', arcadeGame: 'brick_bash', emissive: { color: '#ff1744', radius: 52, intensity: 0.38 }, spriteKey: 'arcadeBreakout2', unlockRequires: null, description: 'High-speed tournament edition machine running Brick Bash.' },
+  { id: 'arcade_drop_1', name: 'Block Drop (Puzzle)', price: 100, category: 'entertainment', footprint: { w: 1, h: 1 }, seat: false, interaction: 'arcade_block_drop', arcadeGame: 'block_drop', emissive: { color: '#00b0ff', radius: 52, intensity: 0.38 }, spriteKey: 'arcadeDrop1', unlockRequires: null, description: 'Classic falling block line-clearer arcade cabinet.' },
+  { id: 'arcade_drop_2', name: 'Block Drop (Deluxe)', price: 100, category: 'entertainment', footprint: { w: 1, h: 1 }, seat: false, interaction: 'arcade_block_drop', arcadeGame: 'block_drop', emissive: { color: '#ffd600', radius: 52, intensity: 0.38 }, spriteKey: 'arcadeDrop2', unlockRequires: null, description: 'Deluxe competitive cabinet running Block Drop.' },
+  { id: 'arcade_leaderboard', name: 'Arcade Hall of Fame', price: 120, category: 'entertainment', footprint: { w: 2, h: 1 }, seat: false, interaction: 'arcade_leaderboard', emissive: { color: '#00e5ff', radius: 64, intensity: 0.44 }, spriteKey: 'arcadeLeaderboard', unlockRequires: null, description: 'Grand digital scoreboard tracking local and global arcade champions.' },
 ].map((item) => ({
   ...item,
   walkable: typeof item.walkable === 'boolean' ? item.walkable : Boolean(item.flat),
@@ -820,14 +828,17 @@ export const SEED_FURNITURE = {
     { itemId: 'lamp', x: 27, y: 9, rot: 0 },
   ],
   arcade: [
-    { itemId: 'mini_arcade', x: 3, y: 2, rot: 0 },
-    { itemId: 'mini_arcade', x: 5, y: 2, rot: 0 },
-    { itemId: 'mini_arcade', x: 7, y: 2, rot: 0 },
+    { itemId: 'arcade_snake_1', x: 2, y: 2, rot: 0 },
+    { itemId: 'arcade_snake_2', x: 4, y: 2, rot: 0 },
+    { itemId: 'arcade_breakout_1', x: 6, y: 2, rot: 0 },
+    { itemId: 'arcade_breakout_2', x: 8, y: 2, rot: 0 },
+    { itemId: 'arcade_drop_1', x: 12, y: 2, rot: 0 },
+    { itemId: 'arcade_drop_2', x: 14, y: 2, rot: 0 },
     { itemId: 'karaoke_machine', x: 16, y: 2, rot: 0 },
     { itemId: 'jukebox', x: 18, y: 2, rot: 0 },
     { itemId: 'capsule_dispenser', x: 2, y: 6, rot: 0 },
     { itemId: 'neon_sign', x: 17, y: 6, rot: 0 },
-    { itemId: 'arcade_reserved', x: 6, y: 6, rot: 0 },
+    { itemId: 'arcade_leaderboard', x: 6, y: 6, rot: 0 },
     { itemId: 'bar_counter', x: 14, y: 11, rot: 0 },
     { itemId: 'stool', x: 14, y: 12, rot: 0 },
     { itemId: 'stool', x: 15, y: 12, rot: 0 },
@@ -1457,20 +1468,20 @@ export const NPCS = [
     room: 'arcade',
     home: { x: 4, y: 4 },
     routine: [
-      { x: 3, y: 2, activity: 'interact', dwell: [6000, 12000] },
-      { x: 5, y: 2, activity: 'interact', dwell: [6000, 12000] },
-      { x: 7, y: 2, activity: 'interact', dwell: [6000, 12000] },
+      { x: 2, y: 2, activity: 'interact', dwell: [6000, 12000] },
+      { x: 6, y: 2, activity: 'interact', dwell: [6000, 12000] },
+      { x: 12, y: 2, activity: 'interact', dwell: [6000, 12000] },
       { x: 16, y: 2, activity: 'interact', dwell: [5000, 10000] },
     ],
-    greetLines: ['Yo! Ready to challenge my Cosmic Bellhop high score?', 'Player Two has entered Floor 6!'],
+    greetLines: ['Yo! Ready to challenge my arcade high scores?', 'Player Two has entered Floor 6!'],
     ambientLines: [
-      'I just hit level 99 on a single token!',
+      'I just hit 2,400 on Block Drop on a single token!',
       'My home is Room 2104 on Floor 21 — decked out with vintage consoles.',
       'The neon glow in this arcade hits different at midnight.',
     ],
     keywords: {
       hello: ['Yo! Welcome to the Pixel Arcade! I live in Room 2104 on Floor 21.'],
-      game: ['Cosmic Bellhop on the upright cabinet is an absolute classic.'],
+      game: ['Noodle Snake, Brick Bash, and Block Drop are all primed for high score runs.'],
       room: ['Room 2104 on Floor 21 is where the arcade magic happens!'],
     },
   },

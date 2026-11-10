@@ -757,3 +757,23 @@ kbd {
   border-color: #ffd27a;
   box-shadow: 0 0 6px #ffd27a;
 }
+
+/* v0.8.7 Arcade Game & Leaderboard Modals */
+.arcade-game-box {
+  background: #18122c;
+  border: 3px solid #00e5ff;
+  box-shadow: 0 0 20px rgba(0, 229, 255, 0.35);
+}
+.arcade-tabs .pixel-btn.active, .arcade-subtabs .pixel-btn.active {
+  background: #3b2a68;
+  border-color: #ffd27a;
+  color: #ffd27a;
+  box-shadow: 0 0 8px rgba(255, 210, 122, 0.4);
+}
+.arcade-subtabs .pixel-btn {
+  font-size: 11px;
+  padding: 4px 8px;
+}
+.leaderboard-row:hover {
+  background: rgba(255, 255, 255, 0.05);
+}

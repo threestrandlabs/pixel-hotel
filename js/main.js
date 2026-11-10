@@ -17,6 +17,11 @@ import { audio, formatTime, trackForRoom } from './audio.js';
 import {
   initMultiplayerUI, getRemoteMultiplayerEntities, tickMultiplayer, notifyLocalChat, publishOwnRoomSnapshot,
 } from './multiplayer/ui.js';
+import { getSupabaseClient } from './multiplayer/client.js';
+import {
+  initArcadeUI, openArcadeGame, closeArcadeGame,
+  openArcadeLeaderboard, closeArcadeLeaderboard, getActiveArcadeState,
+} from './arcade/ui.js';
 
 const STEP_MS = 240;
 const DAY_CYCLE_MS = 120000;
@@ -372,6 +377,15 @@ function applyInteractionArrival(mover, pending, isPlayer = false, immediate = f
     }
     if (placed.itemId === 'salon_chair') {
       if (!immediate) openSalonModal();
+    }
+    if (placed.itemId.startsWith('arcade_snake')) {
+      openArcadeGame('noodle_snake');
+    } else if (placed.itemId.startsWith('arcade_breakout')) {
+      openArcadeGame('brick_bash');
+    } else if (placed.itemId.startsWith('arcade_drop')) {
+      openArcadeGame('block_drop');
+    } else if (placed.itemId === 'arcade_leaderboard') {
+      openArcadeLeaderboard('noodle_snake', 'local');
     }
     if (placed.itemId === 'massage_bed') {
       showToast('Relaxing massage... feeling energized! ✨ (+Mood buff)');
@@ -1389,11 +1403,14 @@ document.getElementById('btnNpcDlgClose').addEventListener('click', closeNpcDial
 window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     if (!document.getElementById('helpOverlay').classList.contains('hidden')) hideHelp();
+    else if (!document.getElementById('arcadeGameModal').classList.contains('hidden')) closeArcadeGame();
+    else if (!document.getElementById('arcadeLeaderboardModal').classList.contains('hidden')) closeArcadeLeaderboard();
     else if (!document.getElementById('elevatorPanel').classList.contains('hidden')) document.getElementById('elevatorPanel').classList.add('hidden');
     else if (!document.getElementById('roomUpgradeModal').classList.contains('hidden')) closeRoomUpgradeModal();
     else if (ui.activeDialogue) closeNpcDialogue();
     else cancelPlacing();
   }
+  else if (getActiveArcadeState().isOpen) return;
   else if (e.key.toLowerCase() === 'r' && ui.placing) rotatePlacing();
   else if ((e.key === '+' || e.key === '=') && !isTypingTarget(e)) stepZoom(0.15);
   else if (e.key === '-' && !isTypingTarget(e)) stepZoom(-0.15);
@@ -2078,6 +2095,11 @@ function init() {
     enterVisitScene: (displayName, roomData) => enterVisitScene(displayName, roomData),
     exitVisitScene: () => exitVisitScene(),
   });
+  initArcadeUI({
+    getState: () => state,
+    getClient: () => getSupabaseClient(),
+    showToast: (msg) => showToast(msg),
+  });
   requestAnimationFrame(frame);
 }
 init();
@@ -2102,6 +2124,7 @@ window.__pixelHotel = {
     quests: listQuests(state),
     unlocked: state.unlocked,
     settings: state.settings,
+    arcade: state.arcade,
   }),
   getAudioState: () => ({
     gestureUnlocked: audio.gestureUnlocked,
@@ -2150,6 +2173,12 @@ window.__pixelHotel = {
   swimLaps: () => startLapSwimming(),
   freeRoamPool: () => freeRoamPool(),
   exitPool: () => exitPool(),
+  openArcadeGame: (gameId) => openArcadeGame(gameId),
+  closeArcadeGame: () => closeArcadeGame(),
+  openArcadeLeaderboard: (gameId, scope) => openArcadeLeaderboard(gameId, scope),
+  closeArcadeLeaderboard: () => closeArcadeLeaderboard(),
+  getArcadeState: () => getActiveArcadeState(),
+  getSupabaseClient: () => getSupabaseClient(),
   setNpcActivity: (npcId, itemIdOrInstanceId) => {
     const npc = npcRuntimes.find((n) => n.id === npcId || n.id.endsWith(`_${npcId}`));
     if (!npc) return false;

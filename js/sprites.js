@@ -2263,6 +2263,184 @@ export function buildArcadeReserved(rot = 0) {
   });
 }
 
+// v0.8.7 Arcade Cabinets (Noodle Snake, Brick Bash, Block Drop) + Leaderboard
+export function buildArcadeSnake1(rot = 0) {
+  const CHASSIS = ['#1e4228', '#16321e', '#0e2014'];
+  const SCREEN = ['#18382c', '#10261e', '#0a1a14'];
+  return isoSprite(1, 1, 52, (box) => {
+    box(0.14, 0.14, 0.86, 0.86, 0, 18, ...CHASSIS);
+    box(0.32, 0.82, 0.68, 0.88, 4, 15, '#22222a', '#181820', '#101014');
+    box(0.46, 0.84, 0.54, 0.88, 9, 13, '#ffe27a', '#d8a834', '#98721c');
+    box(0.14, 0.44, 0.86, 0.88, 18, 24, '#16281a', '#101e14', '#0a140e');
+    box(0.28, 0.62, 0.36, 0.70, 24, 29, '#ff3850', '#d01c32', '#940e1e');
+    box(0.52, 0.64, 0.60, 0.72, 24, 26, '#ffd600', '#d4b000', '#947a00');
+    box(0.68, 0.60, 0.76, 0.68, 24, 26, '#ffd600', '#d4b000', '#947a00');
+    box(0.18, 0.24, 0.82, 0.70, 24, 42, ...SCREEN);
+    // Noodle snake graphic
+    box(0.30, 0.32, 0.68, 0.38, 28, 32, '#ffea60', '#d4c240', '#94841c');
+    box(0.62, 0.38, 0.68, 0.56, 28, 32, '#ffea60', '#d4c240', '#94841c');
+    box(0.36, 0.50, 0.62, 0.56, 32, 36, '#ffea60', '#d4c240', '#94841c');
+    box(0.32, 0.60, 0.40, 0.66, 34, 38, '#ff3344', '#cc1c2c', '#8c0e18');
+    // Marquee
+    box(0.14, 0.20, 0.86, 0.56, 42, 50, '#ffb300', '#cc8f00', '#8c6000');
+    box(0.22, 0.54, 0.78, 0.58, 44, 48, '#fff9c4', '#fff176', '#fbc02d');
+  });
+}
+
+export function buildArcadeSnake2(rot = 0) {
+  const CHASSIS = ['#4a1838', '#361028', '#22081a'];
+  const SCREEN = ['#241432', '#1a0e24', '#100818'];
+  return isoSprite(1, 1, 52, (box) => {
+    box(0.14, 0.14, 0.86, 0.86, 0, 18, ...CHASSIS);
+    box(0.32, 0.82, 0.68, 0.88, 4, 15, '#22222a', '#181820', '#101014');
+    box(0.46, 0.84, 0.54, 0.88, 9, 13, '#ffe27a', '#d8a834', '#98721c');
+    box(0.14, 0.44, 0.86, 0.88, 18, 24, '#2e1026', '#200a1a', '#140610');
+    box(0.28, 0.62, 0.36, 0.70, 24, 29, '#00e676', '#00b85c', '#007a3d');
+    box(0.52, 0.64, 0.60, 0.72, 24, 26, '#00e5ff', '#00b4cc', '#007a8a');
+    box(0.68, 0.60, 0.76, 0.68, 24, 26, '#00e5ff', '#00b4cc', '#007a8a');
+    box(0.18, 0.24, 0.82, 0.70, 24, 42, ...SCREEN);
+    // Neon serpent graphic
+    box(0.28, 0.36, 0.50, 0.42, 28, 32, '#00e676', '#00b85c', '#007a3d');
+    box(0.44, 0.42, 0.50, 0.62, 28, 34, '#00e676', '#00b85c', '#007a3d');
+    box(0.44, 0.56, 0.72, 0.62, 32, 36, '#00e676', '#00b85c', '#007a3d');
+    box(0.68, 0.36, 0.76, 0.44, 30, 36, '#ffd600', '#c7a700', '#8a7400');
+    // Marquee
+    box(0.14, 0.20, 0.86, 0.56, 42, 50, '#ff007f', '#c70063', '#8a0044');
+    box(0.22, 0.54, 0.78, 0.58, 44, 48, '#80d8ff', '#40c4ff', '#00b0ff');
+  });
+}
+
+export function buildArcadeBreakout1(rot = 0) {
+  const CHASSIS = ['#182a4d', '#12203b', '#0c1426'];
+  const SCREEN = ['#14223d', '#0e182c', '#08101e'];
+  return isoSprite(1, 1, 52, (box) => {
+    box(0.14, 0.14, 0.86, 0.86, 0, 18, ...CHASSIS);
+    box(0.32, 0.82, 0.68, 0.88, 4, 15, '#22222a', '#181820', '#101014');
+    box(0.46, 0.84, 0.54, 0.88, 9, 13, '#ffe27a', '#d8a834', '#98721c');
+    box(0.14, 0.44, 0.86, 0.88, 18, 24, '#121e36', '#0c1626', '#080e18');
+    box(0.28, 0.62, 0.36, 0.70, 24, 29, '#ff9100', '#cc7400', '#8a4e00');
+    box(0.52, 0.64, 0.60, 0.72, 24, 26, '#ff4081', '#d42862', '#941440');
+    box(0.68, 0.60, 0.76, 0.68, 24, 26, '#ff4081', '#d42862', '#941440');
+    box(0.18, 0.24, 0.82, 0.70, 24, 42, ...SCREEN);
+    // Bricks on CRT
+    box(0.26, 0.32, 0.42, 0.36, 36, 40, '#ff1744', '#cc0e34', '#8a0620');
+    box(0.46, 0.32, 0.62, 0.36, 36, 40, '#ffd600', '#c7a700', '#8a7400');
+    box(0.66, 0.32, 0.80, 0.36, 36, 40, '#00e5ff', '#00b4cc', '#007a8a');
+    box(0.34, 0.40, 0.50, 0.44, 33, 37, '#76ff03', '#5cc702', '#3d8501');
+    box(0.54, 0.40, 0.70, 0.44, 33, 37, '#ff9100', '#cc7400', '#8a4e00');
+    // Ball & paddle
+    box(0.48, 0.50, 0.54, 0.54, 30, 33, '#ffffff', '#e0e0e0', '#b0b0b0');
+    box(0.36, 0.60, 0.66, 0.64, 26, 29, '#00e5ff', '#00b4cc', '#007a8a');
+    // Marquee
+    box(0.14, 0.20, 0.86, 0.56, 42, 50, '#ff6d00', '#cc5700', '#8f3d00');
+    box(0.22, 0.54, 0.78, 0.58, 44, 48, '#fff3e0', '#ffe0b2', '#ffb74d');
+  });
+}
+
+export function buildArcadeBreakout2(rot = 0) {
+  const CHASSIS = ['#2e3038', '#22242a', '#16171b'];
+  const SCREEN = ['#181a20', '#101216', '#0a0b0e'];
+  return isoSprite(1, 1, 52, (box) => {
+    box(0.14, 0.14, 0.86, 0.86, 0, 18, ...CHASSIS);
+    box(0.32, 0.82, 0.68, 0.88, 4, 15, '#22222a', '#181820', '#101014');
+    box(0.46, 0.84, 0.54, 0.88, 9, 13, '#ffe27a', '#d8a834', '#98721c');
+    box(0.14, 0.44, 0.86, 0.88, 18, 24, '#202228', '#16181e', '#0e0f14');
+    box(0.28, 0.62, 0.36, 0.70, 24, 29, '#ff1744', '#cc0e34', '#8a0620');
+    box(0.52, 0.64, 0.60, 0.72, 24, 26, '#ffd600', '#c7a700', '#8a7400');
+    box(0.68, 0.60, 0.76, 0.68, 24, 26, '#ffd600', '#c7a700', '#8a7400');
+    box(0.18, 0.24, 0.82, 0.70, 24, 42, ...SCREEN);
+    // Neon bricks
+    box(0.26, 0.32, 0.44, 0.36, 36, 40, '#ff4081', '#d42862', '#941440');
+    box(0.48, 0.32, 0.66, 0.36, 36, 40, '#76ff03', '#5cc702', '#3d8501');
+    box(0.36, 0.40, 0.54, 0.44, 32, 36, '#ffd600', '#c7a700', '#8a7400');
+    // Ball & metallic paddle
+    box(0.42, 0.50, 0.48, 0.54, 29, 32, '#ffff00', '#d4d400', '#949400');
+    box(0.32, 0.60, 0.68, 0.64, 26, 29, '#eceff1', '#cfd8dc', '#b0bec5');
+    // Marquee
+    box(0.14, 0.20, 0.86, 0.56, 42, 50, '#d50000', '#a00000', '#6b0000');
+    box(0.22, 0.54, 0.78, 0.58, 44, 48, '#ff8a80', '#ff5252', '#ff1744');
+  });
+}
+
+export function buildArcadeDrop1(rot = 0) {
+  const CHASSIS = ['#282048', '#1c1634', '#120e22'];
+  const SCREEN = ['#101628', '#0c101e', '#080a14'];
+  return isoSprite(1, 1, 52, (box) => {
+    box(0.14, 0.14, 0.86, 0.86, 0, 18, ...CHASSIS);
+    box(0.32, 0.82, 0.68, 0.88, 4, 15, '#22222a', '#181820', '#101014');
+    box(0.46, 0.84, 0.54, 0.88, 9, 13, '#ffe27a', '#d8a834', '#98721c');
+    box(0.14, 0.44, 0.86, 0.88, 18, 24, '#1c1432', '#140c24', '#0c0818');
+    box(0.28, 0.62, 0.36, 0.70, 24, 29, '#00b0ff', '#008ecc', '#005f8a');
+    box(0.52, 0.64, 0.60, 0.72, 24, 26, '#b388ff', '#8f5fe8', '#633bb8');
+    box(0.68, 0.60, 0.76, 0.68, 24, 26, '#b388ff', '#8f5fe8', '#633bb8');
+    box(0.18, 0.24, 0.82, 0.70, 24, 42, ...SCREEN);
+    // Polyomino blocks on CRT
+    box(0.40, 0.34, 0.56, 0.38, 36, 40, '#00e5ff', '#00b4cc', '#007a8a'); // cyan piece
+    box(0.30, 0.44, 0.46, 0.48, 30, 34, '#ff9100', '#cc7400', '#8a4e00'); // orange
+    box(0.46, 0.44, 0.62, 0.48, 30, 34, '#b388ff', '#8f5fe8', '#633bb8'); // purple T
+    box(0.36, 0.54, 0.68, 0.58, 26, 29, '#00e676', '#00b85c', '#007a3d'); // base row
+    // Marquee
+    box(0.14, 0.20, 0.86, 0.56, 42, 50, '#00b0ff', '#008ecc', '#005f8a');
+    box(0.22, 0.54, 0.78, 0.58, 44, 48, '#e1f5fe', '#b3e5fc', '#81d4fa');
+  });
+}
+
+export function buildArcadeDrop2(rot = 0) {
+  const CHASSIS = ['#e0e4ec', '#b0b8c4', '#808894'];
+  const SCREEN = ['#141a24', '#0e121a', '#080a10'];
+  return isoSprite(1, 1, 52, (box) => {
+    box(0.14, 0.14, 0.86, 0.86, 0, 18, ...CHASSIS);
+    box(0.32, 0.82, 0.68, 0.88, 4, 15, '#22222a', '#181820', '#101014');
+    box(0.46, 0.84, 0.54, 0.88, 9, 13, '#ffe27a', '#d8a834', '#98721c');
+    box(0.14, 0.44, 0.86, 0.88, 18, 24, '#242830', '#1a1c22', '#101216');
+    box(0.28, 0.62, 0.36, 0.70, 24, 29, '#ffd600', '#c7a700', '#8a7400');
+    box(0.52, 0.64, 0.60, 0.72, 24, 26, '#00e5ff', '#00b4cc', '#007a8a');
+    box(0.68, 0.60, 0.76, 0.68, 24, 26, '#00e5ff', '#00b4cc', '#007a8a');
+    box(0.18, 0.24, 0.82, 0.70, 24, 42, ...SCREEN);
+    // Cyberpunk blocks on CRT
+    box(0.32, 0.34, 0.48, 0.38, 36, 40, '#ffd600', '#c7a700', '#8a7400');
+    box(0.50, 0.34, 0.66, 0.38, 36, 40, '#ff1744', '#cc0e34', '#8a0620');
+    box(0.38, 0.44, 0.60, 0.48, 31, 35, '#00e5ff', '#00b4cc', '#007a8a');
+    box(0.28, 0.56, 0.72, 0.60, 26, 29, '#76ff03', '#5cc702', '#3d8501');
+    // Marquee
+    box(0.14, 0.20, 0.86, 0.56, 42, 50, '#ffd600', '#c7a700', '#8a7400');
+    box(0.22, 0.54, 0.78, 0.58, 44, 48, '#263238', '#1a2226', '#101417');
+  });
+}
+
+export function buildArcadeLeaderboard(rot = 0) {
+  const [tw, th] = rot % 2 ? [1, 2] : [2, 1];
+  const FRAME = ['#1e1c2e', '#161422', '#0e0c16'];
+  const DISPLAY = ['#0a0e1c', '#060812', '#04050c'];
+  const GOLD = ['#ffd700', '#d4af37', '#997a15'];
+  const NEON_CYAN = ['#00e5ff', '#00b4cc', '#007a8a'];
+  const NEON_GREEN = ['#00e676', '#00b85c', '#007a3d'];
+
+  return isoSprite(tw, th, 54, (box) => {
+    // Twin sturdy metal pedestal legs on floor
+    box(0.15 * tw, 0.20 * th, 0.35 * tw, 0.80 * th, 0, 14, ...FRAME);
+    box(0.65 * tw, 0.20 * th, 0.85 * tw, 0.80 * th, 0, 14, ...FRAME);
+    // Base crossbar
+    box(0.10 * tw, 0.35 * th, 0.90 * tw, 0.65 * th, 4, 8, '#2c2842', '#201c30', '#161222');
+    // Digital monitor housing
+    box(0.06 * tw, 0.12 * th, tw - 0.06 * tw, th - 0.12 * th, 14, 46, ...FRAME);
+    // Glowing LED display screen face
+    box(0.10 * tw, 0.18 * th, tw - 0.10 * tw, th - 0.18 * th, 16, 44, ...DISPLAY);
+    // Gold trophy crown at top (#1 Rank indicator)
+    box(0.44 * tw, 0.22 * th, 0.56 * tw, 0.34 * th, 36, 42, ...GOLD);
+    // Digital LED score lines (cyan, green, gold rows)
+    box(0.18 * tw, 0.26 * th, 0.40 * tw, 0.32 * th, 30, 33, ...GOLD);
+    box(0.60 * tw, 0.26 * th, 0.82 * tw, 0.32 * th, 30, 33, ...GOLD);
+    box(0.18 * tw, 0.34 * th, 0.44 * tw, 0.40 * th, 24, 27, ...NEON_CYAN);
+    box(0.56 * tw, 0.34 * th, 0.82 * tw, 0.40 * th, 24, 27, ...NEON_CYAN);
+    box(0.18 * tw, 0.42 * th, 0.46 * tw, 0.48 * th, 18, 21, ...NEON_GREEN);
+    box(0.54 * tw, 0.42 * th, 0.82 * tw, 0.48 * th, 18, 21, ...NEON_GREEN);
+    // Marquee top banner: "HALL OF FAME"
+    box(0.06 * tw, 0.10 * th, tw - 0.06 * tw, 0.45 * th, 46, 54, '#ff007f', '#c70063', '#8a0044');
+    box(0.16 * tw, 0.40 * th, tw - 0.16 * tw, 0.48 * th, 48, 52, '#fff9c4', '#ffd54f', '#ffb300');
+  });
+}
+
 export const FURNITURE_BUILDERS = {
   stool: (rot) => buildStoolSprite(rot),
   sofa: (rot) => buildSofaSprite('#e2607a', rot),
@@ -2343,6 +2521,14 @@ export const FURNITURE_BUILDERS = {
   massageBed: (rot) => buildMassageBed(rot),
   pergola: (rot) => buildPergola(rot),
   arcadeReserved: (rot) => buildArcadeReserved(rot),
+  // v0.8.7 Arcade Cabinets & Leaderboard
+  arcadeSnake1: (rot) => buildArcadeSnake1(rot),
+  arcadeSnake2: (rot) => buildArcadeSnake2(rot),
+  arcadeBreakout1: (rot) => buildArcadeBreakout1(rot),
+  arcadeBreakout2: (rot) => buildArcadeBreakout2(rot),
+  arcadeDrop1: (rot) => buildArcadeDrop1(rot),
+  arcadeDrop2: (rot) => buildArcadeDrop2(rot),
+  arcadeLeaderboard: (rot) => buildArcadeLeaderboard(rot),
 };
 
 export function shadeColor(hex, amt) {

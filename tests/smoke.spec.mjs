@@ -114,6 +114,32 @@ function installMpFakeServer() {
             const uid = requireAuth();
             return { data: db.kicks.has(`${String(args.p_code).toUpperCase()}:${uid}`), error: null };
           }
+          case 'submit_arcade_score': {
+            const uid = requireAuth();
+            const { p_game, p_score } = args;
+            if (!['noodle_snake', 'brick_bash', 'block_drop'].includes(p_game)) return { data: null, error: new Error('invalid_game') };
+            if (typeof p_score !== 'number' || p_score < 0) return { data: null, error: new Error('invalid_score') };
+            const profile = db.profiles.get(uid);
+            const entry = {
+              id: uuid(),
+              user_id: uid,
+              game: p_game,
+              score: p_score,
+              display_name: profile ? profile.display_name : 'Guest',
+              created_at: new Date().toISOString(),
+            };
+            if (!db.arcadeScores) db.arcadeScores = [];
+            db.arcadeScores.push(entry);
+            return { data: { ok: true, id: entry.id, game: p_game, score: p_score }, error: null };
+          }
+          case 'get_arcade_leaderboard': {
+            const uid = currentUserId;
+            const { p_game, p_mine_only, p_limit = 10 } = args;
+            let rows = (db.arcadeScores || []).filter((r) => r.game === p_game);
+            if (p_mine_only) rows = rows.filter((r) => r.user_id === uid);
+            rows.sort((a, b) => b.score - a.score);
+            return { data: rows.slice(0, p_limit), error: null };
+          }
           default:
             return { data: null, error: new Error(`unknown rpc ${name}`) };
         }
@@ -667,6 +693,46 @@ async function main() {
     const restPlayer = await page.evaluate(() => window.__pixelHotel.getState().player);
     check('restaurant dining chair interaction sets player activity to eat', restPlayer.activity?.kind === 'eat' && !!restPlayer.sitting);
 
+    // ---- v0.8.7: Arcade (Floor 6) cabinets & leaderboard screen ----
+    await page.evaluate(() => {
+      window.__pixelHotel.takeElevator('arcade');
+    });
+    await page.waitForTimeout(500);
+    const stateInArcade = await page.evaluate(() => window.__pixelHotel.getState());
+    check('elevator travel to Arcade works', stateInArcade.room === 'arcade' && stateInArcade.floor === 6);
+    const roomLabelArcade = await page.textContent('#roomName');
+    check('floor indicator updates for Arcade', roomLabelArcade.includes('Floor 6') && roomLabelArcade.includes('Arcade'));
+
+    // Cabinet interaction opens centered arcade game modal
+    await page.evaluate(() => {
+      window.__pixelHotel.interactWith('arcade_snake_1', true);
+    });
+    await page.waitForTimeout(200);
+    const arcadeModalOpen = !(await page.evaluate(() => document.getElementById('arcadeGameModal').classList.contains('hidden')));
+    check('using an arcade cabinet opens the centered arcade game modal', arcadeModalOpen);
+    const arcadeTitle = await page.textContent('#arcadeGameTitle');
+    check('arcade game modal displays game title', arcadeTitle.includes('Noodle Snake'));
+
+    // Esc closes arcade modal
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(100);
+    const arcadeModalClosed = await page.evaluate(() => document.getElementById('arcadeGameModal').classList.contains('hidden'));
+    check('Esc closes the arcade game modal', arcadeModalClosed);
+
+    // Leaderboard board object interaction opens leaderboard modal
+    await page.evaluate(() => {
+      window.__pixelHotel.interactWith('arcade_leaderboard', true);
+    });
+    await page.waitForTimeout(200);
+    const lbModalOpen = !(await page.evaluate(() => document.getElementById('arcadeLeaderboardModal').classList.contains('hidden')));
+    check('using arcade leaderboard board object opens the leaderboard modal', lbModalOpen);
+
+    // Esc closes leaderboard modal
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(100);
+    const lbModalClosed = await page.evaluate(() => document.getElementById('arcadeLeaderboardModal').classList.contains('hidden'));
+    check('Esc closes the arcade leaderboard modal', lbModalClosed);
+
     // ---- elevator travel to My Room (Floor 11) and furniture placement persistence ----
     await page.keyboard.press('e');
     await page.waitForTimeout(100);
@@ -1101,6 +1167,19 @@ async function runMultiplayerUiFlowTests(browser) {
     await page.click('#btnMpLeaveRoom');
     await page.waitForTimeout(150);
     check('mp: leaving the party room hides the active room view', await page.locator('#mpRoomIdleRow:not(.hidden)').count() === 1);
+
+    // ---- v0.8.7: Arcade RPC mocked test (submit_arcade_score and get_arcade_leaderboard) ----
+    const arcadeRpcRes = await page.evaluate(async (aliceUid) => {
+      const { submitScoreToSupabase, fetchGlobalLeaderboard } = await import('/js/arcade/leaderboard.js');
+      const client = window.__mpCreateClient();
+      client._setUser(aliceUid);
+      const submit = await submitScoreToSupabase(client, 'noodle_snake', 580);
+      const leaderboard = await fetchGlobalLeaderboard(client, 'noodle_snake');
+      return { submit, leaderboard };
+    }, aliceProfileId);
+    check('mp: submit_arcade_score RPC persists score to mocked database', arcadeRpcRes.submit.ok === true);
+    check('mp: get_arcade_leaderboard RPC retrieves global top 10 joined to profile',
+      arcadeRpcRes.leaderboard && arcadeRpcRes.leaderboard.some((r) => r.score === 580));
   } finally {
     await context.close();
   }

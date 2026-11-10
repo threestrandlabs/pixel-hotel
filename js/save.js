@@ -23,6 +23,15 @@ export function createDefaultState() {
     quests: initQuestState(),
     player: { room: 'lobby', x: ROOMS.lobby.spawn.x, y: ROOMS.lobby.spawn.y, dir: 'down', sitting: null, activity: null, outfit: 'normal', roomTier: 1 },
     stats: { greetedNpcs: [], visitedRooms: ['lobby'], placedCount: 0, myRoomPlacedCount: 0, activitiesUsed: [] },
+    arcade: {
+      dailyCoins: 0,
+      lastRewardDate: '',
+      highScores: {
+        noodle_snake: [],
+        brick_bash: [],
+        block_drop: [],
+      },
+    },
     settings: {
       muted: false,
       musicMuted: false,
@@ -387,6 +396,86 @@ const MIGRATIONS = {
       },
       stats: { ...def.stats, ...(old.stats || {}), activitiesUsed: old.stats?.activitiesUsed || [] },
       settings: { ...def.settings, ...(old.settings || {}) },
+    };
+  },
+  7: (old) => {
+    const def = createDefaultState();
+    const mergedRooms = { ...def.rooms };
+    const returnedInventory = Array.isArray(old.inventory) ? [...old.inventory] : [];
+
+    if (old.rooms && typeof old.rooms === 'object') {
+      for (const [roomId, rState] of Object.entries(old.rooms)) {
+        const roomDef = ROOMS[roomId];
+        if (!roomDef || !rState || !Array.isArray(rState.placed)) continue;
+        const allSeed = rState.placed.length > 0 && rState.placed.every((p) => String(p.instanceId || '').startsWith(`seed-${roomId}-`));
+        if (allSeed && roomId !== 'myroom') {
+          mergedRooms[roomId] = {
+            ...mergedRooms[roomId],
+            ...rState,
+            placed: def.rooms[roomId].placed,
+          };
+        } else {
+          mergedRooms[roomId] = {
+            ...mergedRooms[roomId],
+            ...rState,
+            placed: sanitizePlacedItemsForRoom(roomDef, rState.placed, returnedInventory),
+          };
+        }
+      }
+    }
+
+    const mergedQuests = { ...def.quests };
+    if (old.quests && typeof old.quests === 'object') {
+      for (const [qId, qState] of Object.entries(old.quests)) {
+        if (qState && typeof qState === 'object') {
+          mergedQuests[qId] = { ...mergedQuests[qId], ...qState };
+        }
+      }
+    }
+
+    const playerRoom = old.player?.room && ROOMS[old.player.room] ? old.player.room : 'lobby';
+    const roomDef = ROOMS[playerRoom];
+    const placedInPlayerRoom = mergedRooms[playerRoom]?.placed || [];
+    let px = typeof old.player?.x === 'number' ? old.player.x : roomDef.spawn.x;
+    let py = typeof old.player?.y === 'number' ? old.player.y : roomDef.spawn.y;
+    const tileInvalid = (
+      py <= 0 || px <= 0 || py >= roomDef.height || px >= roomDef.width ||
+      roomDef.grid[py][px] !== TILE.FLOOR ||
+      (!old.player?.sitting && isTileBlockedByFurniture(placedInPlayerRoom, px, py))
+    );
+    if (tileInvalid) {
+      px = roomDef.spawn.x;
+      py = roomDef.spawn.y;
+    }
+
+    const oldPlayer = old.player || {};
+    const oldArcade = (old.arcade && typeof old.arcade === 'object') ? old.arcade : {};
+    return {
+      ...def,
+      ...old,
+      version: 8,
+      inventory: returnedInventory,
+      rooms: mergedRooms,
+      quests: mergedQuests,
+      player: {
+        ...def.player,
+        ...oldPlayer,
+        room: playerRoom,
+        x: px,
+        y: py,
+        activity: oldPlayer.activity || null,
+        outfit: oldPlayer.outfit || 'normal',
+        roomTier: oldPlayer.roomTier || 1,
+      },
+      stats: { ...def.stats, ...(old.stats || {}), activitiesUsed: old.stats?.activitiesUsed || [] },
+      settings: { ...def.settings, ...(old.settings || {}) },
+      arcade: {
+        dailyCoins: typeof oldArcade.dailyCoins === 'number' ? oldArcade.dailyCoins : 0,
+        lastRewardDate: typeof oldArcade.lastRewardDate === 'string' ? oldArcade.lastRewardDate : '',
+        highScores: (oldArcade.highScores && typeof oldArcade.highScores === 'object')
+          ? { ...def.arcade.highScores, ...oldArcade.highScores }
+          : { ...def.arcade.highScores },
+      },
     };
   },
 };
