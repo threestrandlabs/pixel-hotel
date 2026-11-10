@@ -5,7 +5,7 @@
 
 import { TILE, getCatalogueItem } from './data.js';
 import {
-  ISO, WALL_ANCHOR_Y, buildFloorTile, buildWallSegment, buildWindowSegment,
+  ISO, ART, WALL_ANCHOR_Y, buildFloorTile, buildWallSegment, buildWindowSegment,
   buildDoorSegment, buildElevatorDoorSegment, buildDoorTile, buildElevatorTile,
   buildGlassBalustradeSegment, buildStairwellDoorSegment,
   FURNITURE_BUILDERS, shadeColor,
@@ -62,11 +62,10 @@ function bakeSprite(key, spriteOrFactory, dpr = 1) {
   if (canvasCache.has(cacheKey)) return canvasCache.get(cacheKey);
   const sprite = typeof spriteOrFactory === 'function' ? spriteOrFactory() : spriteOrFactory;
 
-  const W = Math.max(1, Math.round(sprite.w * scale));
-  const H = Math.max(1, Math.round(sprite.h * scale));
-
   // High-resolution native DPR rasterisation for volumetric 3D prism furniture
   if (sprite.boxes && sprite.boxes.length > 0) {
+    const W = Math.max(1, Math.round(sprite.w * scale));
+    const H = Math.max(1, Math.round(sprite.h * scale));
     const body = document.createElement('canvas');
     body.width = W;
     body.height = H;
@@ -100,6 +99,25 @@ function bakeSprite(key, spriteOrFactory, dpr = 1) {
       g.lineTo(bx, by);
       g.lineTo(cx, cy);
       g.stroke();
+      // fine grounding AO along the base and a polished vertical highlight along
+      // the nearest front corner — genuine extra finishing detail only resolvable
+      // at the doubled bake density, applied to every box of every furniture piece
+      const [dx0, dy0] = P(u0, v1, z0);
+      const [ex0, ey0] = P(u1, v1, z0);
+      const [fx0, fy0] = P(u1, v0, z0);
+      g.strokeStyle = 'rgba(0,0,0,0.22)';
+      g.lineWidth = Math.max(0.75, 0.5 * scale);
+      g.beginPath();
+      g.moveTo(dx0, dy0);
+      g.lineTo(ex0, ey0);
+      g.lineTo(fx0, fy0);
+      g.stroke();
+      g.strokeStyle = 'rgba(255,255,255,0.22)';
+      g.lineWidth = Math.max(0.65, 0.4 * scale);
+      g.beginPath();
+      g.moveTo(bx, by);
+      g.lineTo(ex0, ey0);
+      g.stroke();
     }
     const out = document.createElement('canvas');
     out.width = W;
@@ -121,25 +139,32 @@ function bakeSprite(key, spriteOrFactory, dpr = 1) {
     return out;
   }
 
+  // Raster px-grid sprites (floor/wall/door/window/elevator/balustrade) are authored
+  // at ART× the on-screen footprint (see sprites.js) — rasterise each fine grid cell
+  // at scale/ART device pixels so the baked bitmap keeps the exact same CSS/world
+  // size as before, just built from a finer, more detailed source grid.
+  const fine = scale / ART;
+  const W = Math.max(1, Math.round(sprite.w * fine));
+  const H = Math.max(1, Math.round(sprite.h * fine));
   const c = document.createElement('canvas');
   c.width = W;
   c.height = H;
   const ctx = c.getContext('2d');
   ctx.imageSmoothingEnabled = false;
   for (let y = 0; y < sprite.h; y++) {
-    const y0 = Math.round(y * scale);
-    const y1 = Math.round((y + 1) * scale);
+    const y0 = Math.round(y * fine);
+    const y1 = Math.round((y + 1) * fine);
     for (let x = 0; x < sprite.w; x++) {
       const color = sprite.px[y][x];
       if (!color) continue;
-      const x0 = Math.round(x * scale);
-      const x1 = Math.round((x + 1) * scale);
+      const x0 = Math.round(x * fine);
+      const x1 = Math.round((x + 1) * fine);
       ctx.fillStyle = color;
       ctx.fillRect(x0, y0, Math.max(1, x1 - x0), Math.max(1, y1 - y0));
     }
   }
-  c.ax = sprite.ax ?? sprite.w / 2;
-  c.ay = sprite.ay ?? sprite.h - TILE_H / 2;
+  c.ax = (sprite.ax ?? sprite.w / 2) / ART;
+  c.ay = (sprite.ay ?? (sprite.h - TILE_H * ART / 2)) / ART;
   c.scale = scale;
   canvasCache.set(cacheKey, c);
   return c;
@@ -770,6 +795,13 @@ export function drawCityVehicles(ctx, layout, vehicles, phase = 0.5, dpr = 1) {
 
     drawIsoPrism(ctx, P, u0, v0, u1, v1, zBase, zBody, bodyLeft, bodyRight, bodyTop);
 
+    // Dark wheel blobs at the body corners, only resolvable at native bake density
+    ctx.fillStyle = '#14141a';
+    for (const [wu, wv] of [[u0 + 0.08, v0 + 0.12], [u1 - 0.08, v0 + 0.12], [u0 + 0.08, v1 - 0.12], [u1 - 0.08, v1 - 0.12]]) {
+      const wp = P(wu, wv, zBase);
+      ctx.beginPath(); ctx.arc(wp[0], wp[1], Math.max(1, 1.1 * dpr), 0, Math.PI * 2); ctx.fill();
+    }
+
     // Upper cabin / windows for car / taxi / bus
     if (type !== 'scooter') {
       const zCabTop = zBase + height;
@@ -782,6 +814,21 @@ export function drawCityVehicles(ctx, layout, vehicles, phase = 0.5, dpr = 1) {
 
       const cabGlass = day > 0.6 ? '#6cb0d8' : '#2c3e54';
       drawIsoPrism(ctx, P, cabU0, cabV0, cabU1, cabV1, zBody, zCabTop, shadeColor(cabGlass, -0.15), shadeColor(cabGlass, -0.28), bodyTop);
+
+      // central door-pillar mullion line across the cabin glass, only resolvable at native bake density
+      ctx.strokeStyle = shadeColor(bodyCol, -0.4);
+      ctx.lineWidth = Math.max(0.6, 0.5 * dpr);
+      ctx.beginPath();
+      if (isV) {
+        const mTop = P((cabU0 + cabU1) / 2, cabV0, zCabTop);
+        const mBot = P((cabU0 + cabU1) / 2, cabV0, zBody);
+        ctx.moveTo(mTop[0], mTop[1]); ctx.lineTo(mBot[0], mBot[1]);
+      } else {
+        const mTop = P(cabU0, (cabV0 + cabV1) / 2, zCabTop);
+        const mBot = P(cabU0, (cabV0 + cabV1) / 2, zBody);
+        ctx.moveTo(mTop[0], mTop[1]); ctx.lineTo(mBot[0], mBot[1]);
+      }
+      ctx.stroke();
 
       if (type === 'taxi') {
         const sU0 = u - 0.1, sU1 = u + 0.1;
@@ -943,11 +990,12 @@ function renderSkylineToCanvas(g, width, height, phase, floor, room = null, ox =
   if (day < 0.72) {
     const starAlpha = Math.min(0.95, (0.72 - day) * 1.45);
     const rStar = seededRand(90421);
-    for (let i = 0; i < 85; i++) {
+    for (let i = 0; i < 160; i++) {
       const sx = Math.round(bx0 + rStar() * bw);
       const sy = Math.round(by0 + rStar() * (horizonY - by0) * 0.85);
-      const sz = rStar() > 0.8 ? 2 : 1.2;
-      g.fillStyle = `rgba(255, 248, 224, ${(starAlpha * (0.4 + rStar() * 0.6)).toFixed(2)})`;
+      const roll = rStar();
+      const sz = roll > 0.93 ? 2 : roll > 0.7 ? 1.2 : 0.6; // finer star grain, only resolvable at the doubled bake density
+      g.fillStyle = `rgba(255, 248, 224, ${(starAlpha * (0.35 + rStar() * 0.65)).toFixed(2)})`;
       g.fillRect(sx, sy, sz, sz);
     }
   }
@@ -1002,17 +1050,22 @@ function renderSkylineToCanvas(g, width, height, phase, floor, room = null, ox =
     const tw = Math.round(20 + rDistant() * 38);
     const th = Math.round(30 + rDistant() * 110 + (Math.sin(x * 0.003) + 1) * 20);
     g.fillRect(x, horizonY - th, tw - 2, th);
+    // fine vertical facade seam lines, only resolvable at the doubled bake density
+    g.fillStyle = lerpColor(skylineCol1, '#000000', 0.18);
+    for (let sx2 = x + 6; sx2 < x + tw - 4; sx2 += 6) g.fillRect(sx2, horizonY - th, 1, th);
+    g.fillStyle = distSkyGrad;
     if (rDistant() > 0.45) {
       const spireH = Math.round(12 + rDistant() * 26);
       g.fillRect(Math.round(x + tw / 2 - 1), horizonY - th - spireH, 2, spireH);
     }
     if (day < 0.65) {
       const winAlpha = Math.min(0.65, (0.65 - day) * 1.2);
-      g.fillStyle = `rgba(255, 235, 160, ${winAlpha.toFixed(2)})`;
-      for (let wy = horizonY - th + 8; wy < horizonY - 4; wy += 8) {
-        if (rDistant() > 0.5) {
-          g.fillRect(x + 4, wy, 2, 2);
-          if (tw > 28 && rDistant() > 0.4) g.fillRect(x + 12, wy, 2, 2);
+      for (let wy = horizonY - th + 8; wy < horizonY - 4; wy += 5) {
+        for (let wx = x + 4; wx < x + tw - 4; wx += 6) {
+          if (rDistant() > 0.55) {
+            g.fillStyle = `rgba(255, 235, 160, ${(winAlpha * (0.6 + rDistant() * 0.4)).toFixed(2)})`;
+            g.fillRect(wx, wy, 1.4, 1.4);
+          }
         }
       }
       g.fillStyle = distSkyGrad;
@@ -1379,6 +1432,9 @@ function drawTowerCutawayUnder(ctx, room, originX, originY, height, phase) {
           const isLit = ((x * 7 + story * 13 + floorNo) % 5) !== 0;
           const winCol = day > 0.65 ? (isLit ? '#9ad0f4' : '#4a6484') : (isLit ? '#ffd884' : '#242238');
           fillPoly(ctx, [[x0, y0], [x1, y1], [x1, y1 + 26], [x0, y0 + 26]], winCol);
+          // fine mullion bar splitting the pane, only resolvable at native bake density
+          ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.moveTo((x0 + x1) / 2, (y0 + y1) / 2); ctx.lineTo((x0 + x1) / 2, (y0 + y1) / 2 + 26); ctx.stroke();
         }
         fillPoly(ctx, [wPt, sPt, [sPt[0], sPt[1] + SLAB_H], [wPt[0], wPt[1] + SLAB_H]], '#787486');
         ctx.fillStyle = '#3a3646';
@@ -1398,6 +1454,9 @@ function drawTowerCutawayUnder(ctx, room, originX, originY, height, phase) {
           const isLit = ((y * 11 + story * 5 + floorNo) % 4) !== 0;
           const winCol = day > 0.65 ? (isLit ? '#78b0d8' : '#384e68') : (isLit ? '#f0be68' : '#1b182c');
           fillPoly(ctx, [[x0, y0], [x1, y1], [x1, y1 + 26], [x0, y0 + 26]], winCol);
+          // fine mullion bar splitting the pane, only resolvable at native bake density
+          ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.moveTo((x0 + x1) / 2, (y0 + y1) / 2); ctx.lineTo((x0 + x1) / 2, (y0 + y1) / 2 + 26); ctx.stroke();
         }
         if (room.isRooftop && x >= 15 && y >= 3 && y <= 8) {
           // Shimmering infinity pool overflow weir & cascading waterfall sheen
@@ -1468,6 +1527,10 @@ function drawTowerCutawayOver(ctx, room, originX, originY) {
       [wTop1[0], wTop1[1] + 24],
       [wTop0[0], wTop0[1] + 24],
     ], '#384e68');
+    // fine mullion cross splitting the window pane, only resolvable at native bake density
+    const wMid = [(wTop0[0] + wTop1[0]) / 2, (wTop0[1] + wTop1[1]) / 2];
+    ctx.strokeStyle = 'rgba(0,0,0,0.3)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(wMid[0], wMid[1]); ctx.lineTo(wMid[0], wMid[1] + 24); ctx.stroke();
 
     // 2. Flat top roof slab of the housing block
     fillPoly(ctx, [nwTop, blTop, brTop, neTop], '#5e5a6c');
@@ -1486,6 +1549,12 @@ function drawTowerCutawayOver(ctx, room, originX, originY) {
       brTop,
       neTop,
     ], '#a0a6b8');
+    // individual coping-stone seam ticks, only resolvable at native bake density
+    ctx.strokeStyle = 'rgba(0,0,0,0.18)'; ctx.lineWidth = 1;
+    for (let t = 0.1; t < 1; t += 0.14) {
+      const a = [nwTop[0] + (neTop[0] - nwTop[0]) * t, nwTop[1] + (neTop[1] - nwTop[1]) * t];
+      ctx.beginPath(); ctx.moveTo(a[0], a[1] - COP_H); ctx.lineTo(a[0], a[1]); ctx.stroke();
+    }
     return;
   }
   const last = { x: room.width - 1, y: room.height - 1 };
@@ -1812,6 +1881,10 @@ export function renderItemIcon(itemId, size = 52, dpr = 1, makeCanvas = null) {
   fillPoly(ctx, [[midX, midY - s], [midX + s, midY - s / 2], [midX, midY], [midX - s, midY - s / 2]], color);
   fillPoly(ctx, [[midX - s, midY - s / 2], [midX, midY], [midX, midY + s], [midX - s, midY + s / 2]], shadeColor(color, -0.15));
   fillPoly(ctx, [[midX, midY], [midX + s, midY - s / 2], [midX + s, midY + s / 2], [midX, midY + s]], shadeColor(color, -0.3));
+  // fine top-edge highlight, only resolvable at native bake density
+  ctx.strokeStyle = shadeColor(color, 0.3);
+  ctx.lineWidth = Math.max(0.6, 0.5 * dpr);
+  ctx.beginPath(); ctx.moveTo(midX - s, midY - s / 2); ctx.lineTo(midX, midY - s); ctx.lineTo(midX + s, midY - s / 2); ctx.stroke();
 
   itemIconCache.set(cacheKey, canvas);
   return canvas;

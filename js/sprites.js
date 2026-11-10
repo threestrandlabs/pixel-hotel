@@ -107,9 +107,18 @@ function shade(hex, amt) {
 
 export const ISO = { TILE_W: 64, TILE_H: 32, WALL_H: 56 };
 
+// Every raster px-grid sprite below (floor/wall/window/door/elevator/balustrade) is
+// authored at ART× the on-screen footprint: the grid is ART times finer in each axis
+// than the CSS-pixel size the tile actually occupies, so there's real sub-pixel detail
+// to draw (extra bands, flecks, grain) instead of just bigger blocks. ISO itself stays
+// in CSS-pixel/world units — every other part of the renderer (screen projection,
+// camera, collision) is unaffected — bakeSprite (render.js) divides the grid back down
+// by ART when it blits, so on-screen size and world scale never change.
+export const ART = 2;
+
 export function buildFloorTile(baseColor, variant = 0, material = 'default') {
-  const w = ISO.TILE_W;
-  const h = ISO.TILE_H;
+  const w = ISO.TILE_W * ART;
+  const h = ISO.TILE_H * ART;
   const s = makeGrid(w, h);
   fillDiamond(s, w / 2, h / 2 - 0.5, w / 2 - 0.5, h / 2 - 0.5, baseColor);
   const light = shade(baseColor, 0.18);
@@ -123,18 +132,19 @@ export function buildFloorTile(baseColor, variant = 0, material = 'default') {
         const nx = Math.abs(x - w / 2);
         const ny = Math.abs(y - h / 2);
         const d = nx + ny * 2;
-        if (d >= 24 && d <= 26) {
+        if (d >= 24 * ART && d <= 26 * ART) {
           s.px[y][x] = '#cca442'; // warm polished brass
-        } else if (d > 26) {
+        } else if (d > 26 * ART) {
           s.px[y][x] = shade(baseColor, -0.06);
         } else {
           if ((x * 3 + y * 7) % 19 === 0) s.px[y][x] = shade(baseColor, 0.12);
           else if ((x * 5 + y * 2) % 23 === 0) s.px[y][x] = shade(baseColor, -0.08);
+          else if ((x * 11 + y * 13) % 37 === 0) s.px[y][x] = shade(baseColor, 0.22); // fine quartz sparkle
         }
       }
     }
     if (variant % 2 === 0) {
-      setPixel(s, w / 2, h / 2, '#d8b454');
+      fillRect(s, w / 2 - 1, h / 2 - 1, 2, 2, '#d8b454');
     }
     return s;
   }
@@ -151,13 +161,15 @@ export function buildFloorTile(baseColor, variant = 0, material = 'default') {
         const nx = Math.abs(x - w / 2);
         const ny = Math.abs(y - h / 2);
         const d = nx + ny * 2;
-        if (d >= 28) {
+        if (d >= 28 * ART) {
           s.px[y][x] = '#1a100e';
-        } else if (d >= 25 && d <= 26) {
+        } else if (d >= 25 * ART && d <= 26 * ART) {
           s.px[y][x] = gold;
         } else {
           const plank = variant % 2 === 0 ? ((x + y * 2) % 6) : ((x - y * 2 + 100) % 6);
-          s.px[y][x] = plank < 2 ? darkWood : (plank < 4 ? midWood : lightWood);
+          let c = plank < 2 ? darkWood : (plank < 4 ? midWood : lightWood);
+          if ((x * 3 + y * 5) % 29 === 0) c = shade(c, 0.16); // fine grain fleck
+          s.px[y][x] = c;
         }
       }
     }
@@ -173,15 +185,14 @@ export function buildFloorTile(baseColor, variant = 0, material = 'default') {
         if (!s.px[y][x]) continue;
         const nx = Math.abs(x - w / 2);
         const ny = Math.abs(y - h / 2);
-        if (nx + ny * 2 >= 29) {
+        if (nx + ny * 2 >= 29 * ART) {
           s.px[y][x] = '#141418';
           continue;
         }
         const hash = (x * 37 + y * 59 + variant * 17) & 0xff;
-        if (hash < 12) s.px[y][x] = '#5c8ea8';
-        else if (hash < 20) s.px[y][x] = '#c8d4dc';
-        else if (hash < 80) s.px[y][x] = rubberDark;
-        else s.px[y][x] = rubberBase;
+        let c = hash < 12 ? '#5c8ea8' : hash < 20 ? '#c8d4dc' : hash < 80 ? rubberDark : rubberBase;
+        if (x % (8 * ART) < 1 || y % (8 * ART) < 1) c = shade(c, -0.22); // interlocking mat seams
+        s.px[y][x] = c;
       }
     }
     return s;
@@ -199,11 +210,13 @@ export function buildFloorTile(baseColor, variant = 0, material = 'default') {
         const nx = Math.abs(x - w / 2);
         const ny = Math.abs(y - h / 2);
         const d = nx + ny * 2;
-        if (d >= 27) s.px[y][x] = grout;
-        else if (d >= 25) s.px[y][x] = stoneDark;
+        if (d >= 27 * ART) s.px[y][x] = grout;
+        else if (d >= 25 * ART) s.px[y][x] = stoneDark;
         else {
-          const h = (x * 29 + y * 43) % 17;
-          s.px[y][x] = h < 4 ? stoneLight : (h < 12 ? stoneBase : stoneDark);
+          const hh = (x * 29 + y * 43) % 17;
+          let c = hh < 4 ? stoneLight : (hh < 12 ? stoneBase : stoneDark);
+          if ((x * 13 + y * 7) % 31 === 0) c = shade(c, 0.2); // mineral vein glint
+          s.px[y][x] = c;
         }
       }
     }
@@ -221,9 +234,13 @@ export function buildFloorTile(baseColor, variant = 0, material = 'default') {
         const nx = Math.abs(x - w / 2);
         const ny = Math.abs(y - h / 2);
         const d = nx + ny * 2;
-        if (d >= 28) s.px[y][x] = '#2c0c16';
-        else if (d === 16 || d === 17) s.px[y][x] = gold;
-        else s.px[y][x] = (nx + ny) % 3 === 0 ? burgMid : burgDark;
+        if (d >= 28 * ART) s.px[y][x] = '#2c0c16';
+        else if (Math.floor(d / ART) === 16 || Math.floor(d / ART) === 17) s.px[y][x] = gold;
+        else {
+          let c = (nx + ny) % 3 === 0 ? burgMid : burgDark;
+          if ((x + y * 3) % 23 === 0) c = shade(gold, -0.3); // fine woven thread fleck
+          s.px[y][x] = c;
+        }
       }
     }
     return s;
@@ -238,10 +255,11 @@ export function buildFloorTile(baseColor, variant = 0, material = 'default') {
         const nx = Math.abs(x - w / 2);
         const ny = Math.abs(y - h / 2);
         const d = nx + ny * 2;
-        if (d >= 29) { s.px[y][x] = '#0e0a1a'; continue; }
-        if ((x + y) % 11 === 0 && d < 22) s.px[y][x] = '#ff2a8c';
-        else if ((x - y + 60) % 13 === 0 && d < 22) s.px[y][x] = '#00e5ff';
-        else if (d === 14) s.px[y][x] = '#4a2878';
+        if (d >= 29 * ART) { s.px[y][x] = '#0e0a1a'; continue; }
+        if ((x + y) % 11 === 0 && d < 22 * ART) s.px[y][x] = '#ff2a8c';
+        else if ((x - y + 60) % 13 === 0 && d < 22 * ART) s.px[y][x] = '#00e5ff';
+        else if (Math.floor(d / ART) === 14) s.px[y][x] = '#4a2878';
+        else if ((x * 3 + y * 5) % 43 === 0) s.px[y][x] = shade(bg, 0.3); // faint pixel sparkle grid
         else s.px[y][x] = bg;
       }
     }
@@ -259,9 +277,13 @@ export function buildFloorTile(baseColor, variant = 0, material = 'default') {
         const nx = Math.abs(x - w / 2);
         const ny = Math.abs(y - h / 2);
         const d = nx + ny * 2;
-        if (d >= 28) s.px[y][x] = grout;
-        else if (d >= 26) s.px[y][x] = terraDark;
-        else s.px[y][x] = (x + y * 3) % 7 === 0 ? terraDark : terra;
+        if (d >= 28 * ART) s.px[y][x] = grout;
+        else if (d >= 26 * ART) s.px[y][x] = terraDark;
+        else {
+          let c = (x + y * 3) % 7 === 0 ? terraDark : terra;
+          if ((x * 5 + y) % 17 === 0) c = shade(terra, 0.22); // kiln-fired fleck
+          s.px[y][x] = c;
+        }
       }
     }
     return s;
@@ -275,8 +297,10 @@ export function buildFloorTile(baseColor, variant = 0, material = 'default') {
     for (let y = 0; y < h; y++) {
       for (let x = 0; x < w; x++) {
         if (!s.px[y][x]) continue;
-        const h = (x * 41 + y * 73) % 19;
-        s.px[y][x] = h < 5 ? g1 : (h < 13 ? g0 : g2);
+        const hh = (x * 41 + y * 73) % 19;
+        let c = hh < 5 ? g1 : (hh < 13 ? g0 : g2);
+        if ((x * 17 + y * 23) % 31 === 0) c = shade(g1, 0.35); // dew-lit blade tip
+        s.px[y][x] = c;
       }
     }
     return s;
@@ -293,8 +317,12 @@ export function buildFloorTile(baseColor, variant = 0, material = 'default') {
         const nx = Math.abs(x - w / 2);
         const ny = Math.abs(y - h / 2);
         const d = nx + ny * 2;
-        if (d >= 27) s.px[y][x] = seam;
-        else s.px[y][x] = (x * 7 + y * 13) % 11 < 4 ? stoneDark : stone;
+        if (d >= 27 * ART) s.px[y][x] = seam;
+        else {
+          let c = (x * 7 + y * 13) % 11 < 4 ? stoneDark : stone;
+          if ((x * 3 + y * 19) % 29 === 0) c = shade(stone, 0.28); // mica glint
+          s.px[y][x] = c;
+        }
       }
     }
     return s;
@@ -305,12 +333,16 @@ export function buildFloorTile(baseColor, variant = 0, material = 'default') {
     const teak = '#98683e';
     const teakDark = '#7c522e';
     const seam = '#4a301a';
+    const boardW = 3 * ART;
     for (let y = 0; y < h; y++) {
       for (let x = 0; x < w; x++) {
         if (!s.px[y][x]) continue;
-        const plank = (y * 2) % 6;
-        if (plank === 0) s.px[y][x] = seam;
-        else s.px[y][x] = (x * 3 + y) % 9 === 0 ? teakDark : teak;
+        if (y % boardW < ART) s.px[y][x] = seam;
+        else {
+          let c = (x * 3 + y) % 9 === 0 ? teakDark : teak;
+          if ((x * 11 + y * 2) % 23 === 0) c = shade(teak, 0.2); // grain highlight
+          s.px[y][x] = c;
+        }
       }
     }
     return s;
@@ -327,9 +359,9 @@ export function buildFloorTile(baseColor, variant = 0, material = 'default') {
         const nx = Math.abs(x - w / 2);
         const ny = Math.abs(y - h / 2);
         const d = nx + ny * 2;
-        if (d >= 28) s.px[y][x] = grout;
-        else if (d >= 26) s.px[y][x] = tileShade;
-        else s.px[y][x] = tile;
+        if (d >= 28 * ART) s.px[y][x] = grout;
+        else if (d >= 26 * ART) s.px[y][x] = tileShade;
+        else s.px[y][x] = (x % (16 * ART) < ART || y % (16 * ART) < ART) ? shade(tile, -0.04) : tile; // individual tile grout lines
       }
     }
     return s;
@@ -341,22 +373,24 @@ export function buildFloorTile(baseColor, variant = 0, material = 'default') {
       if (!s.px[y][x]) continue;
       const nx = x - w / 2;
       const ny = y - h / 2;
-      if (nx + ny * 2 < -6) s.px[y][x] = light;
-      else if (nx + ny * 2 > 10) s.px[y][x] = dark;
+      if (nx + ny * 2 < -6 * ART) s.px[y][x] = light;
+      else if (nx + ny * 2 > 10 * ART) s.px[y][x] = dark;
+      else if ((Math.abs(nx) + Math.abs(ny)) % 23 === 0) s.px[y][x] = shade(baseColor, 0.08); // subtle fine fleck
     }
   }
   if (variant % 2 === 0) {
-    setPixel(s, w / 2, h / 2, shade(baseColor, 0.3));
+    fillRect(s, w / 2 - 1, h / 2 - 1, 2, 2, shade(baseColor, 0.3));
   }
   return s;
 }
 
 export function buildDoorTile(baseColor) {
   const s = buildFloorTile(baseColor, 1);
-  const w = ISO.TILE_W, h = ISO.TILE_H;
+  const w = ISO.TILE_W * ART, h = ISO.TILE_H * ART;
   const mat = '#9c4a3c';
-  fillDiamond(s, w / 2, h / 2, w / 2 - 8, h / 2 - 5, mat);
-  fillDiamond(s, w / 2, h / 2, w / 2 - 12, h / 2 - 7, shade(mat, 0.15));
+  fillDiamond(s, w / 2, h / 2, w / 2 - 8 * ART, h / 2 - 5 * ART, mat);
+  fillDiamond(s, w / 2, h / 2, w / 2 - 12 * ART, h / 2 - 7 * ART, shade(mat, 0.15));
+  fillDiamond(s, w / 2, h / 2, w / 2 - 16 * ART, h / 2 - 9 * ART, shade(mat, -0.1)); // inner bevel ring
   return s;
 }
 
@@ -370,36 +404,39 @@ export function buildDoorTile(baseColor) {
 // Anchor: local (w/2, WALL_H + TILE_H/2) is the "north" diamond point at
 // floor level — callers align that point with the tile's floor center.
 export function buildWallSegment(baseColor, kind = 'north') {
-  const w = ISO.TILE_W;
-  const h = ISO.WALL_H + ISO.TILE_H;
+  const w = ISO.TILE_W * ART;
+  const h = (ISO.WALL_H + ISO.TILE_H) * ART;
   const s = makeGrid(w, h);
   const bodyColor = kind === 'north' ? baseColor : shade(baseColor, -0.1);
   const trim = shade(bodyColor, 0.22);
 
-  const north = [w / 2, ISO.WALL_H];
-  const side = kind === 'north' ? [w, ISO.WALL_H + ISO.TILE_H / 2] : [0, ISO.WALL_H + ISO.TILE_H / 2];
-  const northUp = [north[0], north[1] - ISO.WALL_H];
-  const sideUp = [side[0], side[1] - ISO.WALL_H];
+  const north = [w / 2, ISO.WALL_H * ART];
+  const side = kind === 'north' ? [w, (ISO.WALL_H + ISO.TILE_H / 2) * ART] : [0, (ISO.WALL_H + ISO.TILE_H / 2) * ART];
+  const northUp = [north[0], north[1] - ISO.WALL_H * ART];
+  const sideUp = [side[0], side[1] - ISO.WALL_H * ART];
 
   fillPolygon(s, [northUp, sideUp, side, north], bodyColor);
   // plank shading lines run parallel to the wall's slanted base, not the screen
-  const baseY = (x) => Math.round(ISO.WALL_H + (kind === 'north' ? (x - w / 2) / 2 : (w / 2 - x) / 2));
+  const baseY = (x) => Math.round(ISO.WALL_H * ART + (kind === 'north' ? (x - w / 2) / 2 : (w / 2 - x) / 2));
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
-      if (s.px[y][x] && (baseY(x) - y) % 7 === 6) s.px[y][x] = shade(bodyColor, -0.14);
+      if (!s.px[y][x]) continue;
+      if ((baseY(x) - y) % 7 === 6) s.px[y][x] = shade(bodyColor, -0.14);
+      else if ((x * 3 + y * 5) % 41 === 0) s.px[y][x] = shade(bodyColor, 0.08); // fine plank grain fleck
     }
   }
   // a thin highlight along the top (ceiling) edge of the wall
   for (let x = 0; x < w; x++) {
-    for (let y = 0; y < h; y++) {
-      if (s.px[y][x]) { s.px[y][x] = trim; break; }
+    let hit = 0;
+    for (let y = 0; y < h && hit < ART; y++) {
+      if (s.px[y][x]) { s.px[y][x] = hit === 0 ? trim : shade(trim, -0.1); hit++; }
     }
   }
   // dark baseboard where the wall meets the floor
   for (let x = 0; x < w; x++) {
     let last = -1;
     for (let y = 0; y < h; y++) if (s.px[y][x]) last = y;
-    for (let y = last - 3; y <= last; y++) if (y >= 0 && s.px[y][x]) s.px[y][x] = shade(bodyColor, -0.32);
+    for (let y = last - 3 * ART; y <= last; y++) if (y >= 0 && s.px[y][x]) s.px[y][x] = shade(bodyColor, -0.32);
   }
   return s;
 }
@@ -411,12 +448,13 @@ export const WALL_ANCHOR_Y = ISO.WALL_H + ISO.TILE_H / 2;
 // slant, so window parts converge with the wall instead of floating on it.
 function wallPlane(kind) {
   const sgn = kind === 'north' ? 1 : -1;
-  const W2 = ISO.TILE_W / 2;
+  const W2 = (ISO.TILE_W * ART) / 2;
+  const WALLF = ISO.WALL_H * ART;
   return {
-    P: (u, t) => [W2 + sgn * W2 * u, ISO.WALL_H + (ISO.TILE_H / 2) * u - ISO.WALL_H * t],
+    P: (u, t) => [W2 + sgn * W2 * u, WALLF + (ISO.TILE_H * ART / 2) * u - WALLF * t],
     inv: (x, y) => {
       const u = sgn * (x - W2) / W2;
-      return [u, (ISO.WALL_H + (ISO.TILE_H / 2) * u - y) / ISO.WALL_H];
+      return [u, (WALLF + (ISO.TILE_H * ART / 2) * u - y) / WALLF];
     },
   };
 }
@@ -439,7 +477,7 @@ export function buildWindowSegment(baseColor, sky, kind = 'north') {
   fillPolygon(s, poly(U0 - 0.07, U1 + 0.07, T0 - 0.06, T1 + 0.06), shade(frame, -0.05));
   fillPolygon(s, poly(U1, U1 + 0.07, T0 - 0.06, T1 + 0.06), shade(frame, -0.2));
   // opening: depth goes into the wall, which shifts the pane up the wall's depth axis
-  const sx = sgn * 3.4, sy = -1.7;
+  const sx = sgn * 3.4 * ART, sy = -1.7 * ART;
   const lo = (a, b, c) => Math.max(a, Math.min(b, c));
   for (let y = 0; y < s.h; y++) {
     for (let x = 0; x < s.w; x++) {
@@ -459,12 +497,13 @@ export function buildWindowSegment(baseColor, sky, kind = 'north') {
       if (g > 0.9 && g < 1.05) c = shade(c, 0.22);
       else if (g > 1.12 && g < 1.2) c = shade(c, 0.12);
       if (nt > 0.88) c = shade(c, -0.14); // shadow under the lintel
+      if ((x * 7 + y * 13) % 53 === 0) c = shade(c, 0.1); // fine glass-pane speckle
       s.px[y][x] = c;
     }
   }
   // projecting slab: top face, front face and the end cap that faces the viewer
   const slab = (ua, ub, ta, tb, pr, color) => {
-    const out = [-sgn * ISO.TILE_W / 2 * pr, ISO.TILE_H / 2 * pr]; // outward = toward the viewer
+    const out = [-sgn * (ISO.TILE_W * ART) / 2 * pr, (ISO.TILE_H * ART) / 2 * pr]; // outward = toward the viewer
     const sh = (p) => [p[0] + out[0], p[1] + out[1]];
     fillPolygon(s, [P(ua, tb), P(ub, tb), sh(P(ub, tb)), sh(P(ua, tb))], shade(color, 0.12));
     fillPolygon(s, [P(ub, tb), P(ub, ta), sh(P(ub, ta)), sh(P(ub, tb))], shade(color, -0.3));
@@ -488,15 +527,17 @@ export function buildDoorSegment(baseColor, kind = 'north') {
   const s = buildWallSegment(baseColor, kind);
   const frame = '#6a3f22';
   const frameLight = '#f0c27a';
-  const xl = kind === 'north' ? 35 : 3;
-  const xr = xl + 26;
-  const doorH = 46;
+  const half = (ISO.TILE_W * ART) / 2;
+  const xl = (kind === 'north' ? 35 : 3) * ART;
+  const xr = xl + 26 * ART;
+  const doorH = 46 * ART;
   for (let x = xl; x < xr; x++) {
-    const base = Math.round(ISO.WALL_H + (kind === 'north' ? (x - 32) / 2 : (32 - x) / 2)) - 1;
+    const base = Math.round(ISO.WALL_H * ART + (kind === 'north' ? (x - half) / 2 : (half - x) / 2)) - ART;
     for (let y = base - doorH; y <= base; y++) {
-      const post = x < xl + 4 || x >= xr - 4 || y < base - doorH + 4;
+      const post = x < xl + 4 * ART || x >= xr - 4 * ART || y < base - doorH + 4 * ART;
       let c = post ? (x === xl || y === base - doorH ? frameLight : frame) : '#2b1d2e';
-      if (!post && y > base - 5) c = '#d9a65a'; // warm light spilling under the door
+      if (!post && y > base - 5 * ART) c = '#d9a65a'; // warm light spilling under the door
+      else if (!post && (x * 3 + y * 7) % 31 === 0) c = shade('#2b1d2e', 0.2); // fine wood-grain panel fleck
       setPixel(s, x, y, c);
     }
   }
@@ -510,31 +551,33 @@ export function buildElevatorDoorSegment(baseColor, kind = 'north') {
   const steelL = '#9aa8b8';
   const steelR = '#7c8a9a';
   const seam = '#28303c';
-  const xl = kind === 'north' ? 34 : 4;
-  const xr = xl + 28;
+  const half = (ISO.TILE_W * ART) / 2;
+  const xl = (kind === 'north' ? 34 : 4) * ART;
+  const xr = xl + 28 * ART;
   const mid = Math.floor((xl + xr) / 2);
-  const doorH = 48;
+  const doorH = 48 * ART;
   for (let x = xl; x < xr; x++) {
-    const base = Math.round(ISO.WALL_H + (kind === 'north' ? (x - 32) / 2 : (32 - x) / 2)) - 1;
+    const base = Math.round(ISO.WALL_H * ART + (kind === 'north' ? (x - half) / 2 : (half - x) / 2)) - ART;
     for (let y = base - doorH; y <= base; y++) {
-      const isFrame = x < xl + 3 || x >= xr - 3 || y < base - doorH + 4;
-      const isIndicator = y >= base - doorH - 5 && y < base - doorH && x >= mid - 5 && x <= mid + 5;
+      const isFrame = x < xl + 3 * ART || x >= xr - 3 * ART || y < base - doorH + 4 * ART;
+      const isIndicator = y >= base - doorH - 5 * ART && y < base - doorH && x >= mid - 5 * ART && x <= mid + 5 * ART;
       if (isFrame) {
         setPixel(s, x, y, x === xl || y === base - doorH ? brassLight : brass);
       } else {
         let c = x < mid ? steelL : steelR;
         if (x === mid) c = seam;
-        else if (y === base - doorH + 6 || y === base - 3) c = shade(c, -0.15);
+        else if (y === base - doorH + 6 * ART || y === base - 3 * ART) c = shade(c, -0.15);
+        else if ((x * 5 + y * 3) % 23 === 0) c = shade(c, 0.1); // brushed steel grain
         setPixel(s, x, y, c);
       }
       if (isIndicator) setPixel(s, x, y, '#1c1828');
     }
     // glowing floor indicator dots above elevator arch
-    const indY = Math.round(ISO.WALL_H + (kind === 'north' ? (x - 32) / 2 : (32 - x) / 2)) - doorH - 4;
-    if (x >= mid - 4 && x <= mid + 4) {
-      setPixel(s, x, indY - 1, '#221a30');
-      setPixel(s, x, indY, x % 2 === 0 ? '#ffcf56' : '#ff6b4a');
-      setPixel(s, x, indY + 1, '#221a30');
+    const indY = Math.round(ISO.WALL_H * ART + (kind === 'north' ? (x - half) / 2 : (half - x) / 2)) - doorH - 4 * ART;
+    if (x >= mid - 4 * ART && x <= mid + 4 * ART) {
+      setPixel(s, x, indY - ART, '#221a30');
+      setPixel(s, x, indY, Math.floor(x / ART) % 2 === 0 ? '#ffcf56' : '#ff6b4a');
+      setPixel(s, x, indY + ART, '#221a30');
     }
   }
   return s;
@@ -544,79 +587,86 @@ export function buildStairwellDoorSegment(baseColor, kind = 'north') {
   const s = buildWallSegment(baseColor, kind);
   const frame = '#323a48';
   const frameLight = '#627288';
-  const xl = kind === 'north' ? 34 : 4;
-  const xr = xl + 28;
+  const half = (ISO.TILE_W * ART) / 2;
+  const xl = (kind === 'north' ? 34 : 4) * ART;
+  const xr = xl + 28 * ART;
   const mid = Math.floor((xl + xr) / 2);
-  const doorH = 48;
+  const doorH = 48 * ART;
   for (let x = xl; x < xr; x++) {
-    const base = Math.round(ISO.WALL_H + (kind === 'north' ? (x - 32) / 2 : (32 - x) / 2)) - 1;
+    const base = Math.round(ISO.WALL_H * ART + (kind === 'north' ? (x - half) / 2 : (half - x) / 2)) - ART;
     for (let y = base - doorH; y <= base; y++) {
-      const isFrame = x < xl + 3 || x >= xr - 3 || y < base - doorH + 4;
-      const isWindow = !isFrame && y >= base - doorH + 8 && y <= base - doorH + 22 && x >= mid - 8 && x <= mid + 8;
+      const isFrame = x < xl + 3 * ART || x >= xr - 3 * ART || y < base - doorH + 4 * ART;
+      const isWindow = !isFrame && y >= base - doorH + 8 * ART && y <= base - doorH + 22 * ART && x >= mid - 8 * ART && x <= mid + 8 * ART;
       if (isFrame) {
         setPixel(s, x, y, (x === xl || y === base - doorH) ? frameLight : frame);
       } else if (isWindow) {
-        setPixel(s, x, y, (x + y) % 2 === 0 ? '#b8ebff' : '#88ccee');
+        setPixel(s, x, y, Math.floor((x + y) / ART) % 2 === 0 ? '#b8ebff' : '#88ccee');
       } else {
-        setPixel(s, x, y, x < mid ? '#485468' : '#384252');
+        let c = x < mid ? '#485468' : '#384252';
+        if ((x * 7 + y * 3) % 29 === 0) c = shade(c, 0.1); // brushed panel grain
+        setPixel(s, x, y, c);
       }
     }
     // Illuminated green "ROOF / EXIT" emergency sign above the stairwell door
-    const signY = Math.round(ISO.WALL_H + (kind === 'north' ? (x - 32) / 2 : (32 - x) / 2)) - doorH - 4;
-    if (x >= mid - 8 && x <= mid + 8) {
-      setPixel(s, x, signY - 2, '#183824');
-      setPixel(s, x, signY - 1, (x === mid - 8 || x === mid + 8) ? '#22c55e' : '#15803d');
-      setPixel(s, x, signY, (x >= mid - 3 && x <= mid + 3) ? '#f0fdf4' : '#22c55e');
-      setPixel(s, x, signY + 1, '#183824');
+    const signY = Math.round(ISO.WALL_H * ART + (kind === 'north' ? (x - half) / 2 : (half - x) / 2)) - doorH - 4 * ART;
+    if (x >= mid - 8 * ART && x <= mid + 8 * ART) {
+      setPixel(s, x, signY - 2 * ART, '#183824');
+      setPixel(s, x, signY - ART, (x === mid - 8 * ART || x === mid + 8 * ART) ? '#22c55e' : '#15803d');
+      setPixel(s, x, signY, (x >= mid - 3 * ART && x <= mid + 3 * ART) ? '#f0fdf4' : '#22c55e');
+      setPixel(s, x, signY + ART, '#183824');
     }
   }
   return s;
 }
 
 export function buildGlassBalustradeSegment(kind = 'north') {
-  const w = ISO.TILE_W;
-  const h = ISO.WALL_H + ISO.TILE_H / 2;
+  const w = ISO.TILE_W * ART;
+  const h = (ISO.WALL_H + ISO.TILE_H / 2) * ART;
   const s = makeGrid(w, h);
-  const baseY = (x) => Math.round(ISO.WALL_H + (kind === 'north' ? (x - w / 2) / 2 : (w / 2 - x) / 2));
-  const RAIL_H = 18;
+  const baseY = (x) => Math.round(ISO.WALL_H * ART + (kind === 'north' ? (x - w / 2) / 2 : (w / 2 - x) / 2));
+  const RAIL_H = 18 * ART;
   const startX = kind === 'north' ? w / 2 : 0;
   const endX = kind === 'north' ? w : w / 2;
+  const posts = [4, 5, 31, 32, 58, 59];
 
   for (let x = startX; x < endX; x++) {
     const base = baseY(x);
     // Base mounting shoe (dark metal channel)
-    setPixel(s, x, base, '#242b35');
-    setPixel(s, x, base - 1, '#3a4452');
-    setPixel(s, x, base - 2, '#505d6e');
+    for (let i = 0; i < ART; i++) setPixel(s, x, base - i, '#242b35');
+    for (let i = ART; i < 2 * ART; i++) setPixel(s, x, base - i, '#3a4452');
+    for (let i = 2 * ART; i < 3 * ART; i++) setPixel(s, x, base - i, '#505d6e');
 
     // Tempered glass panel with reflections and sky tint
-    for (let y = base - RAIL_H + 2; y <= base - 3; y++) {
+    for (let y = base - RAIL_H + 2 * ART; y <= base - 3 * ART; y++) {
       const isReflect = ((x * 2 + y * 3) % 20 < 2);
-      const isPost = (x === 4 || x === 5 || x === 31 || x === 32 || x === 58 || x === 59);
+      const isPost = posts.some((p) => x >= p * ART && x < p * ART + ART);
       if (isPost) {
-        setPixel(s, x, y, (x % 2 === 0) ? '#d8e4f0' : '#8fa4b8');
+        setPixel(s, x, y, (Math.floor(x / ART) % 2 === 0) ? '#d8e4f0' : '#8fa4b8');
       } else if (isReflect) {
         setPixel(s, x, y, '#eaf8ff');
       } else {
         // Translucent glass texture with subtle dither
-        setPixel(s, x, y, (x + y) % 2 === 0 ? '#98d2f0' : '#68b4dc');
+        let c = Math.floor((x + y) / ART) % 2 === 0 ? '#98d2f0' : '#68b4dc';
+        if ((x * 3 + y * 5) % 37 === 0) c = shade(c, 0.3); // fine glint fleck
+        setPixel(s, x, y, c);
       }
     }
 
     // Top handrail (polished steel chrome with upper highlight)
-    setPixel(s, x, base - RAIL_H, '#edf4fa');
-    setPixel(s, x, base - RAIL_H + 1, '#b8c8d8');
-    setPixel(s, x, base - RAIL_H + 2, '#6c7c8c');
+    for (let i = 0; i < ART; i++) setPixel(s, x, base - RAIL_H + i, '#edf4fa');
+    for (let i = ART; i < 2 * ART; i++) setPixel(s, x, base - RAIL_H + i, '#b8c8d8');
+    for (let i = 2 * ART; i < 3 * ART; i++) setPixel(s, x, base - RAIL_H + i, '#6c7c8c');
   }
   return s;
 }
 
 export function buildElevatorTile(baseColor) {
   const s = buildFloorTile(baseColor, 1);
-  const w = ISO.TILE_W, h = ISO.TILE_H;
-  fillDiamond(s, w / 2, h / 2, w / 2 - 7, h / 2 - 4, '#3a4252');
-  fillDiamond(s, w / 2, h / 2, w / 2 - 11, h / 2 - 6, '#d8a848');
-  fillDiamond(s, w / 2, h / 2, w / 2 - 15, h / 2 - 8, '#546074');
+  const w = ISO.TILE_W * ART, h = ISO.TILE_H * ART;
+  fillDiamond(s, w / 2, h / 2, w / 2 - 7 * ART, h / 2 - 4 * ART, '#3a4252');
+  fillDiamond(s, w / 2, h / 2, w / 2 - 11 * ART, h / 2 - 6 * ART, '#d8a848');
+  fillDiamond(s, w / 2, h / 2, w / 2 - 15 * ART, h / 2 - 8 * ART, '#546074');
+  fillDiamond(s, w / 2, h / 2, w / 2 - 17 * ART, h / 2 - 9 * ART, shade('#546074', -0.15)); // inner bevel
   return s;
 }
 
@@ -662,6 +712,11 @@ export function buildStoolSprite() {
     box(0.66, 0.20, 0.80, 0.34, 0, 10, ...WOOD);
     box(0.20, 0.66, 0.34, 0.80, 0, 10, ...WOOD);
     box(0.66, 0.66, 0.80, 0.80, 0, 10, ...WOOD);
+    // Brass leg toe caps
+    box(0.19, 0.19, 0.35, 0.35, 0, 1.4, '#d8a848', '#b8863a', '#8c6224');
+    box(0.65, 0.19, 0.81, 0.35, 0, 1.4, '#d8a848', '#b8863a', '#8c6224');
+    box(0.19, 0.65, 0.35, 0.81, 0, 1.4, '#d8a848', '#b8863a', '#8c6224');
+    box(0.65, 0.65, 0.81, 0.81, 0, 1.4, '#d8a848', '#b8863a', '#8c6224');
     // Footrest cross-stretchers (z = 4 .. 6)
     box(0.22, 0.22, 0.78, 0.30, 4, 6, ...WOOD);
     box(0.22, 0.70, 0.78, 0.78, 4, 6, ...WOOD);
@@ -669,6 +724,10 @@ export function buildStoolSprite() {
     box(0.70, 0.22, 0.78, 0.78, 4, 6, ...WOOD);
     // Wooden seat base slab (z = 10 .. 12)
     box(0.16, 0.16, 0.84, 0.84, 10, 12, ...WOOD);
+    // Brass nailhead trim ring around the cushion base
+    for (const [a, b] of [[0.14, 0.18], [0.5, 0.18], [0.82, 0.18], [0.14, 0.82], [0.5, 0.82], [0.82, 0.82], [0.14, 0.5], [0.82, 0.5]]) {
+      box(a, b, a + 0.03, b + 0.03, 12, 12.6, '#f6c667', '#d8a442', '#a07424');
+    }
     // Tufted leather seat cushion (z = 12 .. 14)
     box(0.12, 0.12, 0.88, 0.88, 12, 14, '#e0b25e', '#caa05a', '#9e7a38');
     // Button tuft
@@ -692,23 +751,29 @@ export function buildSofaSprite(color = '#e2607a', rot = 0) {
     box(0.06, th - 0.18, 0.18, th - 0.06, 0, 3, ...WOOD);
     box(tw - 0.18, th - 0.18, tw - 0.06, th - 0.06, 0, 3, ...WOOD);
 
+    const gold = ['#f6c667', '#d8a442', '#a07424'];
+    const tuft = (x, y) => box(x - 0.04, y - 0.04, x + 0.04, y + 0.04, 13, 13.6, ...dk);
     if (r === 0) {
       // 2x1 facing down (+v): backrest on north edge
       box(0.04, 0.04, 1.96, 0.96, 3, 8, ...dk); // lower plinth
       box(0.04, 0.06, 1.96, 0.32, 8, 34, ...col); // backrest
       box(0.04, 0.32, 0.24, 0.96, 8, 22, ...col); // left armrest
       box(1.76, 0.32, 1.96, 0.96, 8, 22, ...col); // right armrest
+      box(0.04, 0.06, 1.96, 0.1, 32, 34, ...gold); // piping trim along the backrest crown
       // seat cushions (z = 8 .. 13)
       box(0.26, 0.32, 0.98, 0.94, 8, 13, ...lt);
       box(1.02, 0.32, 1.74, 0.94, 8, 13, ...lt);
+      tuft(0.62, 0.63); tuft(1.38, 0.63);
     } else if (r === 1) {
       // 1x2 facing right (+u): backrest on west edge
       box(0.04, 0.04, 0.96, 1.96, 3, 8, ...dk);
       box(0.06, 0.04, 0.32, 1.96, 8, 34, ...col);
       box(0.32, 0.04, 0.96, 0.24, 8, 22, ...col);
       box(0.32, 1.76, 0.96, 1.96, 8, 22, ...col);
+      box(0.06, 0.04, 0.1, 1.96, 32, 34, ...gold);
       box(0.32, 0.26, 0.94, 0.98, 8, 13, ...lt);
       box(0.32, 1.02, 0.94, 1.74, 8, 13, ...lt);
+      tuft(0.63, 0.62); tuft(0.63, 1.38);
     } else if (r === 2) {
       // 2x1 facing up (-v): backrest on south edge
       box(0.04, 0.04, 1.96, 0.96, 3, 8, ...dk);
@@ -717,6 +782,8 @@ export function buildSofaSprite(color = '#e2607a', rot = 0) {
       box(0.04, 0.04, 0.24, 0.68, 8, 22, ...col);
       box(1.76, 0.04, 1.96, 0.68, 8, 22, ...col);
       box(0.04, 0.68, 1.96, 0.94, 8, 34, ...col);
+      box(0.04, 0.9, 1.96, 0.94, 32, 34, ...gold);
+      tuft(0.62, 0.37); tuft(1.38, 0.37);
     } else {
       // 1x2 facing left (-u): backrest on east edge
       box(0.04, 0.04, 0.96, 1.96, 3, 8, ...dk);
@@ -725,6 +792,8 @@ export function buildSofaSprite(color = '#e2607a', rot = 0) {
       box(0.04, 0.04, 0.68, 0.24, 8, 22, ...col);
       box(0.04, 1.76, 0.68, 1.96, 8, 22, ...col);
       box(0.68, 0.04, 0.94, 1.96, 8, 34, ...col);
+      box(0.9, 0.04, 0.94, 1.96, 32, 34, ...gold);
+      tuft(0.37, 0.62); tuft(0.37, 1.38);
     }
   });
 }
@@ -735,11 +804,15 @@ export function buildLampSprite() {
     // Brushed chrome tiered pedestal base (z = 0 .. 8)
     box(0.24, 0.24, 0.76, 0.76, 0, 4, ...CHROME);
     box(0.30, 0.30, 0.70, 0.70, 4, 8, ...CHROME);
+    // Fine rib detailing on the base tier
+    box(0.24, 0.24, 0.76, 0.76, 1.6, 2.0, '#6c6c78', '#585864', '#444450');
     // Glowing liquid cylinder chamber (z = 8 .. 32)
     box(0.34, 0.34, 0.66, 0.66, 8, 32, '#ff9040', '#e06020', '#b03810');
     // Internal floating thermal lava blobs
     box(0.38, 0.38, 0.62, 0.62, 11, 17, '#ffea70', '#ffc040', '#d08020');
     box(0.40, 0.40, 0.60, 0.60, 23, 29, '#fff298', '#ffd450', '#e49424');
+    // Tiny rising bubble, only resolvable at the finer bake density
+    box(0.47, 0.47, 0.53, 0.53, 19, 21, '#fff8d0', '#ffe49a', '#e2b858');
     // Brushed chrome top cone & finial cap (z = 32 .. 42)
     box(0.30, 0.30, 0.70, 0.70, 32, 37, ...CHROME);
     box(0.38, 0.38, 0.62, 0.62, 37, 40, ...CHROME);
@@ -758,6 +831,8 @@ export function buildPlantSprite() {
     // Terracotta pot base and flared rim (z = 0 .. 14)
     box(0.28, 0.28, 0.72, 0.72, 0, 10, ...POT);
     box(0.24, 0.24, 0.76, 0.76, 10, 14, ...POT);
+    // Rim trim band, only resolvable at the finer bake density
+    box(0.24, 0.24, 0.76, 0.76, 13.4, 14, shade('#cc7d47', 0.22), shade('#b06532', 0.1), shade('#8c4b22', 0.1));
     // Dark nutrient soil (z = 13 .. 14)
     box(0.26, 0.26, 0.74, 0.74, 13, 14, ...SOIL);
     // Main stem core
@@ -767,9 +842,15 @@ export function buildPlantSprite() {
     box(0.42, 0.12, 0.70, 0.40, 20, 26, ...LEAF1); // north frond
     box(0.32, 0.60, 0.62, 0.88, 16, 22, ...LEAF2); // south frond
     box(0.60, 0.34, 0.88, 0.64, 17, 23, ...LEAF1); // east frond
+    // small leaf-tip sprigs for a fuller canopy
+    box(0.08, 0.36, 0.2, 0.46, 20, 23, ...LEAF2);
+    box(0.5, 0.08, 0.6, 0.2, 23, 26, ...LEAF1);
+    box(0.78, 0.4, 0.9, 0.5, 19, 22, ...LEAF1);
     // Mid & crown foliage tiers
     box(0.30, 0.30, 0.70, 0.70, 24, 30, ...LEAF1);
     box(0.40, 0.40, 0.60, 0.60, 30, 37, ...LEAF3);
+    // A single flower blossom accent
+    box(0.46, 0.46, 0.54, 0.54, 37, 39, '#ff8fb0', '#e56a90', '#c04870');
   });
 }
 
@@ -781,10 +862,18 @@ export function buildRugSprite() {
   const RUG_CREAM = ['#fff2a8', '#f6c667', '#c8922c'];
 
   return isoSprite(2, 2, 4, (box) => {
+    // Fringe tassels along the outer edge, only resolvable at the finer bake density
+    for (let i = 0; i < 8; i++) {
+      const t = 0.1 + i * 0.235;
+      box(t, -0.03, t + 0.07, 0.04, 0, 1, ...RUG_CREAM);
+      box(t, 1.96, t + 0.07, 2.03, 0, 1, ...RUG_CREAM);
+    }
     // Outer border thin cuboid (z = 0 .. 2)
     box(0.06, 0.06, 1.94, 1.94, 0, 2, ...RUG_BERRY);
     // Rose field (z = 0 .. 2)
     box(0.24, 0.24, 1.76, 1.76, 0, 2, ...RUG_ROSE);
+    // Fine woven lattice ring between the field and the inner panel
+    box(0.5, 0.5, 1.5, 1.5, 0, 2, ...RUG_GOLD);
     // Inner ruby panel (z = 0 .. 2)
     box(0.54, 0.54, 1.46, 1.46, 0, 2, ...RUG_BERRY);
     // Gold starburst medallion (z = 0 .. 2)
@@ -865,30 +954,39 @@ export function buildArmchairSprite(rot = 0) {
     // Base apron frame (z = 6 .. 8)
     box(0.12, 0.12, 0.88, 0.88, 6, 8, ...AMBER_DK);
 
+    const tuft = (x, y) => box(x - 0.04, y - 0.04, x + 0.04, y + 0.04, 12, 12.6, ...AMBER_DK);
     if (r === 0) {
       // Facing down (+v): backrest on north edge, arms on west/east
       box(0.10, 0.10, 0.90, 0.34, 8, 34, ...AMBER); // high backrest
       box(0.10, 0.34, 0.28, 0.90, 8, 22, ...AMBER); // left armrest
       box(0.72, 0.34, 0.90, 0.90, 8, 22, ...AMBER); // right armrest
+      box(0.10, 0.10, 0.90, 0.14, 30, 34, ...AMBER_DK); // piping trim at backrest crown
       box(0.28, 0.34, 0.72, 0.86, 8, 12, ...AMBER_LT); // plush cushion
+      tuft(0.5, 0.6);
     } else if (r === 1) {
       // Facing right (+u): backrest on west edge, arms on north/south
       box(0.10, 0.10, 0.34, 0.90, 8, 34, ...AMBER);
       box(0.34, 0.10, 0.90, 0.28, 8, 22, ...AMBER);
       box(0.34, 0.72, 0.90, 0.90, 8, 22, ...AMBER);
+      box(0.10, 0.10, 0.14, 0.90, 30, 34, ...AMBER_DK);
       box(0.34, 0.28, 0.86, 0.72, 8, 12, ...AMBER_LT);
+      tuft(0.6, 0.5);
     } else if (r === 2) {
       // Facing up (-v): backrest on south edge
       box(0.28, 0.14, 0.72, 0.66, 8, 12, ...AMBER_LT);
       box(0.10, 0.10, 0.28, 0.66, 8, 22, ...AMBER);
       box(0.72, 0.10, 0.90, 0.66, 8, 22, ...AMBER);
       box(0.10, 0.66, 0.90, 0.90, 8, 34, ...AMBER);
+      box(0.10, 0.86, 0.90, 0.90, 30, 34, ...AMBER_DK);
+      tuft(0.5, 0.4);
     } else {
       // Facing left (-u): backrest on east edge
       box(0.14, 0.28, 0.66, 0.72, 8, 12, ...AMBER_LT);
       box(0.10, 0.10, 0.66, 0.28, 8, 22, ...AMBER);
       box(0.10, 0.72, 0.66, 0.90, 8, 22, ...AMBER);
       box(0.66, 0.10, 0.90, 0.90, 8, 34, ...AMBER);
+      box(0.86, 0.10, 0.90, 0.90, 30, 34, ...AMBER_DK);
+      tuft(0.4, 0.5);
     }
   });
 }
@@ -930,8 +1028,12 @@ export function buildReceptionDesk(rot = 0) {
     box(0.04, 0.08, tw - 0.04, th - 0.08, 0, 4, '#7c4c22', '#643a16', '#48260c');
     // Paneled wooden counter body (z = 4 .. 24)
     box(0.06, 0.10, tw - 0.06, th - 0.10, 4, 24, ...WOOD);
+    // Fine brass inlay strip along the counter's upper panel edge
+    box(0.06, 0.10, tw - 0.06, th - 0.10, 20.5, 21, ...BELL);
     // Polished marble slab counter top with overhang (z = 24 .. 28)
     box(0.02, 0.05, tw - 0.02, th - 0.05, 24, 28, ...MARBLE);
+    // Gold edge trim along the marble slab rim, only resolvable at the finer bake density
+    box(0.02, 0.05, tw - 0.02, th - 0.05, 27.6, 28, ...BELL);
     // Brass counter service bell (z = 28 .. 33)
     box(tw / 2 - 0.12, th / 2 - 0.12, tw / 2 + 0.12, th / 2 + 0.12, 28, 33, ...BELL);
     // Guest register leather ledger book (z = 28 .. 30)
@@ -1329,13 +1431,17 @@ export function buildSuiteBedSprite(rot = 0) {
   return isoSprite(2, 2, 38, (box) => {
     box(0.06, 0.06, 1.94, 1.94, 0, 7, ...HEAD);
     box(0.10, 0.10, 1.90, 1.90, 7, 15, ...SHEET);
+    // fine piped edge along the duvet hem, only resolvable at the finer bake density
+    box(0.10, 0.10, 1.90, 1.90, 14.6, 15, '#e8e2d4', '#c8c0ae', '#9c9486');
     if (rot % 2 === 0) {
       box(0.06, 0.06, 1.94, 0.28, 7, 34, ...HEAD);
+      box(0.06, 0.06, 1.94, 0.28, 32, 32.6, '#8a5c38', '#6e4628', '#4e3018'); // headboard button-tuft trim
       box(0.10, 0.70, 1.90, 1.90, 8, 16, ...DUVET);
       box(0.24, 0.32, 0.92, 0.64, 15, 19, ...PILLOW);
       box(1.08, 0.32, 1.76, 0.64, 15, 19, ...PILLOW);
     } else {
       box(0.06, 0.06, 0.28, 1.94, 7, 34, ...HEAD);
+      box(0.06, 0.06, 0.28, 1.94, 32, 32.6, '#8a5c38', '#6e4628', '#4e3018');
       box(0.70, 0.10, 1.90, 1.90, 8, 16, ...DUVET);
       box(0.32, 0.24, 0.64, 0.92, 15, 19, ...PILLOW);
       box(0.32, 1.08, 0.64, 1.76, 15, 19, ...PILLOW);
@@ -1425,20 +1531,31 @@ export function buildDiningTableSprite(rot = 0) {
   return isoSprite(tw, th, 34, (box) => {
     box(0.20, 0.20, tw - 0.20, th - 0.20, 0, 18, ...WOOD);
     box(0.06, 0.08, tw - 0.06, th - 0.08, 18, 25, ...LINEN);
+    // linen hem shadow band, only resolvable at the finer bake density
+    box(0.06, 0.08, tw - 0.06, th - 0.08, 24.4, 25, shade('#e2dcd0', -0.14), shade('#bab2a4', -0.1), shade('#bab2a4', -0.2));
     box(tw / 2 - 0.10, th / 2 - 0.10, tw / 2 + 0.10, th / 2 + 0.10, 25, 31, ...GOLD);
     box(tw / 2 - 0.06, th / 2 - 0.06, tw / 2 + 0.06, th / 2 + 0.06, 31, 33, '#fff6a0', '#ffc840', '#d08818');
+    // two place settings flanking the centerpiece
+    const [px, py] = rot % 2 ? [tw / 2, th / 2 - 0.5] : [tw / 2 - 0.5, th / 2];
+    for (const s of [-1, 1]) {
+      const x = rot % 2 ? px : px + s * 0.32;
+      const y = rot % 2 ? py + s * 0.32 : py;
+      box(x - 0.1, y - 0.1, x + 0.1, y + 0.1, 25, 25.6, '#ffffff', '#e4e0da', '#c4c0ba');
+    }
   });
 }
 
 export function buildDiningChairSprite(rot = 0) {
   const r = ((rot % 4) + 4) % 4;
   const VELVET = ['#c83e58', '#a22840', '#721428'];
+  const PIPING = ['#f4c862', '#d2a03c', '#986c1c'];
   return isoSprite(1, 1, 34, (box) => {
     box(0.20, 0.20, 0.32, 0.32, 0, 10, ...WOOD);
     box(0.68, 0.20, 0.80, 0.32, 0, 10, ...WOOD);
     box(0.20, 0.68, 0.32, 0.80, 0, 10, ...WOOD);
     box(0.68, 0.68, 0.80, 0.80, 0, 10, ...WOOD);
     box(0.18, 0.18, 0.82, 0.82, 10, 14, ...VELVET);
+    box(0.18, 0.18, 0.82, 0.82, 13.5, 14, ...PIPING); // gold piping along the seat edge
     if (r === 0) box(0.18, 0.16, 0.82, 0.32, 14, 32, ...VELVET);
     else if (r === 1) box(0.16, 0.18, 0.32, 0.82, 14, 32, ...VELVET);
     else if (r === 2) box(0.18, 0.68, 0.82, 0.84, 14, 32, ...VELVET);
@@ -1493,6 +1610,10 @@ export function buildPoolWaterSprite(rot = 0) {
     // Animated surface ripples / caustics
     box(0.30, 0.40, 0.90, 0.60, 5, 6, ...FOAM);
     box(1.10, 1.30, 1.70, 1.50, 5, 6, ...FOAM);
+    // fine secondary caustic glints, only resolvable at the doubled bake density
+    box(0.55, 1.05, 0.75, 1.15, 5, 5.6, ...FOAM);
+    box(1.45, 0.25, 1.65, 0.35, 5, 5.6, ...FOAM);
+    box(0.15, 1.6, 0.3, 1.7, 5, 5.6, ...FOAM);
   });
 }
 

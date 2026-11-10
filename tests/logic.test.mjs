@@ -16,7 +16,7 @@ import { createDefaultState, loadState, saveState, resetState, sanitizePlacedIte
 import { getCatalogueItem, TILE, SAVE_VERSION, ROOMS, NPCS, CATALOGUE, SEED_FURNITURE, ITEM_CATEGORIES, ROOM_TIERS } from '../js/data.js';
 import { respondToMessage, findWanderTarget, createNpcRuntime, tickNpc } from '../js/npc.js';
 import { LOOKS, renderCharacter, buildParts } from '../js/voxel.js';
-import { buildWindowSegment, buildGlassBalustradeSegment, buildBookshelf, FURNITURE_BUILDERS } from '../js/sprites.js';
+import { buildWindowSegment, buildGlassBalustradeSegment, buildBookshelf, FURNITURE_BUILDERS, ART } from '../js/sprites.js';
 import {
   tileToScreen, computeOrigin, computeGroundDy, computeCityGroundDy,
   projectIsoCityPoint, buildIsoCityLayout, computeCityVehicles, drawBackground,
@@ -452,7 +452,7 @@ test('rendering: both wall window orientations generate nonempty bounded sprites
   for (const orientation of ['north', 'west']) {
     const s = buildWindowSegment('#e8d8c8', sky, orientation);
     assert.ok(s.w > 0 && s.h > 0, `invalid dimensions for ${orientation} window`);
-    assert.ok(s.w <= 128 && s.h <= 128, `unbounded dimensions for ${orientation} window`);
+    assert.ok(s.w <= 128 * ART && s.h <= 128 * ART, `unbounded dimensions for ${orientation} window`);
     let opaque = 0;
     for (const row of s.px) for (const p of row) if (p) opaque++;
     assert.ok(opaque > 0, `expected opaque pixels for ${orientation} window`);
@@ -1834,6 +1834,8 @@ test('v0.8.3 rooftop railing: glass balustrade segments stay within their tile h
   const west = buildGlassBalustradeSegment('west');
   const north = buildGlassBalustradeSegment('north');
 
+  const corner = 32 * ART; // half the (ART-scaled) tile width
+
   let westOpaqueCount = 0;
   let westOpaquePastCorner = 0;
   let westHasCornerPost = false;
@@ -1841,8 +1843,8 @@ test('v0.8.3 rooftop railing: glass balustrade segments stay within their tile h
     for (let x = 0; x < west.w; x++) {
       if (west.px[y][x]) {
         westOpaqueCount++;
-        if (x >= 32) westOpaquePastCorner++;
-        if (x === 31) westHasCornerPost = true;
+        if (x >= corner) westOpaquePastCorner++;
+        if (x === corner - 1) westHasCornerPost = true;
       }
     }
   }
@@ -1854,19 +1856,19 @@ test('v0.8.3 rooftop railing: glass balustrade segments stay within their tile h
     for (let x = 0; x < north.w; x++) {
       if (north.px[y][x]) {
         northOpaqueCount++;
-        if (x < 32) northOpaqueBeforeCorner++;
-        if (x === 32) northHasCornerPost = true;
+        if (x < corner) northOpaqueBeforeCorner++;
+        if (x === corner) northHasCornerPost = true;
       }
     }
   }
 
   assert.ok(westOpaqueCount > 0, 'west balustrade has pixels');
-  assert.equal(westOpaquePastCorner, 0, 'west balustrade must not stick out beyond x=32 into empty sky/floor');
-  assert.ok(westHasCornerPost, 'west balustrade reaches the corner post at x=31');
+  assert.equal(westOpaquePastCorner, 0, 'west balustrade must not stick out beyond the corner into empty sky/floor');
+  assert.ok(westHasCornerPost, 'west balustrade reaches the corner post');
 
   assert.ok(northOpaqueCount > 0, 'north balustrade has pixels');
-  assert.equal(northOpaqueBeforeCorner, 0, 'north balustrade must not stick out before x=32 into empty sky/floor');
-  assert.ok(northHasCornerPost, 'north balustrade starts at the corner post at x=32');
+  assert.equal(northOpaqueBeforeCorner, 0, 'north balustrade must not stick out before the corner into empty sky/floor');
+  assert.ok(northHasCornerPost, 'north balustrade starts at the corner post');
 });
 
 test('v0.8.3 music player: formatTime formats seconds to M:SS with zero-padding and handles edge cases', () => {

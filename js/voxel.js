@@ -262,6 +262,7 @@ function hairBoxes(look, add, z) {
     return;
   }
   hb(-5.5, 5.5, -5.1, 5.1, z(23), z(24.3)); // cap
+  add(-0.3, 0.3, -4.9, 4.9, z(24.3), z(24.7), sh(hc, 0.22)); // fine centre-parting sheen
   const long = st === 'long' || st === 'bob';
   const down = st === 'long' ? 15 : st === 'bob' ? 16 : 20.5;
   hb(5, 5.5, -4.6, long ? 3 : 1.8, z(down), z(23)); hb(-5.5, -5, -4.6, long ? 3 : 1.8, z(down), z(23));
@@ -286,19 +287,22 @@ function soleTex(g, W, H, fc) {
   g.fillRect(0, H - 0.55, W, 0.55);
   g.fillStyle = 'rgba(255,255,255,0.22)';
   g.fillRect(0.2, H - 0.85, W - 0.4, 0.25);
+  g.fillStyle = 'rgba(0,0,0,0.18)';
+  g.fillRect(0.15, H - 0.3, W - 0.3, 0.08); // fine welt stitch line
 }
 
 function voxTex(seed) {
+  const STEP = 0.5; // half-voxel grain: doubles the resolvable hair/fabric texture detail
   return (g, W, H) => { // per-voxel sheen + faint grid so hair reads as stacked voxels
-    for (let i = 0; i < W; i++) {
-      for (let j = 0; j < H; j++) {
+    for (let i = 0; i < W / STEP; i++) {
+      for (let j = 0; j < H / STEP; j++) {
         const r = (i * 31 + j * 17 + seed * 13) % 5;
         if (r > 1) continue;
         g.fillStyle = r ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.16)';
-        g.fillRect(i, j, Math.min(1, W - i), Math.min(1, H - j));
+        g.fillRect(i * STEP, j * STEP, Math.min(STEP, W - i * STEP), Math.min(STEP, H - j * STEP));
       }
     }
-    g.strokeStyle = 'rgba(0,0,0,0.13)'; g.lineWidth = 0.1;
+    g.strokeStyle = 'rgba(0,0,0,0.13)'; g.lineWidth = 0.08;
     g.beginPath();
     for (let i = 1; i < W; i++) { g.moveTo(i, 0); g.lineTo(i, H); }
     for (let j = 1; j < H; j++) { g.moveTo(0, j); g.lineTo(W, j); }
@@ -306,12 +310,18 @@ function voxTex(seed) {
   };
 }
 
-function cuffTex(color) { return (g, W, H, fc) => { g.fillStyle = fc(color); g.fillRect(0, H - 0.8, W, 0.8); }; }
+function cuffTex(color) {
+  return (g, W, H, fc) => {
+    g.fillStyle = fc(color); g.fillRect(0, H - 0.8, W, 0.8);
+    g.fillStyle = 'rgba(0,0,0,0.15)'; g.fillRect(0, H - 0.85, W, 0.07); // seam line
+  };
+}
 
 function lensTex(g, W, H, fc, face) {
   if (face !== 'front') return;
   g.fillStyle = fc('#bff3ff'); g.fillRect(0.4, 0.4, W - 0.8, H - 0.8);
   g.fillStyle = 'rgba(255,255,255,0.8)'; g.fillRect(0.7, 0.6, 0.8, 0.8);
+  g.fillStyle = 'rgba(255,255,255,0.4)'; g.fillRect(1.6, 1.3, 0.35, 0.35); // secondary sparkle
 }
 
 function headTex(look, pose = {}) {
@@ -319,13 +329,15 @@ function headTex(look, pose = {}) {
   return (g, W, H, fc, face) => {
     if (face === 'top' && look.hairStyle === 'bald') { // comb-over strands on the bald top
       g.fillStyle = fc(look.hair);
-      for (const [y, a, w] of [[1.5, 2, 6], [3, 1.5, 7], [4.5, 2, 6]]) g.fillRect(a, y, w, 0.35);
+      for (const [y, a, w] of [[1.2, 2, 6], [2.2, 1.7, 6.6], [3.2, 1.5, 7], [4.2, 1.8, 6.4], [5.2, 2, 6]]) g.fillRect(a, y, w, 0.28);
       return;
     }
     if (face === 'left' || face === 'right') {
       // Side temple hair sideburn & warm cheek contour (no duplicate side-eye on 3/4 view)
       g.fillStyle = fc(look.hair);
       g.fillRect(0, 0, W * 0.42, 2.6);
+      g.fillStyle = 'rgba(0,0,0,0.14)';
+      for (let k = 0; k < 3; k++) g.fillRect(W * 0.1 + k * W * 0.1, 0, 0.07, 2.6); // fine individual hair strands
       g.fillStyle = 'rgba(255,105,125,0.26)';
       g.fillRect(W - 2.4, 5.1, 1.5, 0.85);
       g.fillStyle = 'rgba(255,255,255,0.18)';
@@ -367,12 +379,15 @@ function headTex(look, pose = {}) {
         g.fillRect(ex + 0.55, 3.1, 0.68, 0.68);
         g.fillStyle = 'rgba(255,255,255,0.75)';
         g.fillRect(ex + 1.45, 3.95, 0.38, 0.38);
+        g.fillStyle = 'rgba(255,255,255,0.3)';
+        g.fillRect(ex + 0.85, 3.35, 0.24, 0.24); // secondary fine catchlight
       }
 
       if (look.lashes) {
         g.fillStyle = look.eye;
         g.fillRect(ex - 0.1, 2.55, 2.7, 0.45);
         g.fillRect(ex < 5 ? ex - 0.45 : ex + 2.5, 2.85, 0.42, 0.52);
+        for (const lt of [0.2, 1.1, 2.0]) g.fillRect(ex + lt, 2.28, 0.12, 0.32); // individual fine lash strokes
         g.fillStyle = look.brow;
         g.fillRect(ex, 1.95, 2.5, 0.4);
       } else if (!look.mustache) {
@@ -392,9 +407,14 @@ function headTex(look, pose = {}) {
       g.strokeStyle = '#3a3340'; g.lineWidth = 0.35;
       g.strokeRect(1.3, 2.5, 3.2, 2.5); g.strokeRect(5.5, 2.5, 3.2, 2.5);
       g.fillStyle = '#3a3340'; g.fillRect(4.5, 3.4, 1, 0.35);
+      g.fillStyle = 'rgba(255,255,255,0.35)';
+      g.fillRect(1.7, 2.8, 0.5, 0.5); g.fillRect(5.9, 2.8, 0.5, 0.5); // lens glint
     }
 
     if (look.mustache) return;
+    // fine philtrum shadow above the mouth
+    g.fillStyle = 'rgba(0,0,0,0.07)';
+    g.fillRect(4.7, 5.85, 0.6, 0.45);
     const m = action === 'eat'
       ? (actionFrame % 2 === 1 ? 'chew' : 'smile')
       : action === 'treadmill'
@@ -434,14 +454,20 @@ function torsoTex(look, skirtTier = false) {
       g.fillStyle = fc('#ffffff'); g.fillRect(mid - 0.9, 2.8, 1.8, 1.8);
       g.fillStyle = fc(sh(look.pants, 0.1)); g.fillRect(0, H - 1.2, W, 1.2);
       g.fillStyle = fc('#f6c667'); g.fillRect(mid - 0.5, H - 1.1, 1.0, 0.9);
+      g.fillStyle = 'rgba(0,0,0,0.08)'; g.fillRect(1.1, 0.9, 0.15, H - 2.1); g.fillRect(W - 1.25, 0.9, 0.15, H - 2.1); // side seams
     } else if (o === 'bellhop') {
       g.fillStyle = fc(look.gold); g.fillRect(0, 0, W, 0.7);
+      g.fillStyle = 'rgba(255,255,255,0.3)'; g.fillRect(0, 0.7, W, 0.1); // braid piping highlight
       g.fillStyle = fc(sh(look.shirt, -0.25)); g.fillRect(mid - 0.1, 0.7, 0.2, H);
       g.fillStyle = fc(look.gold);
       for (const a of [mid - 1.3, mid + 1.3]) for (const b of [1.8, 3.4, 5, 6.6]) g.fillRect(a - 0.35, b, 0.7, 0.7);
+      g.fillStyle = 'rgba(255,255,255,0.35)';
+      for (const a of [mid - 1.3, mid + 1.3]) for (const b of [1.8, 3.4, 5, 6.6]) g.fillRect(a - 0.12, b + 0.1, 0.22, 0.22); // button highlight
       g.fillStyle = fc('#2a2030'); g.fillRect(0, H - 1, W, 1);
     } else if (o === 'cardigan') {
       g.fillStyle = fc(look.under); g.fillRect(mid - 1.2, 0, 2.4, H);
+      g.fillStyle = 'rgba(0,0,0,0.08)';
+      for (let ry = 0.4; ry < H; ry += 0.8) g.fillRect(mid - 1.2, ry, 2.4, 0.1); // ribbed knit texture
       g.fillStyle = fc('#6b4a2e'); for (const b of [2, 4, 6]) g.fillRect(mid - 0.3, b, 0.6, 0.6);
       g.fillStyle = fc(sh(look.shirt, -0.2)); g.fillRect(mid - 1.2, 0, 0.3, H); g.fillRect(mid + 0.9, 0, 0.3, H);
       g.fillRect(0.5, 5, 1.6, 1.4); g.fillRect(W - 2.1, 5, 1.6, 1.4);
@@ -450,10 +476,17 @@ function torsoTex(look, skirtTier = false) {
       g.fillStyle = fc(sh(look.shirt, -0.3)); g.fillRect(mid - 0.1, 3.2, 0.2, H);
       g.fillStyle = fc(sh(look.shirt, -0.15)); g.fillRect(0.6, 5, 1.7, 1.5); g.fillRect(W - 2.3, 5, 1.7, 1.5);
       g.fillStyle = fc('#4da3ff'); g.fillRect(W - 2.3, 4.4, 0.4, 1); g.fillStyle = fc('#e04a4a'); g.fillRect(1, 1.8, 1.2, 0.7);
+      g.strokeStyle = 'rgba(0,0,0,0.15)'; g.lineWidth = 0.08;
+      g.beginPath(); g.moveTo(mid - 1.5, 0); g.lineTo(mid, 3.2); g.lineTo(mid + 1.5, 0); g.stroke(); // lapel stitch line
     } else if (o === 'dress') {
       g.fillStyle = fc(look.skin); g.fillRect(mid - 1.6, 0, 3.2, 1.1); g.fillRect(mid - 1, 1.1, 2, 0.5);
       g.fillStyle = fc('#ffffff'); for (const [a, b] of [[-1.8, 1.4], [-1.2, 2], [-0.4, 2.3], [0.4, 2.3], [1.2, 2], [1.8, 1.4]]) g.fillRect(mid + a - 0.25, b, 0.5, 0.5);
       g.fillStyle = fc('#c0304a'); g.fillRect(0, 5.4, W, 0.8);
+      g.fillStyle = 'rgba(255,255,255,0.18)'; g.fillRect(mid - 2.2, 2.6, 0.9, H - 2.8); // fabric sheen highlight
+    } else if (o === 'swimsuit') {
+      g.fillStyle = fc(sh(look.shirt, -0.22)); g.fillRect(mid - 1.4, -0.2, 2.8, 1.1); // scoop neckline trim
+      g.fillStyle = fc('#ffffff'); g.fillRect(mid - 0.35, 1.0, 0.7, H - 1.2); // racing stripe
+      g.fillStyle = 'rgba(255,255,255,0.18)'; g.fillRect(0.6, 1.2, 1.1, H - 2); // fabric sheen highlight
     }
   };
 }
