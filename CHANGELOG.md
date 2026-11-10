@@ -4,6 +4,32 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+
+## [0.8.9] - 2026-11-11
+
+#### Added
+
+- **Olympic-Style Lap Pool (Floor 5 Azure Pool & Spa)**:
+  - Standard Olympic-style lap pool proportioned to 50m × 25m ratio (12 tiles wide × 24 tiles long, 72 water units) with 4 lanes, lane ropes, deck edge, starting blocks with numbered lane badges 1–4, and chrome exit ladders.
+  - Changing room suite with louvered cedar privacy door and changing cubicles.
+  - Swimsuit gating: entering pool water is strictly blocked without a swimsuit with toast prompt "Change into your swimsuit first". Changing room cubicles and door toggle the swimsuit outfit.
+  - Swimsuit outfit rendering on avatar in water/deck, and visible to multiplayer peers via Realtime presence sync (`channel.track({ outfit })`).
+  - Pool interaction prompt with options: "Swim laps" (auto continuous swimming routine along pool lanes with lap counter, updating quest progress for gym/fitness goals), "Free roam" (free movement anywhere in water with animated swim strokes, waterline collar, wake ripples, and splashes), and "Exit pool" via ladder/steps onto deck.
+  - NPC Marina swims along pool lane stops with swimsuit rendering.
+- **Enclosed Azure Spa & Salon Suite (Floor 5)**:
+  - Enclosed spa room separated by frosted aquamarine glass partition walls with an arched glass entrance door leading from the pool deck.
+  - Antoine's Azure Salon: styling chair station and vanity wall mirrors; interact to choose from 5 hairstyles (classic, bob, ponytail, spiky, curls) and 6 hair dye hues for 20 coins, rendering distinct voxel geometry and hair colors.
+  - Massage therapy services: massage beds with relaxing lie-down animation and a restorative 2-minute "Relaxed & Energized" mood buff.
+  - Nordic cedar sauna cabin, reception desk, and zen decor.
+  - 3 Spa staff NPCs with full personalities, greet lines, ambient lines, and interactive dialogue topics: Antoine (Hair Stylist), Elena (Masseuse), and Yuki (Spa Receptionist).
+- **Mobile Polish for Touch Devices (390×844 & 360×780)**:
+  - Help/welcome overlay dynamically adapts on touch devices: changes "Click" to "Tap" and cleanly hides keyboard shortcuts.
+  - Responsive header layout at 360px viewport: cassette music player pill and zoom controls never collide or overlap, preserving comfortable spacing.
+  - Modal audits at 360×780: every modal (inventory/shop, elevator, quests, multiplayer, upgrade, guestbook, salon, arcade, pool prompt, help) fits within viewport with >=44px reachable top close buttons (`✕`).
+- **Tests & Verification**:
+  - 155 unit tests (`tests/logic.test.mjs`, `tests/multiplayer.unit.test.mjs`, `tests/arcade.unit.test.mjs`) passing with 100% success rate.
+  - Playwright smoke test (`tests/smoke.spec.mjs`) passing on desktop (1x, 2x DPR) and mobile portrait (390×844 and 360×780 with touch), verifying swimsuit gating, auto laps, pool exit, salon styling, massage bed buff, non-overlapping 360px top controls, and touch help prompts.
+
 ## [0.8.8] - 2026-11-11
 
 ### Added

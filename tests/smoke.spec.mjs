@@ -994,7 +994,17 @@ async function runMobilePortraitSmokeTest(browser) {
     const helpOpen = await page.locator('#helpOverlay:not(.hidden)').count();
     check('mobile: help overlay is shown initially on first run', helpOpen === 1);
     await checkOverflow('mobile: help overlay open');
-    await page.click('#btnHelpClose');
+
+    const helpText = await page.textContent('#helpOverlay');
+    check('mobile: help text says "Tap" instead of "Click" on touch', helpText.includes('Tap a floor tile') && !helpText.includes('Click a floor tile'));
+
+    const kbdHintVis = await page.evaluate(() => {
+      const el = document.querySelector('.kbd-hint');
+      return el && window.getComputedStyle(el).display !== 'none';
+    });
+    check('mobile: keyboard shortcuts row is hidden on touch devices', !kbdHintVis);
+
+    await page.click('#btnHelpCloseTop');
     await page.waitForTimeout(100);
     check('mobile: closing help overlay hides it', (await page.locator('#helpOverlay:not(.hidden)').count()) === 0);
 
@@ -1138,6 +1148,90 @@ async function runMobilePortraitSmokeTest(browser) {
     await page.click('#btnLeaderboardClose');
     await page.waitForTimeout(100);
     check('mobile: arcade leaderboard modal closes', await page.locator('#arcadeLeaderboardModal.hidden').count() === 1);
+
+    // 360x780 viewport layout & non-overlapping top controls check
+    await page.setViewportSize({ width: 360, height: 780 });
+    await page.waitForTimeout(100);
+
+    const mpBox360 = await page.locator('#musicPlayer').boundingBox();
+    const zoomBox360 = await page.locator('#zoomControls').boundingBox();
+    check(
+      'mobile 360px: cassette player and zoom controls do not overlap',
+      mpBox360 && zoomBox360 && (mpBox360.x + mpBox360.width < zoomBox360.x)
+    );
+
+    // 9. Salon modal & top close button
+    await page.evaluate(() => document.getElementById('salonModal')?.classList.remove('hidden'));
+    await page.waitForTimeout(100);
+    check('mobile: salon modal opens', (await page.locator('#salonModal:not(.hidden)').count()) === 1);
+    await checkOverflow('mobile: salon modal at 360x780');
+    await page.click('#btnSalonCloseTop');
+    await page.waitForTimeout(100);
+    check('mobile: salon modal closes via top close button', (await page.locator('#salonModal.hidden').count()) === 1);
+
+    // 10. Pool prompt modal & top close button
+    await page.evaluate(() => document.getElementById('poolPromptModal')?.classList.remove('hidden'));
+    await page.waitForTimeout(100);
+    check('mobile: pool prompt modal opens', (await page.locator('#poolPromptModal:not(.hidden)').count()) === 1);
+    await checkOverflow('mobile: pool prompt modal at 360x780');
+    await page.click('#btnPoolPromptClose');
+    await page.waitForTimeout(100);
+    check('mobile: pool prompt modal closes via top close button', (await page.locator('#poolPromptModal.hidden').count()) === 1);
+
+    // Restore 390x844 viewport for Pool & Spa gameplay tests
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.waitForTimeout(100);
+
+    // Floor 5 Azure Pool & Spa: travel via elevator
+    await page.click('#btnElevator');
+    await page.waitForTimeout(150);
+    await page.click('button[data-floor-room="pool"]');
+    await page.waitForTimeout(400);
+    const currentRoom = await page.evaluate(() => window.__pixelHotel.getState().room);
+    check('mobile: traveled to Floor 5 Azure Pool & Spa', currentRoom === 'pool');
+
+    // Swimsuit gating: walking onto water without swimsuit is blocked with toast
+    const walkWaterResult = await page.evaluate(() => window.__pixelHotel.walkTo(10, 16));
+    const toastText = await page.textContent('#toast');
+    check('mobile: entering pool without swimsuit is blocked with hint toast', walkWaterResult === false && toastText.includes('Change into your swimsuit first'));
+
+    // Changing room: toggle swimsuit outfit
+    await page.evaluate(() => window.__pixelHotel.setOutfit('swimsuit'));
+    const outfitAfterChange = await page.evaluate(() => window.__pixelHotel.getOutfit());
+    check('mobile: player changed into swimsuit', outfitAfterChange === 'swimsuit');
+
+    // Walking onto water with swimsuit now succeeds
+    const walkWaterSuccess = await page.evaluate(() => window.__pixelHotel.walkTo(10, 16));
+    check('mobile: entering water in swimsuit succeeds', walkWaterSuccess === true);
+
+    // Auto lap swimming
+    await page.evaluate(() => window.__pixelHotel.swimLaps());
+    const activityAfterLaps = await page.evaluate(() => window.__pixelHotel.getState().player.activity);
+    check('mobile: lap swimming starts swim activity', activityAfterLaps?.kind === 'swim');
+
+    // Exit pool via deck/steps
+    await page.evaluate(() => window.__pixelHotel.exitPool());
+    const activityAfterExit = await page.evaluate(() => window.__pixelHotel.getState().player.activity);
+    check('mobile: exiting pool clears swim activity', activityAfterExit === null);
+
+    // Antoine's Salon styling and hair dye
+    await page.evaluate(() => {
+      window.__pixelHotel.handleSalonStyle('ponytail');
+      window.__pixelHotel.handleSalonColor('#4aa3df');
+    });
+
+    // Massage bed interaction and mood buff
+    await page.evaluate(() => {
+      const s = window.__pixelHotel.getState();
+      const massageBed = s.rooms.pool.placed.find((p) => p.itemId === 'massage_bed');
+      if (massageBed) window.__pixelHotel.interactWith(massageBed.instanceId, true);
+    });
+    await page.waitForTimeout(200);
+    const playerStateAfterMassage = await page.evaluate(() => {
+      const s = window.__pixelHotel.getState();
+      return { lying: s.player.lying, sitting: s.player.sitting, buff: s.player.buff };
+    });
+    check('mobile: massage bed interaction sets lying pose and mood buff', (playerStateAfterMassage.lying === true || !!playerStateAfterMassage.sitting) && playerStateAfterMassage.buff?.name === 'Relaxed & Energized');
 
     // Chat dock & input with visualViewport
     await page.fill('#chatInput', 'mobile hello!');

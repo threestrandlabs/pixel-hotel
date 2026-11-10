@@ -381,6 +381,14 @@ html, body {
 .overlay-box h2 { color: #ffd27a; margin-top: 0; }
 .overlay-box li { margin-bottom: 6px; }
 .kbd-hint { font-size: 13px; color: #d5c8f8; }
+body.has-touch .kbd-hint {
+  display: none !important;
+}
+@media (pointer: coarse) {
+  .kbd-hint {
+    display: none !important;
+  }
+}
 kbd {
   background: #1b1430;
   border: 1px solid #5c4a96;
@@ -958,6 +966,10 @@ kbd {
     padding: 4px 10px;
   }
 
+  .kbd-hint {
+    display: none !important;
+  }
+
   /* Music player minimizes to a sleek small pill on mobile */
   .music-player {
     position: absolute;
@@ -965,9 +977,9 @@ kbd {
     left: 8px;
     bottom: auto;
     width: auto;
-    max-width: 220px;
+    max-width: calc(100vw - 145px);
     border-radius: 20px;
-    padding: 3px 8px;
+    padding: 3px 6px;
     background: rgba(20, 14, 40, 0.92);
     border: 2px solid #5c4a96;
     box-shadow: 0 4px 12px rgba(0,0,0,0.5);
@@ -983,19 +995,23 @@ kbd {
   }
   .music-player .mp-bar {
     padding: 2px;
-    gap: 6px;
+    gap: 4px;
   }
   .music-player .mp-title {
-    max-width: 105px;
-    font-size: 11.5px;
+    max-width: 72px;
+    font-size: 11px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .music-player .mp-controls {
-    gap: 3px;
+    gap: 2px;
   }
   .music-player .mp-controls .pixel-btn {
-    padding: 2px 6px;
+    padding: 2px 5px;
     font-size: 11px;
     min-height: 28px;
+    min-width: 24px;
   }
 
   /* Zoom controls: compact in top right */
@@ -1003,17 +1019,18 @@ kbd {
     top: 8px;
     right: 8px;
     padding: 2px 4px;
-    gap: 3px;
+    gap: 2px;
+    max-width: 135px;
   }
   #zoomControls .pixel-btn {
-    min-width: 28px;
+    min-width: 24px;
     min-height: 28px;
-    padding: 2px 6px;
-    font-size: 12px;
+    padding: 2px 4px;
+    font-size: 11.5px;
   }
   #zoomLevel {
-    font-size: 11px;
-    min-width: 34px;
+    font-size: 10.5px;
+    min-width: 28px;
   }
 
   /* Panels open as bottom sheets sliding up */
@@ -1090,8 +1107,9 @@ kbd {
     max-height: calc(100dvh - 32px) !important;
     border-radius: 12px;
   }
+  .panel-close,
   .elevator-modal-backdrop .panel-close,
-  #btnElevatorClose, #btnArcadeClose, #btnLeaderboardClose, #btnUpgradeClose, #btnSalonClose, #btnHelpClose {
+  #btnElevatorClose, #btnArcadeClose, #btnLeaderboardClose, #btnUpgradeClose, #btnSalonClose, #btnSalonCloseTop, #btnHelpClose, #btnHelpCloseTop, #btnPoolPromptClose {
     min-width: 44px;
     min-height: 44px;
     display: inline-flex;
@@ -1187,4 +1205,36 @@ kbd {
 }
 .leaderboard-row:hover {
   background: rgba(255, 255, 255, 0.05);
+}
+
+@media (max-width: 400px) {
+  .music-player {
+    left: 6px;
+    top: 6px;
+    padding: 2px 5px;
+    max-width: calc(100vw - 140px);
+  }
+  .music-player .mp-title {
+    max-width: 60px;
+    font-size: 10px;
+  }
+  .music-player .mp-eq {
+    display: none !important;
+  }
+  #zoomControls {
+    top: 6px;
+    right: 6px;
+    padding: 2px 3px;
+    gap: 2px;
+  }
+  #zoomControls .pixel-btn {
+    min-width: 22px;
+    min-height: 26px;
+    padding: 1px 3px;
+    font-size: 10.5px;
+  }
+  #zoomLevel {
+    font-size: 10px;
+    min-width: 26px;
+  }
 }

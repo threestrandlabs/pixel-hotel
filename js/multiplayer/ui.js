@@ -313,7 +313,7 @@ function subscribeChannel(code) {
         seen.add(userId);
         const meta = metas[metas.length - 1] || {};
         const prev = state.members.get(userId) || {};
-        state.members.set(userId, { ...prev, displayName: meta.displayName || prev.displayName });
+        state.members.set(userId, { ...prev, displayName: meta.displayName || prev.displayName, outfit: meta.outfit || prev.outfit || 'normal' });
       }
       for (const userId of Array.from(state.members.keys())) {
         if (!seen.has(userId)) {
@@ -364,7 +364,7 @@ function subscribeChannel(code) {
     })
     .subscribe((status) => {
       if (status === 'SUBSCRIBED') {
-        channel.track({ displayName: state.profile.display_name });
+        channel.track({ displayName: state.profile.display_name, outfit: state.host?.getPlayerOutfit?.() || 'normal' });
       }
     });
   return channel;
@@ -475,6 +475,13 @@ export function notifyLocalChat(text) {
   broadcastChatBubble(state.channel, text, { userId: state.profile.id, displayName: state.profile.display_name });
 }
 
+/** Broadcasts updated outfit to peers in party room presence. */
+export function updateLocalOutfit(outfit) {
+  if (state.channel && state.profile) {
+    state.channel.track({ displayName: state.profile.display_name, outfit: outfit || 'normal' });
+  }
+}
+
 /** Returns render-ready entities for every remote avatar currently in the shared party room. */
 export function getRemoteMultiplayerEntities(now) {
   if (!state.channel || !state.roomCode) return [];
@@ -488,10 +495,11 @@ export function getRemoteMultiplayerEntities(now) {
       id: `mp-${userId}`,
       x: pos.x, y: pos.y, dir: meta.dir || 'down', frame: 0, walking: false,
       sitting: false, lying: false, blink: false, breathe: 0,
-      action: null, actionFrame: 0, depth: undefined,
+      action: meta.action || (meta.outfit === 'swimsuit' ? 'swim' : null), actionFrame: 0, depth: undefined,
       spriteKey: 'player', kind: 'remote_player', color: '#7fd9ff',
       nameTag: meta.displayName || 'Guest',
       bubbleText: bubble && bubble.until > now ? bubble.text : null,
+      outfit: meta.outfit || 'normal',
     });
   }
   return list;

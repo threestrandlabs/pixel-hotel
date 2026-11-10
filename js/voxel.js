@@ -101,7 +101,7 @@ export function buildParts(look, pose = {}) {
     actionFrame = 0,
   } = pose;
   const isSwim = action === 'swim';
-  const isLie = lie || action === 'lie';
+  const isLie = lie || action === 'lie' || action === 'spa_massage';
   const isTreadmill = action === 'treadmill';
   const isEat = action === 'eat';
   const isUse = action === 'use';
@@ -214,7 +214,7 @@ export function buildParts(look, pose = {}) {
   add(-5, 5, -4.6, 4.6, 15 + hdz, 23 + hdz, look.skin, headTex(look, { blink: blink || isLie, action, actionFrame }));
   const z = (v) => v + hdz;
   add(-0.65, 0.65, 4.6, 5.35, z(17.2), z(18.5), sh(look.skin, -0.03));
-  const hairy = ['bob', 'long'].includes(look.hairStyle);
+  const hairy = ['bob', 'long', 'ponytail', 'curls'].includes(look.hairStyle);
   if (!hairy) for (const s of [-1, 1]) add(s > 0 ? 5 : -5.6, s > 0 ? 5.6 : -5, -0.6, 1, z(17.8), z(20), sh(look.skin, -0.05));
   hairBoxes(look, add, z);
   if (look.mustache) {
@@ -273,6 +273,19 @@ function hairBoxes(look, add, z) {
     for (const [x, y, h] of [[-3.5, -2.5, 2.6], [0, -1, 3.6], [3.2, -2.8, 2.4], [-2.8, 2.2, 2], [2.6, 2.4, 2.4], [0.2, 3.4, 1.8]]) {
       hb(x - 0.95, x + 0.95, y - 0.95, y + 0.95, z(24.3), z(24.3 + h));
     }
+  } else if (st === 'ponytail') {
+    hb(-1.8, 1.8, -6.6, -4.6, z(19), z(24)); // high ponytail puff extending back
+    hb(-1.4, 1.4, -7.2, -5.0, z(16), z(20.5)); // tail drop
+    add(-1.2, 1.2, -5.2, -4.6, z(21.5), z(23), '#ff5f8a'); // hair-tie band
+    hb(-5, 1.5, 4.6, 5.1, z(21.2), z(23)); hb(1.5, 5, 4.6, 5.1, z(22), z(23));
+  } else if (st === 'curls') {
+    for (const [cx, cy, cz] of [
+      [-4.5, -2, 23.5], [4.5, -2, 23.5], [-3, 3, 23.8], [3, 3, 23.8],
+      [-5.5, 0, 20], [5.5, 0, 20], [-5.2, -3.5, 18], [5.2, -3.5, 18],
+    ]) {
+      hb(cx - 1.2, cx + 1.2, cy - 1.2, cy + 1.2, z(cz), z(cz + 2.4));
+    }
+    hb(-5, 1.5, 4.6, 5.1, z(21), z(23)); hb(1.5, 5, 4.6, 5.1, z(21.5), z(23));
   } else if (st === 'long') {
     hb(-5, 2, 4.6, 5.1, z(21), z(23)); hb(2, 5, 4.6, 5.1, z(22), z(23));
   } else {

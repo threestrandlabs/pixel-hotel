@@ -256,11 +256,14 @@
   </aside>
 
   <div id="helpOverlay" class="overlay hidden">
-    <div class="overlay-box">
-      <h2>Welcome to Pixel Hotel!</h2>
+    <div class="overlay-box" style="position: relative;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+        <h2 style="margin: 0;">Welcome to Pixel Hotel!</h2>
+        <button class="panel-close" id="btnHelpCloseTop" data-close="helpOverlay">✕</button>
+      </div>
       <ul>
-        <li><b>Click a floor tile</b> to walk there.</li>
-        <li><b>Click a chair/sofa/bed</b> to walk over and sit.</li>
+        <li><b class="help-action-walk">Click a floor tile</b> to walk there.</li>
+        <li><b class="help-action-sit">Click a chair/sofa/bed</b> to walk over and sit.</li>
         <li><b>🛗 Elevator (<kbd>E</kbd>)</b> — ride between all 10 tower floors, facilities, and <b>My Room</b>!</li>
         <li><b>Type in the chat box</b> and press Enter to talk — nearby guests reply!</li>
         <li><b>🛋️ Items</b> — buy furniture, then place/move/rotate/pick it up in your suite or any room.</li>
@@ -272,8 +275,11 @@
   </div>
 
   <div id="poolPromptModal" class="overlay hidden">
-    <div class="overlay-box" style="max-width: 380px; text-align: center;">
-      <h2>🏊 Azure Olympic Pool</h2>
+    <div class="overlay-box" style="max-width: 380px; text-align: center; position: relative;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+        <h2 style="margin: 0; font-size: 16px;">🏊 Azure Olympic Pool</h2>
+        <button class="panel-close" id="btnPoolPromptClose" data-close="poolPromptModal">✕</button>
+      </div>
       <p>Heated Olympic lap pool with 25m lanes. Choose an activity:</p>
       <div style="display:flex; flex-direction:column; gap:10px; margin: 16px 0;">
         <button id="btnPoolSwimLaps" class="pixel-btn">🏊 Swim Laps (Automatic Lap Routine)</button>
@@ -284,8 +290,11 @@
   </div>
 
   <div id="salonModal" class="overlay hidden">
-    <div class="overlay-box" style="max-width: 440px; text-align: center;">
-      <h2>💇 Antoine's Azure Salon</h2>
+    <div class="overlay-box" style="max-width: 440px; text-align: center; position: relative;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+        <h2 style="margin: 0; font-size: 16px;">💇 Antoine's Azure Salon</h2>
+        <button class="panel-close" id="btnSalonCloseTop" data-close="salonModal">✕</button>
+      </div>
       <p>Transform your look with a stylish haircut or vibrant dye! <b>Cost: 20 Coins</b></p>
       <div style="margin: 14px 0; text-align: left;">
         <h4 style="margin: 6px 0;">Select Hairstyle</h4>

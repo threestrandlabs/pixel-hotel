@@ -2106,11 +2106,35 @@ export function buildKitchenPass(rot = 0) {
 export function buildStartingBlock(rot = 0) {
   const BLOCK = ['#3888d8', '#2064aa', '#124478'];
   const TOP = ['#f4f8fc', '#d0e0f0', '#9cb4cc'];
+  const NUM_BG = ['#10243c', '#0c1a2c', '#08121e'];
+  const NUM = ['#ffffff', '#e0eaf4', '#b0c0d0'];
+  const laneNum = ((rot % 4 + 4) % 4) + 1;
   return isoSprite(1, 1, 24, (box) => {
     box(0.20, 0.20, 0.80, 0.80, 0, 16, ...BLOCK);
     box(0.16, 0.16, 0.84, 0.84, 16, 20, ...TOP); // Grippy platform
     // Stainless step handle
     box(0.35, 0.10, 0.65, 0.20, 16, 24, '#d8e0e8', '#b0b8c2', '#7c848e');
+    // Number plaque on front face facing pool
+    box(0.32, 0.79, 0.68, 0.81, 3, 14, ...NUM_BG);
+    if (laneNum === 1) {
+      box(0.46, 0.79, 0.54, 0.82, 4, 13, ...NUM);
+    } else if (laneNum === 2) {
+      box(0.38, 0.79, 0.62, 0.82, 11, 13, ...NUM);
+      box(0.54, 0.79, 0.62, 0.82, 8, 11, ...NUM);
+      box(0.38, 0.79, 0.62, 0.82, 7, 9, ...NUM);
+      box(0.38, 0.79, 0.46, 0.82, 5, 7, ...NUM);
+      box(0.38, 0.79, 0.62, 0.82, 3, 5, ...NUM);
+    } else if (laneNum === 3) {
+      box(0.38, 0.79, 0.62, 0.82, 11, 13, ...NUM);
+      box(0.54, 0.79, 0.62, 0.82, 8, 11, ...NUM);
+      box(0.38, 0.79, 0.62, 0.82, 7, 9, ...NUM);
+      box(0.54, 0.79, 0.62, 0.82, 5, 7, ...NUM);
+      box(0.38, 0.79, 0.62, 0.82, 3, 5, ...NUM);
+    } else { // 4
+      box(0.38, 0.79, 0.46, 0.82, 8, 13, ...NUM);
+      box(0.38, 0.79, 0.62, 0.82, 7, 9, ...NUM);
+      box(0.54, 0.79, 0.62, 0.82, 3, 13, ...NUM);
+    }
   });
 }
 
@@ -2222,6 +2246,65 @@ export function buildMassageBed(rot = 0) {
       box(0.20, 0.30, 0.65, 0.70, 22, 26, ...TOWEL);
     } else {
       box(0.30, 0.20, 0.70, 0.65, 22, 26, ...TOWEL);
+    }
+  });
+}
+
+export function buildChangingRoomDoor(rot = 0) {
+  const FRAME = ['#7c522e', '#5a3b20', '#3e2816'];
+  const SLAT = ['#a06c3c', '#84542c', '#5e3c1e'];
+  const BRASS = ['#ffd268', '#d4a43c', '#9e7820'];
+  return isoSprite(1, 1, 54, (box) => {
+    // Outer door jamb frame
+    box(0.08, 0.08, 0.92, 0.20, 0, 52, ...FRAME);
+    box(0.08, 0.20, 0.20, 0.92, 0, 52, ...FRAME);
+    box(0.80, 0.20, 0.92, 0.92, 0, 52, ...FRAME);
+    box(0.20, 0.20, 0.80, 0.32, 50, 54, ...FRAME);
+    // Louvered panel slats
+    box(0.20, 0.40, 0.80, 0.48, 6, 48, ...SLAT);
+    // Brass handle & cabin signage plaque
+    box(0.72, 0.36, 0.78, 0.52, 22, 28, ...BRASS);
+    box(0.38, 0.36, 0.62, 0.50, 36, 42, ...BRASS);
+  });
+}
+
+export function buildSpaPartition(rot = 0) {
+  const FRAME = ['#4a3424', '#362418', '#241810'];
+  const GLASS = ['#a4deda', '#7accc6', '#52aba4'];
+  const CHROME = ['#dce6ee', '#b2c0cc', '#7c8c9a'];
+  return isoSprite(1, 1, 52, (box) => {
+    // Corner posts
+    box(0.06, 0.06, 0.22, 0.22, 0, 50, ...FRAME);
+    box(0.78, 0.78, 0.94, 0.94, 0, 50, ...FRAME);
+    // Lower solid plinth
+    box(0.06, 0.06, 0.94, 0.94, 0, 8, ...FRAME);
+    // Frosted glass partition screen
+    box(0.12, 0.12, 0.88, 0.88, 8, 48, ...GLASS);
+    // Top coping trim
+    box(0.04, 0.04, 0.96, 0.96, 48, 52, ...CHROME);
+  });
+}
+
+export function buildSpaDoor(rot = 0) {
+  const [tw, th] = rot % 2 ? [1, 2] : [2, 1];
+  const BRONZE = ['#6e4a2c', '#4e341e', '#322012'];
+  const SIGN = ['#103840', '#0a242a', '#06161a'];
+  const GOLD = ['#ffd478', '#dca848', '#9e7428'];
+  return isoSprite(tw, th, 58, (box) => {
+    // Two side pillars leaving the center open for walking through
+    if (rot % 2 === 0) {
+      box(0.04, 0.12, 0.28, th - 0.12, 0, 54, ...BRONZE);
+      box(tw - 0.28, 0.12, tw - 0.04, th - 0.12, 0, 54, ...BRONZE);
+      // Arched lintel header beam spanning overhead
+      box(0.04, 0.10, tw - 0.04, th - 0.10, 46, 56, ...BRONZE);
+      box(0.35, 0.08, tw - 0.35, th - 0.08, 48, 54, ...SIGN); // "AZURE SPA" sign
+      box(0.40, 0.06, tw - 0.40, th - 0.06, 49, 53, ...GOLD);
+    } else {
+      box(0.12, 0.04, tw - 0.12, 0.28, 0, 54, ...BRONZE);
+      box(0.12, th - 0.28, tw - 0.12, th - 0.04, 0, 54, ...BRONZE);
+      box(0.10, 0.04, tw - 0.10, th - 0.04, 46, 56, ...BRONZE);
+      box(0.08, 0.35, tw - 0.08, th - 0.35, 48, 54, ...SIGN);
+      box(0.06, 0.40, tw - 0.06, th - 0.40, 49, 53, ...GOLD);
     }
   });
 }
@@ -2517,8 +2600,11 @@ export const FURNITURE_BUILDERS = {
   poolLounger: (rot) => buildPoolLounger(rot),
   poolUmbrella: (rot) => buildPoolUmbrella(rot),
   changingCubicle: (rot) => buildChangingCubicle(rot),
+  changingRoomDoor: (rot) => buildChangingRoomDoor(rot),
   salonChair: (rot) => buildSalonChair(rot),
   massageBed: (rot) => buildMassageBed(rot),
+  spaPartition: (rot) => buildSpaPartition(rot),
+  spaDoor: (rot) => buildSpaDoor(rot),
   pergola: (rot) => buildPergola(rot),
   arcadeReserved: (rot) => buildArcadeReserved(rot),
   // v0.8.7 Arcade Cabinets & Leaderboard

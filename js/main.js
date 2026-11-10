@@ -16,6 +16,7 @@ import {
 import { audio, formatTime, trackForRoom } from './audio.js';
 import {
   initMultiplayerUI, getRemoteMultiplayerEntities, tickMultiplayer, notifyLocalChat, publishOwnRoomSnapshot,
+  updateLocalOutfit,
 } from './multiplayer/ui.js';
 import { getSupabaseClient } from './multiplayer/client.js';
 import {
@@ -363,7 +364,7 @@ function applyInteractionArrival(mover, pending, isPlayer = false, immediate = f
   // Counters/tables/bars use kind 'eat' too (standing use), so only a true seat item
   // (item.seat) should render the sitting pose — see tests/logic.test.mjs "never seats".
   const isSeatPose = Boolean(item?.seat) && (kind === 'sit' || kind === 'eat');
-  const isLiePose = kind === 'lie';
+  const isLiePose = kind === 'lie' || kind === 'spa_massage';
   mover.sitting = (isSeatPose || isLiePose) ? placed.instanceId : null;
   mover.lying = isLiePose;
   mover.activity = {
@@ -391,16 +392,20 @@ function applyInteractionArrival(mover, pending, isPlayer = false, immediate = f
       showToast(roomRuntime.lightsOn ? `${item.name} turned on.` : `${item.name} turned off.`);
       saveState(window.localStorage, state);
     }
-    if (placed.itemId === 'changing_cubicle') {
+    if (placed.itemId === 'changing_cubicle' || placed.itemId === 'changing_room_door' || item?.interaction === 'swimsuit_change') {
       state.player.outfit = state.player.outfit === 'swimsuit' ? 'normal' : 'swimsuit';
       player.outfit = state.player.outfit;
       showToast(state.player.outfit === 'swimsuit' ? 'Changed into your swimsuit! 🩱' : 'Changed back into regular clothes. 👕');
+      updateLocalOutfit(state.player.outfit);
       saveState(window.localStorage, state);
       if (state.player.room === 'myroom') publishOwnRoomSnapshot({ tier: state.player.roomTier || 1, placed: state.rooms.myroom.placed });
     }
     if (placed.itemId === 'pool_water') {
       if (immediate) freeRoamPool();
       else showPoolActivityPrompt();
+    }
+    if (placed.itemId === 'pool_ladder') {
+      exitPool();
     }
     if (placed.itemId === 'salon_chair') {
       if (!immediate) openSalonModal();
@@ -415,8 +420,8 @@ function applyInteractionArrival(mover, pending, isPlayer = false, immediate = f
       openArcadeLeaderboard('noodle_snake', 'local');
     }
     if (placed.itemId === 'massage_bed') {
-      showToast('Relaxing massage... feeling energized! ✨ (+Mood buff)');
-      state.player.buff = { name: 'Relaxed & Energized', expiresAt: Date.now() + 60000 };
+      showToast('Relaxing massage... feeling energized! ✨ (+Mood buff: Relaxed & Energized)');
+      state.player.buff = { name: 'Relaxed & Energized', expiresAt: Date.now() + 120000 };
       saveState(window.localStorage, state);
     }
     persistPlayerPos();
@@ -428,31 +433,38 @@ function startLapSwimming() {
   if (lapSwimTimer) clearTimeout(lapSwimTimer);
   player.activity = { kind: 'swim', loop: true, startedAt: performance.now() };
   state.player.activity = player.activity;
-  const laneX = player.x >= 6 && player.x <= 20 ? player.x : 10;
+  const lanes = [7, 10, 13, 16];
+  const laneX = lanes.reduce((prev, curr) => Math.abs(curr - player.x) < Math.abs(prev - player.x) ? curr : prev, 10);
   const room = currentRoomDef();
   const roomRuntime = currentRoomRuntime();
   const occ = occupantTilesExcluding('player', null);
   const blocked = isBlockedFactory(room, roomRuntime, occ, true);
 
-  walkMoverTo(player, laneX, 24, room, blocked, { nearestFallback: false });
+  walkMoverTo(player, laneX, 32, room, blocked, { nearestFallback: false });
   showToast('Swimming laps along the pool lane... 🏊');
 
+  let headingDeep = true;
   const checkLap = () => {
     if (state.player.room !== 'pool') return;
-    if (Math.abs(player.y - 24) <= 1 && !player.walking) {
+    if (player.activity?.kind !== 'swim') return;
+    if (headingDeep && Math.abs(player.y - 32) <= 1 && !player.walking) {
+      headingDeep = false;
       walkMoverTo(player, laneX, 11, room, blocked, { nearestFallback: false });
       lapSwimTimer = setTimeout(checkLap, 800);
-    } else if (Math.abs(player.y - 11) <= 1 && !player.walking) {
+    } else if (!headingDeep && Math.abs(player.y - 11) <= 1 && !player.walking) {
+      headingDeep = true;
       state.stats.lapsCompleted = (state.stats.lapsCompleted || 0) + 1;
       showToast(`Completed lap ${state.stats.lapsCompleted}! 🏊`);
       onQuestProgress(advanceQuestsByType(state, 'visit_gym', 1));
       onQuestProgress(advanceQuestsByType(state, 'swim_laps', 1));
       saveState(window.localStorage, state);
-    } else if (player.walking) {
+      walkMoverTo(player, laneX, 32, room, blocked, { nearestFallback: false });
       lapSwimTimer = setTimeout(checkLap, 800);
+    } else {
+      lapSwimTimer = setTimeout(checkLap, 600);
     }
   };
-  lapSwimTimer = setTimeout(checkLap, 1000);
+  lapSwimTimer = setTimeout(checkLap, 800);
 }
 
 function freeRoamPool() {
@@ -468,7 +480,9 @@ function exitPool() {
   const roomRuntime = currentRoomRuntime();
   const occ = occupantTilesExcluding('player', null);
   const blocked = isBlockedFactory(room, roomRuntime, occ, true);
-  walkMoverTo(player, 5, player.y, room, blocked);
+  const targetX = player.x <= 11 ? 5 : 18;
+  const targetY = Math.min(Math.max(player.y, 10), 32);
+  walkMoverTo(player, targetX, targetY, room, blocked);
   player.activity = null;
   state.player.activity = null;
   showToast('Exited the pool onto the stone deck.');
@@ -801,6 +815,10 @@ function onPlayerArrive() {
       startedAt: performance.now(),
     };
     state.player.activity = player.activity;
+  } else if (player.activity?.kind === 'swim') {
+    player.activity = null;
+    state.player.activity = null;
+    if (lapSwimTimer) { clearTimeout(lapSwimTimer); lapSwimTimer = null; }
   }
   if (cell === TILE.DOOR) {
     const doorDef = room.doors.find((d) => d.x === player.x && d.y === player.y);
@@ -1131,8 +1149,11 @@ function computeActionFrame(action, now, offset = 0) {
 
 function buildEntities(now = performance.now()) {
   const list = [];
+  const roomDef = currentRoomDef();
+  const roomRuntime = currentRoomRuntime();
   const pOff = entityPhaseOffset('player');
-  const pAction = !player.walking && player.activity ? player.activity.kind : null;
+  const inWater = isWaterTile(roomDef, roomRuntime, Math.round(player.renderX), Math.round(player.renderY));
+  const pAction = (inWater || player.activity?.kind === 'swim') ? 'swim' : (!player.walking && player.activity ? player.activity.kind : null);
   list.push({
     id: 'player',
     x: player.renderX, y: player.renderY, dir: player.dir, frame: player.frame, walking: player.walking,
@@ -1149,7 +1170,8 @@ function buildEntities(now = performance.now()) {
   for (const n of npcRuntimes) {
     if (n.room !== state.player.room) continue;
     const nOff = entityPhaseOffset(n.id);
-    const nAction = !n.walking && n.activity ? n.activity.kind : null;
+    const nInWater = isWaterTile(roomDef, roomRuntime, Math.round(n.renderX), Math.round(n.renderY));
+    const nAction = (nInWater || n.activity?.kind === 'swim') ? 'swim' : (!n.walking && n.activity ? n.activity.kind : null);
     list.push({
       id: n.id,
       x: n.renderX, y: n.renderY, dir: n.dir, frame: n.frame, walking: n.walking,
@@ -1178,7 +1200,7 @@ function frame(now) {
   syncCanvasSize();
   tickNpcs(now);
   const room0 = currentRoomDef();
-  const playerBlocked = isBlockedFactory(room0, currentRoomRuntime(), occupantTilesExcluding('player', null));
+  const playerBlocked = isBlockedFactory(room0, currentRoomRuntime(), occupantTilesExcluding('player', null), true);
   advanceMover(player, now, {
     width: room0.width, height: room0.height, isBlocked: playerBlocked, stepMs: STEP_MS, onArrive: onPlayerArrive,
   });
@@ -2181,6 +2203,7 @@ function init() {
   initMultiplayerUI({
     switchRoom: (roomId) => switchRoom(roomId),
     getPlayerRoom: () => state.player.room,
+    getPlayerOutfit: () => state.player.outfit || 'normal',
     onRemoteChat: (who, text) => pushChatLine(who, text),
     getMyRoomPlaced: () => state.rooms.myroom.placed,
     enterVisitScene: (displayName, roomData) => enterVisitScene(displayName, roomData),
@@ -2191,6 +2214,13 @@ function init() {
     getClient: () => getSupabaseClient(),
     showToast: (msg) => showToast(msg),
   });
+  const isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || (window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+  if (isTouch) {
+    document.body.classList.add('has-touch');
+    document.querySelectorAll('.help-action-walk').forEach((el) => { el.textContent = 'Tap a floor tile'; });
+    document.querySelectorAll('.help-action-sit').forEach((el) => { el.textContent = 'Tap a chair/sofa/bed'; });
+    document.querySelectorAll('.kbd-hint').forEach((el) => { el.style.display = 'none'; });
+  }
   requestAnimationFrame(frame);
 }
 init();
@@ -2209,6 +2239,7 @@ window.__pixelHotel = {
       sitting: player.sitting,
       lying: !!player.lying,
       activity: player.activity,
+      buff: state.player.buff,
     },
     inventory: state.inventory,
     rooms: state.rooms,
@@ -2233,7 +2264,7 @@ window.__pixelHotel = {
     refreshAudioUi();
   }, // 0.5 noon, 0 midnight
   getSaveVersion: () => SAVE_VERSION,
-  getVersion: () => '0.8.8',
+  getVersion: () => '0.8.9',
   getRemoteMultiplayer: () => getRemoteMultiplayerEntities(performance.now()),
   walkTo: (x, y) => tryWalkPlayer(x, y),
   interactWith: (itemIdOrInstanceId, immediate = false) => {
@@ -2265,6 +2296,8 @@ window.__pixelHotel = {
   swimLaps: () => startLapSwimming(),
   freeRoamPool: () => freeRoamPool(),
   exitPool: () => exitPool(),
+  handleSalonStyle: (style) => handleSalonStyle(style),
+  handleSalonColor: (color) => handleSalonColor(color),
   openArcadeGame: (gameId) => openArcadeGame(gameId),
   closeArcadeGame: () => closeArcadeGame(),
   openArcadeLeaderboard: (gameId, scope) => openArcadeLeaderboard(gameId, scope),

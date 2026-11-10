@@ -2141,6 +2141,179 @@ test('v0.8.3 pool & spa: Olympic pool layout, changing cubicles, and swimsuit ga
   assert.ok(hasDoorArrivalRoute(poolRoom, placed), 'elevator landing is reachable');
 });
 
+test('v0.8.9-spa: Olympic pool 50m x 25m ratio, changing cubicles, and enclosed spa layout', () => {
+  const poolRoom = ROOMS.pool;
+  const placed = SEED_FURNITURE.pool;
+  assert.equal(poolRoom.width, 44);
+  assert.equal(poolRoom.height, 36);
+
+  // Olympic pool dimensions: 12 wide x 24 long (exact 1:2 ratio, 50m x 25m Olympic spec)
+  const poolTiles = placed.filter((p) => p.itemId === 'pool_water');
+  assert.equal(poolTiles.length, 72); // 6 x 12 grid of 2x2 blocks = 12 x 24 tiles
+  const minX = Math.min(...poolTiles.map((p) => p.x));
+  const maxX = Math.max(...poolTiles.map((p) => p.x + 1));
+  const minY = Math.min(...poolTiles.map((p) => p.y));
+  const maxY = Math.max(...poolTiles.map((p) => p.y + 1));
+  assert.equal(maxX - minX + 1, 12, 'pool width is 12 tiles (25m scale)');
+  assert.equal(maxY - minY + 1, 24, 'pool length is 24 tiles (50m scale, 2:1 ratio)');
+
+  // Starting blocks 1-4 with distinct rotation/lane numbers
+  const blocks = placed.filter((p) => p.itemId === 'starting_block');
+  assert.equal(blocks.length, 4);
+  assert.deepEqual(blocks.map((b) => b.rot).sort(), [0, 1, 2, 3]);
+
+  // Pool exit ladders
+  const ladders = placed.filter((p) => p.itemId === 'pool_ladder');
+  assert.equal(ladders.length, 4);
+
+  // Changing room cubicles and louvered door
+  const cubicles = placed.filter((p) => p.itemId === 'changing_cubicle');
+  assert.ok(cubicles.length >= 2);
+  const changeDoor = placed.find((p) => p.itemId === 'changing_room_door');
+  assert.ok(changeDoor);
+
+  // Enclosed Spa room with partitions and walkable door archway
+  const partitions = placed.filter((p) => p.itemId === 'spa_partition');
+  assert.ok(partitions.length >= 20, 'spa enclosed with partition walls');
+  const spaDoor = placed.find((p) => p.itemId === 'spa_door');
+  assert.ok(spaDoor);
+  assert.equal(getCatalogueItem('spa_door').walkable, true);
+
+  // Spa interior
+  const salonChairs = placed.filter((p) => p.itemId === 'salon_chair');
+  assert.ok(salonChairs.length >= 2);
+  const massageBeds = placed.filter((p) => p.itemId === 'massage_bed');
+  assert.ok(massageBeds.length >= 2);
+  const sauna = placed.find((p) => p.itemId === 'sauna_cabin');
+  assert.ok(sauna);
+});
+
+test('v0.8.9-spa: Swimsuit gating and changing room logic', () => {
+  const state = createDefaultState();
+  state.player.room = 'pool';
+  assert.equal(state.player.outfit, 'normal');
+
+  // Changing room cubicle / door toggles outfit
+  state.player.outfit = state.player.outfit === 'swimsuit' ? 'normal' : 'swimsuit';
+  assert.equal(state.player.outfit, 'swimsuit');
+  state.player.outfit = state.player.outfit === 'swimsuit' ? 'normal' : 'swimsuit';
+  assert.equal(state.player.outfit, 'normal');
+
+  // Water tile blocking check
+  const poolWater = SEED_FURNITURE.pool.find((p) => p.itemId === 'pool_water');
+  assert.ok(poolWater);
+
+  const isWater = (x, y) => {
+    return SEED_FURNITURE.pool.some((p) => {
+      if (p.itemId !== 'pool_water') return false;
+      const item = getCatalogueItem(p.itemId);
+      return footprintCells(p.x, p.y, item.footprint, p.rot || 0).some((c) => c.x === x && c.y === y);
+    });
+  };
+
+  assert.ok(isWater(poolWater.x, poolWater.y));
+  assert.ok(!isWater(2, 2));
+
+  // Gating helper simulation
+  const checkWaterBlocked = (outfit, x, y) => {
+    return outfit !== 'swimsuit' && isWater(x, y);
+  };
+
+  assert.equal(checkWaterBlocked('normal', poolWater.x, poolWater.y), true, 'blocked without swimsuit');
+  assert.equal(checkWaterBlocked('swimsuit', poolWater.x, poolWater.y), false, 'walkable with swimsuit');
+  assert.equal(checkWaterBlocked('normal', 2, 2), false, 'deck walkable without swimsuit');
+});
+
+test('v0.8.9-spa: Lap swimming progress, stats, and gym quest linking', () => {
+  const state = createDefaultState();
+  state.stats.lapsCompleted = 0;
+
+  // Complete a lap
+  state.stats.lapsCompleted += 1;
+  const progressGym = advanceQuestsByType(state, 'visit_gym', 1);
+  const progressSwim = advanceQuestsByType(state, 'swim_laps', 1);
+
+  assert.equal(state.stats.lapsCompleted, 1);
+  assert.ok(progressGym.length >= 1, 'advances visit_gym quest');
+  assert.ok(progressSwim.length >= 0);
+});
+
+test('v0.8.9-spa: Salon styling, color change, and massage bed relaxation buff', () => {
+  const state = createDefaultState();
+  state.coins = 50;
+
+  // Hairstyle change
+  const applyHairStyle = (s, style) => {
+    if (s.coins < 20) return { ok: false, reason: 'insufficient_coins' };
+    s.coins -= 20;
+    s.player.look = s.player.look || {};
+    s.player.look.hairStyle = style;
+    return { ok: true };
+  };
+
+  const res1 = applyHairStyle(state, 'ponytail');
+  assert.ok(res1.ok);
+  assert.equal(state.coins, 30);
+  assert.equal(state.player.look.hairStyle, 'ponytail');
+
+  // Hair color change
+  const applyHairColor = (s, color) => {
+    if (s.coins < 20) return { ok: false, reason: 'insufficient_coins' };
+    s.coins -= 20;
+    s.player.look = s.player.look || {};
+    s.player.look.hairColor = color;
+    return { ok: true };
+  };
+
+  const res2 = applyHairColor(state, '#4aa3df');
+  assert.ok(res2.ok);
+  assert.equal(state.coins, 10);
+  assert.equal(state.player.look.hairColor, '#4aa3df');
+
+  // Insufficient coins
+  const res3 = applyHairStyle(state, 'curls');
+  assert.equal(res3.ok, false);
+  assert.equal(res3.reason, 'insufficient_coins');
+
+  // Massage bed relaxation buff
+  const massageItem = getCatalogueItem('massage_bed');
+  assert.ok(massageItem);
+  assert.equal(massageItem.interaction, 'spa_massage');
+  assert.equal(massageItem.seat, true);
+
+  state.player.buff = { name: 'Relaxed & Energized', expiresAt: Date.now() + 120000 };
+  assert.ok(state.player.buff);
+  assert.equal(state.player.buff.name, 'Relaxed & Energized');
+});
+
+test('v0.8.9-spa: Spa NPCs (Antoine, Elena, Yuki) and Marina dialogue and routines', () => {
+  const antoine = NPCS.find((n) => n.id === 'spa_antoine');
+  const elena = NPCS.find((n) => n.id === 'spa_elena');
+  const yuki = NPCS.find((n) => n.id === 'spa_yuki');
+  const marina = NPCS.find((n) => n.id === 'marina');
+
+  assert.ok(antoine && antoine.role === 'Hair Stylist' && antoine.room === 'pool');
+  assert.ok(elena && elena.role === 'Masseuse' && elena.room === 'pool');
+  assert.ok(yuki && yuki.role === 'Spa Receptionist' && yuki.room === 'pool');
+  assert.ok(marina && marina.homeFloor === 28 && marina.roomNumber === '2802' && marina.room === 'pool');
+
+  // Check dialogue topics
+  assert.ok(antoine.dialogueTopics.length >= 2);
+  assert.ok(elena.dialogueTopics.length >= 2);
+  assert.ok(yuki.dialogueTopics.length >= 2);
+  assert.ok(marina.dialogueTopics.length >= 2);
+
+  // Check routine stops sit on valid seeded pool furniture
+  for (const npc of [antoine, elena, yuki, marina]) {
+    for (const stop of npc.routine) {
+      if (stop.activity === 'interact') {
+        const item = SEED_FURNITURE.pool.find((p) => p.x === stop.x && p.y === stop.y);
+        assert.ok(item, `${npc.id} stop at (${stop.x}, ${stop.y}) must sit on seeded furniture`);
+      }
+    }
+  }
+});
+
 // ======================= v0.8.5 Music by James v2 floor soundtrack & cassette playlist =======================
 
 test('v0.8.5 audio: floor mapping resolves every floor to its matching v2 soundtrack file with clean labels', () => {

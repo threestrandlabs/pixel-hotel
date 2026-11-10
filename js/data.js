@@ -553,8 +553,11 @@ export const CATALOGUE = [
   { id: 'pool_lounger', name: 'Cushioned Pool Lounger', price: 40, category: 'seating', footprint: { w: 1, h: 2 }, seat: true, sitDir: 0, interaction: 'sit', seatOffsets: [{ dx: 0, dy: 0 }, { dx: 0, dy: 1 }], spriteKey: 'poolLounger', unlockRequires: null, description: 'Ergonomic poolside sunbed with waterproof turquoise cushion.' },
   { id: 'pool_umbrella', name: 'Resort Sun Umbrella', price: 45, category: 'outdoor_pool', footprint: { w: 1, h: 1 }, seat: false, interaction: 'use', spriteKey: 'poolUmbrella', unlockRequires: null, description: 'Wide hexagonal canvas parasol casting shade across the pool deck.' },
   { id: 'changing_cubicle', name: 'Changing Room Cubicle', price: 65, category: 'outdoor_pool', footprint: { w: 2, h: 2 }, seat: false, interaction: 'swimsuit_change', spriteKey: 'changingCubicle', unlockRequires: null, description: 'Private louvered wooden changing booth for slipping into swimsuits.' },
+  { id: 'changing_room_door', name: 'Changing Room Louvered Door', price: 45, category: 'outdoor_pool', footprint: { w: 1, h: 1 }, seat: false, interaction: 'swimsuit_change', spriteKey: 'changingRoomDoor', unlockRequires: null, description: 'Louvered cedar door to the private changing cubicles. Use to change into or out of your swimsuit.' },
   { id: 'salon_chair', name: 'Salon Styling Chair', price: 55, category: 'seating', footprint: { w: 1, h: 1 }, seat: true, sitDir: 2, interaction: 'salon_styling', seatOffsets: [{ dx: 0, dy: 0 }], spriteKey: 'salonChair', unlockRequires: null, description: 'Hydraulic barber and salon chair for haircuts and styling consultations.' },
   { id: 'massage_bed', name: 'Spa Massage Bed', price: 70, category: 'seating', footprint: { w: 1, h: 2 }, seat: true, sitDir: 0, interaction: 'spa_massage', seatOffsets: [{ dx: 0, dy: 0 }, { dx: 0, dy: 1 }], spriteKey: 'massageBed', unlockRequires: null, description: 'Padded treatment table draped in white linens with lavender aromatherapy.' },
+  { id: 'spa_partition', name: 'Spa Glass Partition Wall', price: 40, category: 'decor', footprint: { w: 1, h: 1 }, seat: false, spriteKey: 'spaPartition', unlockRequires: null, description: 'Frosted aquamarine glass partition wall with brushed bronze framing.' },
+  { id: 'spa_door', name: 'Spa Glass Door Archway', price: 50, category: 'decor', footprint: { w: 2, h: 1 }, seat: false, walkable: true, spriteKey: 'spaDoor', unlockRequires: null, description: 'Arched glass doorway portal leading from the pool deck into the Azure Spa.' },
   { id: 'pergola', name: 'Garden Pergola with Vines', price: 85, category: 'plants', footprint: { w: 2, h: 2 }, seat: false, flat: true, walkable: true, spriteKey: 'pergola', unlockRequires: null, description: 'Timber garden arbor draped with flowering wisteria and jasmine vines.' },
   { id: 'arcade_reserved', name: 'Reserved Arcade Zone', price: 0, category: 'decor', footprint: { w: 4, h: 2 }, seat: false, flat: true, walkable: true, spriteKey: 'arcadeReserved', unlockRequires: null, description: 'Marked open floor area reserved for upcoming arcade cabinets and games.' },
   // v0.8.7 Arcade Cabinets & Leaderboard
@@ -729,103 +732,178 @@ export const SEED_FURNITURE = {
     { itemId: 'plant', x: 1, y: 13, rot: 0 },
   ],
   pool: [
-    // Changing cubicles & amenities near entrance
+    // Changing room & amenities near entrance (cubicles, louvered door, towel racks, bench)
     { itemId: 'towel_rack', x: 10, y: 2, rot: 0 },
     { itemId: 'changing_cubicle', x: 12, y: 2, rot: 0 },
     { itemId: 'changing_cubicle', x: 15, y: 2, rot: 0 },
+    { itemId: 'changing_room_door', x: 14, y: 4, rot: 0 },
     { itemId: 'towel_rack', x: 21, y: 2, rot: 0 },
-    { itemId: 'garden_bench', x: 13, y: 5, rot: 0 },
-    // Olympic lap pool starting blocks
+    { itemId: 'garden_bench', x: 12, y: 5, rot: 0 },
+
+    // Standard Olympic-style lap pool (50m x 25m ratio = 24 x 12 tiles, 4 lanes)
+    // Starting blocks with lane numbers 1-4 (rot 0..3)
     { itemId: 'starting_block', x: 7, y: 9, rot: 0 },
-    { itemId: 'starting_block', x: 11, y: 9, rot: 0 },
-    { itemId: 'starting_block', x: 15, y: 9, rot: 0 },
-    { itemId: 'starting_block', x: 19, y: 9, rot: 0 },
-    // Olympic lap pool water (7x8 grid of 2x2 blocks = 14x16 water area)
+    { itemId: 'starting_block', x: 10, y: 9, rot: 1 },
+    { itemId: 'starting_block', x: 13, y: 9, rot: 2 },
+    { itemId: 'starting_block', x: 16, y: 9, rot: 3 },
+
+    // 12x6 grid of 2x2 blocks = 24 tiles long (y=10..33) by 12 tiles wide (x=6..17)
     { itemId: 'pool_water', x: 6, y: 10, rot: 0 },
     { itemId: 'pool_water', x: 8, y: 10, rot: 0 },
     { itemId: 'pool_water', x: 10, y: 10, rot: 0 },
     { itemId: 'pool_water', x: 12, y: 10, rot: 0 },
     { itemId: 'pool_water', x: 14, y: 10, rot: 0 },
     { itemId: 'pool_water', x: 16, y: 10, rot: 0 },
-    { itemId: 'pool_water', x: 18, y: 10, rot: 0 },
+
     { itemId: 'pool_water', x: 6, y: 12, rot: 0 },
     { itemId: 'pool_water', x: 8, y: 12, rot: 0 },
     { itemId: 'pool_water', x: 10, y: 12, rot: 0 },
     { itemId: 'pool_water', x: 12, y: 12, rot: 0 },
     { itemId: 'pool_water', x: 14, y: 12, rot: 0 },
     { itemId: 'pool_water', x: 16, y: 12, rot: 0 },
-    { itemId: 'pool_water', x: 18, y: 12, rot: 0 },
+
     { itemId: 'pool_water', x: 6, y: 14, rot: 0 },
     { itemId: 'pool_water', x: 8, y: 14, rot: 0 },
     { itemId: 'pool_water', x: 10, y: 14, rot: 0 },
     { itemId: 'pool_water', x: 12, y: 14, rot: 0 },
     { itemId: 'pool_water', x: 14, y: 14, rot: 0 },
     { itemId: 'pool_water', x: 16, y: 14, rot: 0 },
-    { itemId: 'pool_water', x: 18, y: 14, rot: 0 },
+
     { itemId: 'pool_water', x: 6, y: 16, rot: 0 },
     { itemId: 'pool_water', x: 8, y: 16, rot: 0 },
     { itemId: 'pool_water', x: 10, y: 16, rot: 0 },
     { itemId: 'pool_water', x: 12, y: 16, rot: 0 },
     { itemId: 'pool_water', x: 14, y: 16, rot: 0 },
     { itemId: 'pool_water', x: 16, y: 16, rot: 0 },
-    { itemId: 'pool_water', x: 18, y: 16, rot: 0 },
+
     { itemId: 'pool_water', x: 6, y: 18, rot: 0 },
     { itemId: 'pool_water', x: 8, y: 18, rot: 0 },
     { itemId: 'pool_water', x: 10, y: 18, rot: 0 },
     { itemId: 'pool_water', x: 12, y: 18, rot: 0 },
     { itemId: 'pool_water', x: 14, y: 18, rot: 0 },
     { itemId: 'pool_water', x: 16, y: 18, rot: 0 },
-    { itemId: 'pool_water', x: 18, y: 18, rot: 0 },
+
     { itemId: 'pool_water', x: 6, y: 20, rot: 0 },
     { itemId: 'pool_water', x: 8, y: 20, rot: 0 },
     { itemId: 'pool_water', x: 10, y: 20, rot: 0 },
     { itemId: 'pool_water', x: 12, y: 20, rot: 0 },
     { itemId: 'pool_water', x: 14, y: 20, rot: 0 },
     { itemId: 'pool_water', x: 16, y: 20, rot: 0 },
-    { itemId: 'pool_water', x: 18, y: 20, rot: 0 },
+
     { itemId: 'pool_water', x: 6, y: 22, rot: 0 },
     { itemId: 'pool_water', x: 8, y: 22, rot: 0 },
     { itemId: 'pool_water', x: 10, y: 22, rot: 0 },
     { itemId: 'pool_water', x: 12, y: 22, rot: 0 },
     { itemId: 'pool_water', x: 14, y: 22, rot: 0 },
     { itemId: 'pool_water', x: 16, y: 22, rot: 0 },
-    { itemId: 'pool_water', x: 18, y: 22, rot: 0 },
+
     { itemId: 'pool_water', x: 6, y: 24, rot: 0 },
     { itemId: 'pool_water', x: 8, y: 24, rot: 0 },
     { itemId: 'pool_water', x: 10, y: 24, rot: 0 },
     { itemId: 'pool_water', x: 12, y: 24, rot: 0 },
     { itemId: 'pool_water', x: 14, y: 24, rot: 0 },
     { itemId: 'pool_water', x: 16, y: 24, rot: 0 },
-    { itemId: 'pool_water', x: 18, y: 24, rot: 0 },
-    // Ladders at corners
+
+    { itemId: 'pool_water', x: 6, y: 26, rot: 0 },
+    { itemId: 'pool_water', x: 8, y: 26, rot: 0 },
+    { itemId: 'pool_water', x: 10, y: 26, rot: 0 },
+    { itemId: 'pool_water', x: 12, y: 26, rot: 0 },
+    { itemId: 'pool_water', x: 14, y: 26, rot: 0 },
+    { itemId: 'pool_water', x: 16, y: 26, rot: 0 },
+
+    { itemId: 'pool_water', x: 6, y: 28, rot: 0 },
+    { itemId: 'pool_water', x: 8, y: 28, rot: 0 },
+    { itemId: 'pool_water', x: 10, y: 28, rot: 0 },
+    { itemId: 'pool_water', x: 12, y: 28, rot: 0 },
+    { itemId: 'pool_water', x: 14, y: 28, rot: 0 },
+    { itemId: 'pool_water', x: 16, y: 28, rot: 0 },
+
+    { itemId: 'pool_water', x: 6, y: 30, rot: 0 },
+    { itemId: 'pool_water', x: 8, y: 30, rot: 0 },
+    { itemId: 'pool_water', x: 10, y: 30, rot: 0 },
+    { itemId: 'pool_water', x: 12, y: 30, rot: 0 },
+    { itemId: 'pool_water', x: 14, y: 30, rot: 0 },
+    { itemId: 'pool_water', x: 16, y: 30, rot: 0 },
+
+    { itemId: 'pool_water', x: 6, y: 32, rot: 0 },
+    { itemId: 'pool_water', x: 8, y: 32, rot: 0 },
+    { itemId: 'pool_water', x: 10, y: 32, rot: 0 },
+    { itemId: 'pool_water', x: 12, y: 32, rot: 0 },
+    { itemId: 'pool_water', x: 14, y: 32, rot: 0 },
+    { itemId: 'pool_water', x: 16, y: 32, rot: 0 },
+
+    // Chrome pool exit ladders at deck edge
     { itemId: 'pool_ladder', x: 5, y: 10, rot: 0 },
-    { itemId: 'pool_ladder', x: 21, y: 10, rot: 0 },
-    { itemId: 'pool_ladder', x: 5, y: 24, rot: 0 },
-    { itemId: 'pool_ladder', x: 21, y: 24, rot: 0 },
-    // Deck loungers & umbrellas
+    { itemId: 'pool_ladder', x: 18, y: 10, rot: 0 },
+    { itemId: 'pool_ladder', x: 5, y: 32, rot: 0 },
+    { itemId: 'pool_ladder', x: 18, y: 32, rot: 0 },
+
+    // West deck loungers & umbrellas
     { itemId: 'pool_lounger', x: 3, y: 11, rot: 0 },
     { itemId: 'pool_lounger', x: 3, y: 14, rot: 0 },
     { itemId: 'pool_lounger', x: 3, y: 17, rot: 0 },
     { itemId: 'pool_lounger', x: 3, y: 20, rot: 0 },
     { itemId: 'pool_lounger', x: 3, y: 23, rot: 0 },
+    { itemId: 'pool_lounger', x: 3, y: 26, rot: 0 },
+    { itemId: 'pool_lounger', x: 3, y: 29, rot: 0 },
     { itemId: 'pool_umbrella', x: 2, y: 11, rot: 0 },
     { itemId: 'pool_umbrella', x: 2, y: 17, rot: 0 },
     { itemId: 'pool_umbrella', x: 2, y: 23, rot: 0 },
-    // Enclosed Spa & Salon Room (x=26..42)
+    { itemId: 'pool_umbrella', x: 2, y: 29, rot: 0 },
+
+    // Enclosed Spa & Salon Room:
+    // Partition walls separating pool deck from spa room along x=24
+    { itemId: 'spa_partition', x: 24, y: 2, rot: 0 },
+    { itemId: 'spa_partition', x: 24, y: 3, rot: 0 },
+    { itemId: 'spa_partition', x: 24, y: 4, rot: 0 },
+    { itemId: 'spa_partition', x: 24, y: 5, rot: 0 },
+    { itemId: 'spa_partition', x: 24, y: 6, rot: 0 },
+    { itemId: 'spa_partition', x: 24, y: 7, rot: 0 },
+    { itemId: 'spa_partition', x: 24, y: 8, rot: 0 },
+    { itemId: 'spa_partition', x: 24, y: 9, rot: 0 },
+    { itemId: 'spa_partition', x: 24, y: 10, rot: 0 },
+    { itemId: 'spa_partition', x: 24, y: 11, rot: 0 },
+    { itemId: 'spa_partition', x: 24, y: 12, rot: 0 },
+    { itemId: 'spa_partition', x: 24, y: 13, rot: 0 },
+    // Walk-through glass spa doorway arch leading into the spa (walkable: true)
+    { itemId: 'spa_door', x: 24, y: 14, rot: 1 },
+    // Partition wall continues along x=24 south of the door
+    { itemId: 'spa_partition', x: 24, y: 16, rot: 0 },
+    { itemId: 'spa_partition', x: 24, y: 17, rot: 0 },
+    { itemId: 'spa_partition', x: 24, y: 18, rot: 0 },
+    { itemId: 'spa_partition', x: 24, y: 19, rot: 0 },
+    { itemId: 'spa_partition', x: 24, y: 20, rot: 0 },
+    { itemId: 'spa_partition', x: 24, y: 21, rot: 0 },
+    { itemId: 'spa_partition', x: 24, y: 22, rot: 0 },
+    { itemId: 'spa_partition', x: 24, y: 23, rot: 0 },
+    { itemId: 'spa_partition', x: 24, y: 24, rot: 0 },
+    { itemId: 'spa_partition', x: 24, y: 25, rot: 0 },
+    { itemId: 'spa_partition', x: 24, y: 26, rot: 0 },
+    { itemId: 'spa_partition', x: 24, y: 27, rot: 0 },
+
+    // Inside the Enclosed Azure Spa Room (x=26..42)
+    // Salon styling station (chairs + vanity mirrors)
     { itemId: 'salon_chair', x: 30, y: 6, rot: 0 },
     { itemId: 'salon_chair', x: 34, y: 6, rot: 0 },
     { itemId: 'gym_mirror', x: 30, y: 5, rot: 0 },
     { itemId: 'gym_mirror', x: 34, y: 5, rot: 0 },
-    { itemId: 'massage_bed', x: 34, y: 13, rot: 0 },
-    { itemId: 'massage_bed', x: 38, y: 13, rot: 0 },
-    { itemId: 'plant', x: 41, y: 13, rot: 0 },
-    { itemId: 'reception_desk', x: 28, y: 20, rot: 0 },
-    { itemId: 'sauna_cabin', x: 38, y: 22, rot: 0 },
-    { itemId: 'towel_rack', x: 41, y: 22, rot: 0 },
+
+    // Salon waiting lounge
     { itemId: 'rug', x: 28, y: 10, rot: 0 },
     { itemId: 'armchair', x: 28, y: 10, rot: 1 },
     { itemId: 'armchair', x: 31, y: 10, rot: 3 },
     { itemId: 'lamp', x: 27, y: 9, rot: 0 },
+
+    // Massage services (massage beds with lie-down animation & mood buff)
+    { itemId: 'massage_bed', x: 34, y: 13, rot: 0 },
+    { itemId: 'massage_bed', x: 38, y: 13, rot: 0 },
+    { itemId: 'plant', x: 41, y: 13, rot: 0 },
+
+    // Nordic cedar sauna & spa amenities
+    { itemId: 'reception_desk', x: 28, y: 20, rot: 0 },
+    { itemId: 'plant', x: 26, y: 20, rot: 0 },
+    { itemId: 'sauna_cabin', x: 38, y: 22, rot: 0 },
+    { itemId: 'towel_rack', x: 41, y: 22, rot: 0 },
   ],
   arcade: [
     { itemId: 'arcade_snake_1', x: 2, y: 2, rot: 0 },
@@ -1299,6 +1377,18 @@ export const NPCS = [
       hello: ['Welcome to Azure Salon! Sit in the styling chair whenever you are ready!'],
       hair: ['Click the salon chair and pick your favourite style or hair hue!'],
     },
+    dialogueTopics: [
+      {
+        id: 'hair_styling',
+        label: '💇 Hairstyle & Color Change',
+        reply: 'Bonjour darling! Sit right in my salon chair. Choose a classic, bob, spiky, ponytail, curls or flowing long style and vibrant dye for 20 coins!',
+      },
+      {
+        id: 'styling_consult',
+        label: '✨ Styling Advice',
+        reply: 'A fresh cut or dye completely transforms your aura! Step into my chair anytime.',
+      },
+    ],
   },
   {
     id: 'spa_elena',
@@ -1322,6 +1412,18 @@ export const NPCS = [
       hello: ['Welcome. Let the stress melt away on our heated treatment beds.'],
       massage: ['Click either massage bed to lie down and receive a restorative mood buff!'],
     },
+    dialogueTopics: [
+      {
+        id: 'spa_massage',
+        label: '💆 Restorative Massage Treatment',
+        reply: 'Lie down on our massage beds for a gentle lavender treatment that restores your mood and energy!',
+      },
+      {
+        id: 'wellness_tips',
+        label: '🌿 Wellness & Recovery',
+        reply: 'Swimming laps in the Olympic pool followed by a calming massage is the hotel\'s finest rejuvenation ritual.',
+      },
+    ],
   },
   {
     id: 'spa_yuki',
@@ -1344,6 +1446,18 @@ export const NPCS = [
     keywords: {
       hello: ['Welcome to Floor 5! Salon services to your left, massage therapy to your right.'],
     },
+    dialogueTopics: [
+      {
+        id: 'spa_menu',
+        label: '📋 Spa & Salon Menu',
+        reply: 'Welcome to Azure Spa! Antoine manages our salon styling, Elena offers restorative massage therapy, and our Nordic sauna is open 24/7.',
+      },
+      {
+        id: 'pool_rules',
+        label: '🩱 Pool Guidelines',
+        reply: 'Please stop by the changing room cubicles to slip into your swimsuit before entering the water. Towel caddies are provided on deck.',
+      },
+    ],
   },
   {
     id: 'clara',
@@ -1524,6 +1638,10 @@ export const NPCS = [
       { x: 8, y: 14, activity: 'interact', dwell: [1500, 3000] },
       { x: 8, y: 18, activity: 'interact', dwell: [1500, 3000] },
       { x: 8, y: 22, activity: 'interact', dwell: [1500, 3000] },
+      { x: 8, y: 26, activity: 'interact', dwell: [1500, 3000] },
+      { x: 8, y: 30, activity: 'interact', dwell: [1500, 3000] },
+      { x: 12, y: 30, activity: 'interact', dwell: [1500, 3000] },
+      { x: 12, y: 26, activity: 'interact', dwell: [1500, 3000] },
       { x: 12, y: 22, activity: 'interact', dwell: [1500, 3000] },
       { x: 12, y: 18, activity: 'interact', dwell: [1500, 3000] },
       { x: 12, y: 14, activity: 'interact', dwell: [1500, 3000] },
@@ -1540,6 +1658,18 @@ export const NPCS = [
       swim: ['Be sure to use the changing cubicles to slip on your swimsuit before diving in!'],
       room: ['I stay in Room 2802 on Floor 28.'],
     },
+    dialogueTopics: [
+      {
+        id: 'lap_routine',
+        label: '🏊 Olympic Lap Routine',
+        reply: 'The 50m x 25m Olympic ratio is sublime! I swim down Lane 1 and return along Lane 2 for my daily sets.',
+      },
+      {
+        id: 'swimsuit_gating',
+        label: '🩱 Swimsuit Gating',
+        reply: 'Remember to slip into your swimsuit at the changing cubicles near the entrance before entering the water!',
+      },
+    ],
   },
   {
     id: 'flora',

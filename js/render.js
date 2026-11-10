@@ -1623,7 +1623,7 @@ function drawCharacter(ctx, e, screenX, screenY, dpr = 1, room = null) {
   const pose = {
     stride,
     sit: !!e.sitting,
-    lie: !!e.lying || e.action === 'lie',
+    lie: !!e.lying || e.action === 'lie' || e.action === 'spa_massage',
     blink: !!e.blink,
     breathe: e.breathe || 0,
     action: e.action || null,
