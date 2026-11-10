@@ -369,6 +369,7 @@ html, body {
   z-index: 20;
 }
 .overlay.hidden { display: none; }
+#poolGameOverOverlay.hidden { display: none !important; }
 .overlay-box {
   background: #2c2150;
   border: 3px solid #ffd27a;

@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 
+## [0.8.10] - 2026-11-11
+
+### Added
+
+- **Arcade Pool — "Rail & Pocket" (`js/arcade/pool.js`, `js/arcade/pool-ui.js`)**:
+  - Centred modal top-down 8-ball table vs. a bot opponent with selectable Easy/Medium/Hard difficulty (aim + power noise).
+  - Deterministic, headless-testable 2D billiard physics core: cushions, pockets, friction, elastic ball-ball collisions, and a standard 5-row rack.
+  - Simplified 8-ball rules: solids/stripes group assignment, fouls on scratch or no-contact, immediate loss on an early 8-ball, win on a legal 8-ball clear.
+  - Pointer-event aim (drag back from the cue ball) + power drag, working for mouse and touch.
+  - Wins/losses/current & best streak recorded locally (`state.pool`) and submitted to a new `pool_stats`/`submit_pool_result`/`get_pool_leaderboard` Supabase schema (`supabase/migrations/0004_v0810_pool_gumballs.sql`, not yet applied) for a future global leaderboard.
+- **Gumball Machine & Gumballs collection (`js/gumballs/`)**:
+  - The arcade's Gachapon dispenser now pulls a gumball for 5 coins with a crank animation and reveal, drawing from a 20-gumball drop table (1% legendary, 12% special across 6 colors, 17% rare, 25% uncommon, 45% common) that sums to exactly 100% (tested) via an injectable/seeded RNG.
+  - New "Gumballs" tab in the Inventory panel: a collection grid showing owned gumballs in full color with counts, unowned as "???" silhouettes with rarity still visible, plus a per-rarity progress summary.
+  - Rarity sparkle animation + a distinct ascending chime SFX for Special and Legendary pulls.
+  - Collection persisted in the save (`state.gumballs`: counts, first-obtained dates, total pulls, trade history) via save migration 9→10.
+- **Gumball Trader NPC & Gumball Library (`js/gumballs/trader.js`, `trader-ui.js`, `library-ui.js`)**:
+  - A seated trader NPC in the Arcade rotates daily (device-local date) through a pool of 7 original personas, deterministic from the date — talk to them to open a trade modal with that day's 3-4 offers.
+  - Trades are any-gumball-for-any-gumball, generated deterministically from the date, and always favor the trader (what you give is worth at least 1.3x what you receive, by rarity value) — asserted for every generated offer across a wide range of fixed dates in `tests/trader.unit.test.mjs`.
+  - A "Collector" quest chain (all commons, all uncommons, all rares, all specials, the full 20-gumball set) grants coins and, on completing the full set, unlocks a placeable Gumball Collector Trophy.
+  - Separate "Gumball Library" view: a read-only catalogue of all 20 gumballs with name, rarity, drop %, flavor text and art — owned ones in full color with count and first-obtained date, unowned shown as silhouettes with rarity visible but name hidden.
+- **Tests**: 197 unit tests passing (`tests/pool.unit.test.mjs`, `tests/gumballs.unit.test.mjs`, `tests/trader.unit.test.mjs` added), plus the full Playwright smoke suite.
+
 ## [0.8.9] - 2026-11-11
 
 #### Added

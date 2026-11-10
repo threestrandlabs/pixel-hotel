@@ -23,6 +23,12 @@ import {
   initArcadeUI, openArcadeGame, closeArcadeGame,
   openArcadeLeaderboard, closeArcadeLeaderboard, getActiveArcadeState,
 } from './arcade/ui.js';
+import { initPoolUI, openPoolGame, closePoolGame, getActivePoolState } from './arcade/pool-ui.js';
+import { initGumballUI, openGumballModal, renderGumballsTab } from './gumballs/gumballs-ui.js';
+import { distinctOwnedInRarity, totalDistinctOwned, todayDateStr } from './gumballs/gumballs.js';
+import { applyTraderPersona } from './gumballs/trader.js';
+import { initTraderUI, openTraderModal } from './gumballs/trader-ui.js';
+import { initLibraryUI, openLibraryModal } from './gumballs/library-ui.js';
 
 const STEP_MS = 240;
 const DAY_CYCLE_MS = 120000;
@@ -34,6 +40,9 @@ ctx.imageSmoothingEnabled = false;
 
 let state = loadState(window.localStorage);
 applyRoomTier(state.player.roomTier || 1);
+
+const gumballTraderDef = NPCS.find((n) => n.id === 'gumball_trader');
+if (gumballTraderDef) applyTraderPersona(gumballTraderDef, todayDateStr());
 
 const npcRuntimes = NPCS.map((def) => ({
   def,
@@ -418,6 +427,10 @@ function applyInteractionArrival(mover, pending, isPlayer = false, immediate = f
       openArcadeGame('block_drop');
     } else if (placed.itemId === 'arcade_leaderboard') {
       openArcadeLeaderboard('noodle_snake', 'local');
+    } else if (placed.itemId === 'pool_table') {
+      openPoolGame();
+    } else if (placed.itemId === 'capsule_dispenser') {
+      openGumballModal();
     }
     if (placed.itemId === 'massage_bed') {
       showToast('Relaxing massage... feeling energized! ✨ (+Mood buff: Relaxed & Energized)');
@@ -747,6 +760,10 @@ function openNpcDialogue(npc) {
       if (topic.id === 'checkin') {
         onQuestProgress(setQuestProgress(state, 'greet', Math.max(1, greetedNpcs.size)));
       }
+      if (topic.id === 'gumball_trade') {
+        closeNpcDialogue();
+        openTraderModal();
+      }
     });
   });
   audio.playSfx('chat');
@@ -986,6 +1003,15 @@ function onQuestProgress(newlyCompleteIds) {
   refreshShopTab();
 }
 
+function onGumballCollectionChanged() {
+  onQuestProgress(setQuestProgress(state, 'gumball_common_set', distinctOwnedInRarity(state, 'common')));
+  onQuestProgress(setQuestProgress(state, 'gumball_uncommon_set', distinctOwnedInRarity(state, 'uncommon')));
+  onQuestProgress(setQuestProgress(state, 'gumball_rare_set', distinctOwnedInRarity(state, 'rare')));
+  onQuestProgress(setQuestProgress(state, 'gumball_special_set', distinctOwnedInRarity(state, 'special')));
+  onQuestProgress(setQuestProgress(state, 'gumball_full_set', totalDistinctOwned(state)));
+  renderGumballsTab();
+}
+
 let toastTimer = null;
 function showToast(msg) {
   const el = document.getElementById('toast');
@@ -1181,7 +1207,7 @@ function buildEntities(now = performance.now()) {
       action: nAction,
       actionFrame: computeActionFrame(nAction, now, nOff),
       depth: entityDepth(n),
-      spriteKey: n.id, kind: 'npc', color: n.def.color,
+      spriteKey: n.id, kind: 'npc', color: n.def.color, look: n.def.look || null,
       nameTag: n.def.isStaff ? `${n.def.name} · Staff` : (n.def.homeFloor ? `${n.def.name} · F${n.def.homeFloor}` : n.def.name),
       outfit: n.id === 'marina' ? 'swimsuit' : 'normal',
       bubbleText: n.bubble ? n.bubble.text : null,
@@ -1545,7 +1571,7 @@ function togglePanel(id) {
     activeCategory.shopTab = null;
     activeCategory.bagTab = null;
     activeCategory.roomTab = null;
-    refreshShopTab(); refreshBagTab(); refreshRoomTab();
+    refreshShopTab(); refreshBagTab(); refreshRoomTab(); renderGumballsTab();
   }
   if (id === 'questPanel' && willShow) refreshQuestPanel();
   if (id === 'elevatorPanel' && willShow) refreshElevatorPanel();
@@ -2214,6 +2240,27 @@ function init() {
     getClient: () => getSupabaseClient(),
     showToast: (msg) => showToast(msg),
   });
+  initPoolUI({
+    getState: () => state,
+    getClient: () => getSupabaseClient(),
+    showToast: (msg) => showToast(msg),
+  });
+  initGumballUI({
+    getState: () => state,
+    save: () => saveState(window.localStorage, state),
+    showToast: (msg) => showToast(msg),
+    refreshCoins: () => refreshCoins(),
+    refreshGumballsTab: () => onGumballCollectionChanged(),
+    playSfx: (kind) => audio.playSfx(kind),
+    openLibrary: () => openLibraryModal(),
+  });
+  initTraderUI({
+    getState: () => state,
+    save: () => saveState(window.localStorage, state),
+    showToast: (msg) => showToast(msg),
+    onTradeAccepted: () => onGumballCollectionChanged(),
+  });
+  initLibraryUI({ getState: () => state });
   const isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || (window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
   if (isTouch) {
     document.body.classList.add('has-touch');
@@ -2264,7 +2311,7 @@ window.__pixelHotel = {
     refreshAudioUi();
   }, // 0.5 noon, 0 midnight
   getSaveVersion: () => SAVE_VERSION,
-  getVersion: () => '0.8.9',
+  getVersion: () => '0.8.10',
   getRemoteMultiplayer: () => getRemoteMultiplayerEntities(performance.now()),
   walkTo: (x, y) => tryWalkPlayer(x, y),
   interactWith: (itemIdOrInstanceId, immediate = false) => {

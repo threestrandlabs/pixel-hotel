@@ -2524,6 +2524,20 @@ export function buildArcadeLeaderboard(rot = 0) {
   });
 }
 
+export function buildGumballTrophySprite(rot = 0) {
+  const GOLD = ['#ffd84a', '#e0a818', '#a4760c'];
+  const BASE = ['#3a2c54', '#2a1e40', '#1c1430'];
+  return isoSprite(1, 1, 36, (box) => {
+    box(0.26, 0.26, 0.74, 0.74, 0, 6, ...BASE);
+    box(0.34, 0.34, 0.66, 0.66, 6, 10, ...GOLD);
+    box(0.42, 0.42, 0.58, 0.58, 10, 20, ...GOLD);
+    box(0.28, 0.28, 0.72, 0.72, 20, 30, ...GOLD);
+    box(0.20, 0.40, 0.28, 0.52, 20, 26, ...GOLD);
+    box(0.72, 0.40, 0.80, 0.52, 20, 26, ...GOLD);
+    box(0.40, 0.30, 0.60, 0.42, 30, 33, '#fff6d2', '#ffe9a0', '#e0b848');
+  });
+}
+
 export const FURNITURE_BUILDERS = {
   stool: (rot) => buildStoolSprite(rot),
   sofa: (rot) => buildSofaSprite('#e2607a', rot),
@@ -2615,6 +2629,8 @@ export const FURNITURE_BUILDERS = {
   arcadeDrop1: (rot) => buildArcadeDrop1(rot),
   arcadeDrop2: (rot) => buildArcadeDrop2(rot),
   arcadeLeaderboard: (rot) => buildArcadeLeaderboard(rot),
+  // v0.8.10 Gumball collection trophy
+  gumballTrophy: (rot) => buildGumballTrophySprite(rot),
 };
 
 export function shadeColor(hex, amt) {

@@ -1180,6 +1180,13 @@ export class ChiptuneAudio {
     if (kind === 'brake') {
       return this.playBusBrakeHiss();
     }
+    if (kind === 'sparkle') {
+      const notes = [1046.5, 1318.51, 1567.98, 2093.0];
+      notes.forEach((f, i) => {
+        this._scheduleTone(f, now + i * 0.045, 0.18, 'sine', 2600, 0.1);
+      });
+      return true;
+    }
     if (kind === 'quest') {
       const notes = [523.25, 659.25, 783.99, 987.77];
       notes.forEach((f, i) => {

@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
 <title>Pixel Hotel</title>
 <link rel="stylesheet" href="css/style.css" />
+<link rel="stylesheet" href="css/gumballs.css" />
 </head>
 <body>
 <div id="app">
@@ -154,10 +155,12 @@
       <button class="tab-btn active" data-tab="shopTab">Shop</button>
       <button class="tab-btn" data-tab="bagTab">My Items</button>
       <button class="tab-btn" data-tab="roomTab">In This Room</button>
+      <button class="tab-btn" data-tab="gumballsTab">Gumballs</button>
     </div>
     <div id="shopTab" class="tab-content"></div>
     <div id="bagTab" class="tab-content hidden"></div>
     <div id="roomTab" class="tab-content hidden"></div>
+    <div id="gumballsTab" class="tab-content hidden"></div>
   </aside>
 
   <aside id="questPanel" class="panel hidden">
@@ -409,6 +412,88 @@
       <div style="margin-top: 10px; font-size: 11px; color: #888; text-align: right;" id="arcadeLeaderboardStatus">
         Offline Local Top 10
       </div>
+    </div>
+  </div>
+
+  <!-- v0.8.10 Arcade Pool ("Rail & Pocket") 8-ball vs bot -->
+  <div id="poolGameModal" class="overlay hidden">
+    <div class="overlay-box" style="max-width: 360px; text-align: center; position: relative;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+        <h2 style="margin: 0; font-size: 16px;">🎱 Rail &amp; Pocket</h2>
+        <button class="panel-close" id="btnPoolClose" data-close="poolGameModal">✕</button>
+      </div>
+
+      <div style="display: flex; justify-content: center; gap: 6px; margin-bottom: 8px;">
+        <button class="pixel-btn" data-pool-difficulty="easy">Easy</button>
+        <button class="pixel-btn active" data-pool-difficulty="medium">Medium</button>
+        <button class="pixel-btn" data-pool-difficulty="hard">Hard</button>
+      </div>
+
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-size: 12px; background: rgba(0,0,0,0.3); padding: 4px 10px; border-radius: 4px;">
+        <span id="poolTurnStatus">Your turn</span>
+        <span id="poolStreakStatus">🔥 Streak: 0 · 🏆 Wins: 0</span>
+      </div>
+
+      <div style="position: relative; width: 300px; height: 150px; max-width: calc(100vw - 44px); margin: 0 auto; border: 2px solid #4a2c18; border-radius: 4px; overflow: hidden;">
+        <canvas id="poolCanvas" width="300" height="150" style="display: block; width: 100%; height: 100%; touch-action: none;"></canvas>
+
+        <div id="poolGameOverOverlay" class="hidden" style="position: absolute; inset: 0; background: rgba(10, 6, 24, 0.9); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 12px;">
+          <h3 id="poolResultTitle" style="margin: 0; font-size: 18px; color: #fff;">Result</h3>
+          <div id="poolResultText" style="font-size: 12px; color: #ffd27a; text-align: center;"></div>
+          <button id="btnPoolPlayAgain" class="pixel-btn">Play Again</button>
+        </div>
+      </div>
+
+      <div style="margin-top: 10px; display: flex; justify-content: space-between; align-items: center;">
+        <button id="btnPoolNewGame" class="pixel-btn">Rerack</button>
+        <span style="font-size: 11px; color: #aaa;">Drag back from the cue ball to aim &amp; shoot</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- v0.8.10 Gumball Machine pull modal -->
+  <div id="gumballModal" class="overlay hidden">
+    <div class="overlay-box gumball-box">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+        <h2 style="margin: 0; font-size: 16px;">🍬 Gachapon Gumball Machine</h2>
+        <button class="panel-close" id="btnGumballClose" data-close="gumballModal">✕</button>
+      </div>
+      <p class="gumball-hint">Pay 5 coins, turn the crank, see what drops!</p>
+      <div id="gumballMachineStage" class="gumball-stage">
+        <div id="gumballCrankArt" class="gumball-crank-art">🔧</div>
+        <div id="gumballReveal" class="gumball-reveal hidden">
+          <div id="gumballRevealBall" class="gumball-ball"></div>
+          <div id="gumballRevealName" class="gumball-reveal-name"></div>
+          <div id="gumballRevealRarity" class="gumball-reveal-rarity"></div>
+        </div>
+      </div>
+      <div style="display:flex; justify-content:center; gap:10px; margin-top: 10px;">
+        <button id="btnGumballPull" class="pixel-btn">Pull for 🪙 5</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- v0.8.10 Gumball Trader trade modal -->
+  <div id="gumballTradeModal" class="overlay hidden">
+    <div class="overlay-box gumball-box" style="max-width: 380px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+        <h2 id="traderModalName" style="margin: 0; font-size: 16px;">🍬 Trader</h2>
+        <button class="panel-close" id="btnTraderClose" data-close="gumballTradeModal">✕</button>
+      </div>
+      <p class="gumball-hint">Today's trades — every offer favors me, but maybe you need what I've got.</p>
+      <div id="traderOffersList" class="trader-offers-list"></div>
+    </div>
+  </div>
+
+  <!-- v0.8.10 Gumball Library: full catalogue, owned in color, unowned as silhouettes -->
+  <div id="gumballLibraryModal" class="overlay hidden">
+    <div class="overlay-box" style="max-width: 640px; width: 92%;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+        <h2 style="margin: 0; font-size: 16px;">📖 Gumball Library</h2>
+        <button class="panel-close" id="btnGumballLibraryClose" data-close="gumballLibraryModal">✕</button>
+      </div>
+      <p class="gumball-hint" id="gumballLibraryProgress">0/20 collected</p>
+      <div id="gumballLibraryGrid" class="gumball-library-grid"></div>
     </div>
   </div>
 </div>

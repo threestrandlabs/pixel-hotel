@@ -32,6 +32,19 @@ export function createDefaultState() {
         block_drop: [],
       },
     },
+    pool: {
+      wins: 0,
+      losses: 0,
+      currentStreak: 0,
+      bestStreak: 0,
+    },
+    gumballs: {
+      counts: {},
+      firstObtained: {},
+      totalPulls: 0,
+      lastTradeDate: '',
+      tradesAcceptedToday: [],
+    },
     settings: {
       muted: false,
       musicMuted: false,
@@ -489,6 +502,31 @@ const MIGRATIONS = {
       ...old,
       version: 9,
       settings: { ...def.settings, ...oldSettings },
+    };
+  },
+  // v0.8.10: adds arcade Pool (8-ball) win/streak stats and the local Gumball
+  // collection (counts, first-obtained dates, trade history).
+  9: (old) => {
+    const def = createDefaultState();
+    const oldPool = (old.pool && typeof old.pool === 'object') ? old.pool : {};
+    const oldGumballs = (old.gumballs && typeof old.gumballs === 'object') ? old.gumballs : {};
+    return {
+      ...def,
+      ...old,
+      version: 10,
+      pool: {
+        wins: typeof oldPool.wins === 'number' ? oldPool.wins : 0,
+        losses: typeof oldPool.losses === 'number' ? oldPool.losses : 0,
+        currentStreak: typeof oldPool.currentStreak === 'number' ? oldPool.currentStreak : 0,
+        bestStreak: typeof oldPool.bestStreak === 'number' ? oldPool.bestStreak : 0,
+      },
+      gumballs: {
+        counts: (oldGumballs.counts && typeof oldGumballs.counts === 'object') ? { ...oldGumballs.counts } : {},
+        firstObtained: (oldGumballs.firstObtained && typeof oldGumballs.firstObtained === 'object') ? { ...oldGumballs.firstObtained } : {},
+        totalPulls: typeof oldGumballs.totalPulls === 'number' ? oldGumballs.totalPulls : 0,
+        lastTradeDate: typeof oldGumballs.lastTradeDate === 'string' ? oldGumballs.lastTradeDate : '',
+        tradesAcceptedToday: Array.isArray(oldGumballs.tradesAcceptedToday) ? [...oldGumballs.tradesAcceptedToday] : [],
+      },
     };
   },
 };

@@ -8,7 +8,7 @@ export const TILE = {
   VOID: 4,
 };
 
-export const SAVE_VERSION = 9;
+export const SAVE_VERSION = 10;
 
 // Grid is row-major: grid[y][x]
 export function makeRoomGrid(w, h, { doors = [], windows = [], cutouts = [] } = {}) {
@@ -500,7 +500,8 @@ export const CATALOGUE = [
   { id: 'karaoke_machine', name: 'Star Stage Karaoke', price: 75, category: 'entertainment', footprint: { w: 1, h: 1 }, seat: false, interaction: 'use', emissive: { color: '#50e4ff', radius: 56, intensity: 0.38 }, spriteKey: 'karaokeMachine', unlockRequires: null, description: 'Digital karaoke kiosk with twin microphones, equalizer display and disco floor.' },
   { id: 'telescope', name: 'Stargazer Telescope', price: 50, category: 'outdoor_pool', footprint: { w: 1, h: 1 }, seat: false, interaction: 'use', spriteKey: 'telescope', unlockRequires: null, description: 'Heavy brass astronomical refractor on an equatorial wooden tripod mount.' },
   { id: 'koi_pond', name: 'Zen Koi Stone Pond', price: 80, category: 'outdoor_pool', footprint: { w: 2, h: 2 }, seat: false, interaction: 'use', spriteKey: 'koiPond', unlockRequires: null, description: 'Carved slate floor water garden with floating lily pads and swimming calico koi.' },
-  { id: 'capsule_dispenser', name: 'Gachapon Capsule Toy', price: 40, category: 'entertainment', footprint: { w: 1, h: 1 }, seat: false, interaction: 'use', spriteKey: 'capsuleDispenser', unlockRequires: null, description: 'Retro Japanese twin-globe prize capsule dispenser with coin turn keys.' },
+  { id: 'capsule_dispenser', name: 'Gachapon Capsule Toy', price: 40, category: 'entertainment', footprint: { w: 1, h: 1 }, seat: false, interaction: 'gumball_machine', spriteKey: 'capsuleDispenser', unlockRequires: null, description: 'Retro twin-globe gumball machine. Pay 5 coins, turn the crank, and see what drops.' },
+  { id: 'gumball_trophy', name: 'Gumball Collector Trophy', price: 0, category: 'entertainment', footprint: { w: 1, h: 1 }, seat: false, interaction: 'use', spriteKey: 'gumballTrophy', unlockRequires: 'quest_gumball_full_set', description: 'A gleaming gold trophy awarded for completing the full 20-gumball collection.' },
   // Original v0.4.0 Hotel Expansion & Suite Collection
   { id: 'suite_bed', name: 'Cloud-Soft Suite Bed', price: 65, category: 'beds', footprint: { w: 2, h: 2 }, seat: true, interaction: 'lie', seatOffsets: [{ dx: 0, dy: 0 }, { dx: 1, dy: 0 }], spriteKey: 'suiteBed', unlockRequires: null, description: 'A plush king-size hotel suite bed with tufted headboard and down duvet.' },
   { id: 'treadmill', name: 'AeroRun Treadmill', price: 55, category: 'entertainment', footprint: { w: 1, h: 2 }, seat: false, interaction: 'treadmill', seatOffsets: [{ dx: 0, dy: 1 }], spriteKey: 'treadmill', unlockRequires: null, description: 'Motorised cardio treadmill with cushioned running belt and digital pace console.' },
@@ -516,7 +517,7 @@ export const CATALOGUE = [
   { id: 'towel_rack', name: 'Spa Towel Caddy', price: 30, category: 'outdoor_pool', footprint: { w: 1, h: 1 }, seat: false, interaction: 'use', spriteKey: 'towelRack', unlockRequires: null, description: 'Tiered bamboo spa stand stocked with freshly rolled cotton bath towels.' },
   { id: 'espresso_bar', name: 'Artisan Espresso Bar', price: 70, category: 'kitchen_food', footprint: { w: 2, h: 1 }, seat: false, interaction: 'eat', spriteKey: 'espressoBar', unlockRequires: null, description: 'Hammered-copper dual-boiler espresso machine with burr grinder and pastry case.' },
   { id: 'cafe_table', name: 'Marble Cafe Table', price: 30, category: 'tables', footprint: { w: 1, h: 1 }, seat: false, interaction: 'eat', spriteKey: 'cafeTable', unlockRequires: null, description: 'Round brass-pedestal bistro table topped with latte art and a warm croissant.' },
-  { id: 'pool_table', name: 'Championship Billiards', price: 85, category: 'entertainment', footprint: { w: 2, h: 1 }, seat: false, interaction: 'use', spriteKey: 'poolTable', unlockRequires: null, description: 'Carved mahogany billiards table with emerald baize felt, cues and racked balls.' },
+  { id: 'pool_table', name: 'Championship Billiards', price: 85, category: 'entertainment', footprint: { w: 2, h: 1 }, seat: false, interaction: 'arcade_pool', spriteKey: 'poolTable', unlockRequires: null, description: 'Carved mahogany billiards table with emerald baize felt, cues and racked balls. Challenge the house bot to a game of 8-ball.' },
   { id: 'computer_desk', name: 'Workstation Desk & PC', price: 60, category: 'tables', footprint: { w: 2, h: 1 }, seat: false, interaction: 'use', emissive: { color: '#7ad8ff', radius: 46, intensity: 0.28 }, spriteKey: 'computerDesk', unlockRequires: null, description: 'Executive timber desk equipped with dual-monitor pixel workstation and task lamp.' },
   { id: 'sky_tree', name: 'Ornamental Sakura Tree', price: 55, category: 'plants', footprint: { w: 1, h: 1 }, seat: false, walkable: false, spriteKey: 'skyTree', unlockRequires: null, description: 'Sculpted stone planter supporting a blooming pink sakura canopy.' },
   { id: 'garden_bench', name: 'Teak Garden Bench', price: 40, category: 'seating', footprint: { w: 2, h: 1 }, seat: true, walkable: false, interaction: 'sit', seatOffsets: [{ dx: 0, dy: 0 }, { dx: 1, dy: 0 }], spriteKey: 'gardenBench', unlockRequires: null, description: 'Slatted teakwood conservatory bench with scrolled wrought-iron armrests.' },
@@ -917,6 +918,7 @@ export const SEED_FURNITURE = {
     { itemId: 'capsule_dispenser', x: 2, y: 6, rot: 0 },
     { itemId: 'neon_sign', x: 17, y: 6, rot: 0 },
     { itemId: 'arcade_leaderboard', x: 6, y: 6, rot: 0 },
+    { itemId: 'pool_table', x: 9, y: 9, rot: 0 },
     { itemId: 'bar_counter', x: 14, y: 11, rot: 0 },
     { itemId: 'stool', x: 14, y: 12, rot: 0 },
     { itemId: 'stool', x: 15, y: 12, rot: 0 },
@@ -1599,6 +1601,29 @@ export const NPCS = [
       room: ['Room 2104 on Floor 21 is where the arcade magic happens!'],
     },
   },
+  // v0.8.10 Gumball trader: a single NPC slot whose name/look/lines are
+  // overwritten at startup with that day's deterministic persona (see
+  // js/gumballs/trader.js and the applyTodaysTrader() call in main.js).
+  {
+    id: 'gumball_trader',
+    name: 'Traveling Trader',
+    isStaff: false,
+    homeFloor: 17,
+    roomNumber: '1701',
+    stationary: true,
+    color: '#8a8a8a',
+    personality: 'traveling gumball trader',
+    room: 'arcade',
+    home: { x: 15, y: 12 },
+    greetLines: ["Got gumballs to trade? Check back daily — my offers change."],
+    ambientLines: ["Every gumball's worth something to the right trader."],
+    keywords: {
+      hello: ["Got gumballs to trade? Check back daily — my offers change."],
+    },
+    dialogueTopics: [
+      { id: 'gumball_trade', label: '🍬 Trade Gumballs', reply: "Here's what I'm offering today." },
+    ],
+  },
   {
     id: 'arthur',
     name: 'Arthur',
@@ -1873,6 +1898,47 @@ export const QUESTS = [
     type: 'visit',
     target: 6,
     reward: { coins: 90, unlock: null },
+  },
+  // v0.8.10 Gumball Collector chain
+  {
+    id: 'quest_gumball_commons',
+    title: 'Collector: Commons',
+    description: 'Collect all 6 common gumballs.',
+    type: 'gumball_common_set',
+    target: 6,
+    reward: { coins: 40, unlock: null },
+  },
+  {
+    id: 'quest_gumball_uncommons',
+    title: 'Collector: Uncommons',
+    description: 'Collect all 4 uncommon gumballs.',
+    type: 'gumball_uncommon_set',
+    target: 4,
+    reward: { coins: 60, unlock: null },
+  },
+  {
+    id: 'quest_gumball_rares',
+    title: 'Collector: Rares',
+    description: 'Collect all 3 rare gumballs.',
+    type: 'gumball_rare_set',
+    target: 3,
+    reward: { coins: 90, unlock: null },
+  },
+  {
+    id: 'quest_gumball_specials',
+    title: 'Collector: Specials',
+    description: 'Collect all 6 special gumballs.',
+    type: 'gumball_special_set',
+    target: 6,
+    reward: { coins: 150, unlock: null },
+  },
+  {
+    id: 'quest_gumball_full_set',
+    title: 'Collector: Full Set',
+    description: 'Collect every gumball in the Gumball Library.',
+    type: 'gumball_full_set',
+    target: 20,
+    reward: { coins: 300, unlock: 'gumball_trophy' },
   },
 ];
 

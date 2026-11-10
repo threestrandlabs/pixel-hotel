@@ -2534,6 +2534,6 @@ test('v0.8.8 migration: v8 save migrates forward to v9, resetting deprecated tra
   storage.setItem(SAVE_KEY, JSON.stringify(v8Save));
 
   const loaded = loadState(storage);
-  assert.equal(loaded.version, 9, 'save migrated to version 9');
+  assert.equal(loaded.version, SAVE_VERSION, 'save migrated to latest version');
   assert.equal(loaded.settings.trackId, 'lobby', 'legacy classic-lobby trackId reset to lobby');
 });
