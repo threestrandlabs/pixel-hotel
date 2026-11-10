@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 
-## [0.8.10] - 2026-11-11
+## [0.9.1] - 2026-11-11
 
 ### Added
 
@@ -14,18 +14,53 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - Deterministic, headless-testable 2D billiard physics core: cushions, pockets, friction, elastic ball-ball collisions, and a standard 5-row rack.
   - Simplified 8-ball rules: solids/stripes group assignment, fouls on scratch or no-contact, immediate loss on an early 8-ball, win on a legal 8-ball clear.
   - Pointer-event aim (drag back from the cue ball) + power drag, working for mouse and touch.
-  - Wins/losses/current & best streak recorded locally (`state.pool`) and submitted to a new `pool_stats`/`submit_pool_result`/`get_pool_leaderboard` Supabase schema (`supabase/migrations/0004_v0810_pool_gumballs.sql`, not yet applied) for a future global leaderboard.
+  - Wins/losses/current & best streak recorded locally (`state.pool`) and submitted to a new `pool_stats`/`submit_pool_result`/`get_pool_leaderboard` Supabase schema (`supabase/migrations/0004_v091_pool_gumballs.sql`, not yet applied) for a future global leaderboard.
 - **Gumball Machine & Gumballs collection (`js/gumballs/`)**:
   - The arcade's Gachapon dispenser now pulls a gumball for 5 coins with a crank animation and reveal, drawing from a 20-gumball drop table (1% legendary, 12% special across 6 colors, 17% rare, 25% uncommon, 45% common) that sums to exactly 100% (tested) via an injectable/seeded RNG.
   - New "Gumballs" tab in the Inventory panel: a collection grid showing owned gumballs in full color with counts, unowned as "???" silhouettes with rarity still visible, plus a per-rarity progress summary.
   - Rarity sparkle animation + a distinct ascending chime SFX for Special and Legendary pulls.
-  - Collection persisted in the save (`state.gumballs`: counts, first-obtained dates, total pulls, trade history) via save migration 9→10.
+  - Collection persisted in the save (`state.gumballs`: counts, first-obtained dates, total pulls, trade history) via save migration 10→11.
 - **Gumball Trader NPC & Gumball Library (`js/gumballs/trader.js`, `trader-ui.js`, `library-ui.js`)**:
   - A seated trader NPC in the Arcade rotates daily (device-local date) through a pool of 7 original personas, deterministic from the date — talk to them to open a trade modal with that day's 3-4 offers.
   - Trades are any-gumball-for-any-gumball, generated deterministically from the date, and always favor the trader (what you give is worth at least 1.3x what you receive, by rarity value) — asserted for every generated offer across a wide range of fixed dates in `tests/trader.unit.test.mjs`.
   - A "Collector" quest chain (all commons, all uncommons, all rares, all specials, the full 20-gumball set) grants coins and, on completing the full set, unlocks a placeable Gumball Collector Trophy.
   - Separate "Gumball Library" view: a read-only catalogue of all 20 gumballs with name, rarity, drop %, flavor text and art — owned ones in full color with count and first-obtained date, unowned shown as silhouettes with rarity visible but name hidden.
 - **Tests**: 197 unit tests passing (`tests/pool.unit.test.mjs`, `tests/gumballs.unit.test.mjs`, `tests/trader.unit.test.mjs` added), plus the full Playwright smoke suite.
+
+## [0.9.0] - 2026-11-11
+
+#### Added
+
+- **Avatar Creator Modal (`js/avatar.js`, `js/avatarModal.js`, `index.html`, `css/style.css`)**:
+  - Full-featured avatar customizer accessible on first launch for new players, via the "Wardrobe" action bar button (`👔`), and by interacting with the wardrobe furniture in My Room.
+  - 7 customization categories:
+    - Skin tones (warm peach, fair porcelain, golden olive, rich umber, deep espresso).
+    - Face presets (classic, gentle, bright, starry eyes with optional lashes; smile, grin, smirk, neutral mouths).
+    - Hairstyles & hair colours (classic short, bob cut, ponytail, spiky, long flowing, minimal bald, and shop-unlockable retro curls; 8 Azure salon hair dyes).
+    - Top styles & colours (classic tee, cosy hoodie, knit cardigan, hotel jacket, smart coat, summer dress; 8 vibrant fabric colors).
+    - Bottom styles & colours (trousers, tailored skirt; 6 palette colors).
+    - Shoe colours (white kicks, black leather, brown loafers, and unlockable red sneakers, blue trainers, golden soles).
+    - Accessories (none, wire glasses, baseball cap with peaked visor, audio headphones with headband & earcups; 5 accent colors).
+  - Live rotating voxel preview canvas rendering the 3D isometric avatar across 4 directions (Front, Left, Back, Right).
+  - 🎲 Randomise button generating harmonious unlocked styles.
+  - Shop-unlockable premium items purchased directly with coins; core basics are completely free.
+  - Touch-friendly responsive design fitting viewports down to 360×780 portrait as well as widescreen desktop, with >=44px tap targets.
+  - Save file version bumped to 10 (`SAVE_VERSION = 10`) with a lossless migration preserving existing players' salon hairstyles and looks.
+- **Wardrobe Furniture (`js/data.js`, `js/sprites.js`)**:
+  - Added interactive oak wardrobe cabinet (`wardrobe`) to the catalogue and seeded in My Room. Walking up and interacting opens the Wardrobe / Avatar Creator modal.
+- **Emotes System (`js/emotes.js`, `js/voxel.js`, `index.html`, `css/style.css`)**:
+  - Emote bar popup toggled via the action bar button (`👋`) or number keys 1–8 on desktop.
+  - 8 expressive emotes: Wave (`👋`), Dance (`💃`), Laugh (`😂`), Clap (`👏`), Heart (`❤️`), Sleep (`💤`), Cheer (`🎉`), and Thumbs Up (`👍`).
+  - Animated voxel character poses and speech-bubble emoji icons floating above the avatar for ~3 seconds.
+  - Rate limited to at most 1 emote per second.
+  - Nearby NPCs occasionally wave back when the player waves near them.
+- **Multiplayer Presence Sync & Security (`js/multiplayer/ui.js`, `js/multiplayer/realtimeRoom.js`, `js/multiplayer/filter.js`)**:
+  - Live synchronization of avatar looks and active emotes with multiplayer peers through Realtime presence.
+  - Strict input validation (`validateAvatarLook`, `validateEmotePayload`) rejecting unknown option IDs or malformed hex codes, and enforcing independent 1-second receive throttling per sender.
+  - Respects mute and kick settings.
+- **Tests & Verification (`tests/avatar.unit.test.mjs`, `tests/smoke.spec.mjs`)**:
+  - Added unit test suite for avatar validation, malicious payload sanitation, randomizeLook, save migration v9→v10, emote registry, and rate limiting.
+  - Added mobile portrait smoke test step in `tests/smoke.spec.mjs` verifying opening the avatar creator on a 390×844 touch viewport, changing options, saving, and triggering emotes.
 
 ## [0.8.9] - 2026-11-11
 

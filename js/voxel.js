@@ -99,6 +99,8 @@ export function buildParts(look, pose = {}) {
     breathe = 0,
     action = null,
     actionFrame = 0,
+    emote = null,
+    emoteFrame = 0,
   } = pose;
   const isSwim = action === 'swim';
   const isLie = lie || action === 'lie' || action === 'spa_massage';
@@ -106,6 +108,8 @@ export function buildParts(look, pose = {}) {
   const isEat = action === 'eat';
   const isUse = action === 'use';
   const idleBreathe = (!sit && !isLie && !isSwim && !isTreadmill && stride === 0 && breathe) ? 0.45 : 0;
+  const emoteDanceBounce = emote === 'dance' ? Math.sin(emoteFrame * 3) * 0.7 : 0;
+  const emoteLaughBounce = emote === 'laugh' ? Math.abs(Math.sin(emoteFrame * 4)) * 0.7 : 0;
 
   const dz = isSwim
     ? -5.4
@@ -115,13 +119,17 @@ export function buildParts(look, pose = {}) {
         ? (actionFrame % 2 === 0 ? 0.75 : -0.15)
         : sit
           ? -1
-          : idleBreathe * 0.6;
+          : (idleBreathe * 0.6 + emoteDanceBounce + emoteLaughBounce);
 
   const P = [];
   const add = (x0, x1, y0, y1, z0, z1, color, tex) => P.push({ x0, x1, y0, y1, z0, z1, color, tex });
   const skirt = look.skirt && !sit && !isLie && !isSwim;
   const lower = look.bareArms ? look.skin : look.shirt;
-  const effStride = isTreadmill ? (actionFrame % 2 === 0 ? 1.35 : -1.35) : stride;
+  const effStride = isTreadmill
+    ? (actionFrame % 2 === 0 ? 1.35 : -1.35)
+    : emote === 'dance'
+      ? (Math.sin(emoteFrame * 2.5) > 0 ? 1.1 : -1.1)
+      : stride;
 
   // legs: thigh / shin / shoe (submerged and omitted during swimming so waterline stays clean)
   if (!isSwim) {
@@ -201,6 +209,38 @@ export function buildParts(look, pose = {}) {
       add(a, b, -1.4, 1.4, 9, 14, look.bareArms ? look.skin : look.shirt);
       add(a, b, -0.2, 3.6, 7, 9, lower, cuff);
       add(a + 0.2, b - 0.2, 3.6, 4.9, 7, 8.6, look.skin);
+    } else if (emote === 'wave' && s > 0) {
+      const wShift = Math.sin((emoteFrame || 0) * 3) * 1.5;
+      add(a, b, -0.6, 1.4, 11.5 + dz, 16.5 + dz, look.bareArms ? look.skin : look.shirt);
+      add(a + wShift, b + wShift, -0.2, 1.8, 16.2 + dz, 20.8 + dz, lower, cuff);
+      add(a + 0.2 + wShift, b - 0.2 + wShift, 0, 1.6, 20.8 + dz, 22.4 + dz, look.skin);
+    } else if (emote === 'cheer') {
+      const cBounce = Math.sin((emoteFrame || 0) * 2) * 0.5;
+      add(a, b, -1.0, 1.0, 11.5 + dz, 16.5 + dz, look.bareArms ? look.skin : look.shirt);
+      add(a, b, -0.8, 1.2, 16.2 + dz, 21.0 + dz + cBounce, lower, cuff);
+      add(a + 0.2, b - 0.2, -0.6, 1.0, 21.0 + dz + cBounce, 22.8 + dz + cBounce, look.skin);
+    } else if (emote === 'clap') {
+      const cShift = Math.abs(Math.sin((emoteFrame || 0) * 4)) * 0.8;
+      const cx0 = s > 0 ? (1.2 - cShift) : (-3.0 + cShift);
+      const cx1 = s > 0 ? (3.0 - cShift) : (-1.2 + cShift);
+      add(a, b, -1.0, 1.2, 10.5 + dz, 14.5 + dz, look.bareArms ? look.skin : look.shirt);
+      add(cx0, cx1, 1.2, 3.8, 10.5 + dz, 12.8 + dz, lower, cuff);
+      add(cx0 + 0.2, cx1 - 0.2, 3.6, 4.8, 10.5 + dz, 12.8 + dz, look.skin);
+    } else if (emote === 'thumbsup' && s > 0) {
+      add(a, b, -1.2, 1.4, 10.5 + dz, 14.5 + dz, look.bareArms ? look.skin : look.shirt);
+      add(a, b, 0.4, 3.8, 11.0 + dz, 13.2 + dz, lower, cuff);
+      add(a + 0.2, b - 0.2, 3.6, 4.8, 11.0 + dz, 13.0 + dz, look.skin);
+      add(a + 0.2, b - 0.2, 3.8, 4.4, 13.0 + dz, 14.8 + dz, look.skin);
+    } else if (emote === 'heart') {
+      const hx = s > 0 ? 0.8 : -2.6;
+      add(a, b, -1.0, 1.0, 12 + dz, 16.8 + dz, look.bareArms ? look.skin : look.shirt);
+      add(hx, hx + 1.8, 0, 1.8, 16.8 + dz, 21.8 + dz, lower, cuff);
+      add(hx + 0.2, hx + 1.6, 0.2, 1.6, 21.8 + dz, 23.2 + dz, look.skin);
+    } else if (emote === 'dance') {
+      const dArm = Math.sin((emoteFrame || 0) * 3 + s * 1.6) * 1.8;
+      add(a, b, -1.4 + dArm * 0.4, 1.4 + dArm * 0.4, 10.8 + dz, 14.8 + dz, look.bareArms ? look.skin : look.shirt);
+      add(a, b, 0.4 + dArm * 0.8, 3.8 + dArm * 0.8, 9.6 + dz, 11.8 + dz, lower, cuff);
+      add(a + 0.2, b - 0.2, 3.6 + dArm * 0.8, 4.9 + dArm * 0.8, 9.8 + dz, 11.6 + dz, look.skin);
     } else {
       const sway = idleBreathe ? s * 0.15 : 0;
       add(a + sway, b + sway, -1.4 + o * 0.5, 1.4 + o * 0.5, 11.2 + idleBreathe * 0.5, 15 + idleBreathe, look.bareArms ? look.skin : look.shirt);
@@ -211,7 +251,7 @@ export function buildParts(look, pose = {}) {
 
   // head: skin box with the face painted on its front & side planes, plus 3D nose / ears
   const hdz = dz + idleBreathe * 0.6;
-  add(-5, 5, -4.6, 4.6, 15 + hdz, 23 + hdz, look.skin, headTex(look, { blink: blink || isLie, action, actionFrame }));
+  add(-5, 5, -4.6, 4.6, 15 + hdz, 23 + hdz, look.skin, headTex(look, { blink: blink || isLie || emote === 'sleep', action, actionFrame, emote, emoteFrame }));
   const z = (v) => v + hdz;
   add(-0.65, 0.65, 4.6, 5.35, z(17.2), z(18.5), sh(look.skin, -0.03));
   const hairy = ['bob', 'long', 'ponytail', 'curls'].includes(look.hairStyle);
@@ -224,8 +264,24 @@ export function buildParts(look, pose = {}) {
       add(s > 0 ? 0.6 : -4.3, s > 0 ? 4.3 : -0.6, 4.6, 5.3, z(20), z(21), look.hair, voxTex(3)); // bushy brows
     }
   }
-  if (look.glasses) {
-    for (const s of [-1, 1]) add(s > 0 ? 5 : -5.3, s > 0 ? 5.3 : -5, -1, 4.6, z(19.3), z(19.8), '#3a3340');
+  const acc = look.accessory;
+  const accColor = look.accessoryColor || '#2a2030';
+  if (look.glasses || acc === 'glasses') {
+    for (const s of [-1, 1]) add(s > 0 ? 5 : -5.3, s > 0 ? 5.3 : -5, -1, 4.6, z(19.3), z(19.8), accColor);
+  }
+  if (acc === 'cap') {
+    add(-5.3, 5.3, -4.9, 4.9, z(22.6), z(24.8), accColor);
+    add(-4.6, 4.6, 4.6, 7.2, z(22.2), z(23.2), accColor);
+    add(-0.7, 0.7, -0.7, 0.7, z(24.8), z(25.4), sh(accColor, -0.2));
+  }
+  if (acc === 'headphones') {
+    add(-5.6, 5.6, -0.8, 0.8, z(24.2), z(25.2), accColor);
+    for (const s of [-1, 1]) {
+      const ex0 = s > 0 ? 5.0 : -6.2;
+      const ex1 = s > 0 ? 6.2 : -5.0;
+      add(ex0, ex1, -1.8, 1.8, z(17.0), z(21.0), accColor);
+      add(s > 0 ? 4.8 : -5.2, s > 0 ? 5.2 : -4.8, -1.4, 1.4, z(17.4), z(20.6), '#1a1820');
+    }
   }
   if (look.headband) {
     add(-5.4, 5.4, -4.8, 5.1, z(21.4), z(22.5), look.headband);
@@ -416,10 +472,11 @@ function headTex(look, pose = {}) {
       }
     }
 
-    if (look.glasses) {
-      g.strokeStyle = '#3a3340'; g.lineWidth = 0.35;
+    if (look.glasses || look.accessory === 'glasses') {
+      const gColor = look.accessoryColor || '#3a3340';
+      g.strokeStyle = gColor; g.lineWidth = 0.35;
       g.strokeRect(1.3, 2.5, 3.2, 2.5); g.strokeRect(5.5, 2.5, 3.2, 2.5);
-      g.fillStyle = '#3a3340'; g.fillRect(4.5, 3.4, 1, 0.35);
+      g.fillStyle = gColor; g.fillRect(4.5, 3.4, 1, 0.35);
       g.fillStyle = 'rgba(255,255,255,0.35)';
       g.fillRect(1.7, 2.8, 0.5, 0.5); g.fillRect(5.9, 2.8, 0.5, 0.5); // lens glint
     }
@@ -468,6 +525,11 @@ function torsoTex(look, skirtTier = false) {
       g.fillStyle = fc(sh(look.pants, 0.1)); g.fillRect(0, H - 1.2, W, 1.2);
       g.fillStyle = fc('#f6c667'); g.fillRect(mid - 0.5, H - 1.1, 1.0, 0.9);
       g.fillStyle = 'rgba(0,0,0,0.08)'; g.fillRect(1.1, 0.9, 0.15, H - 2.1); g.fillRect(W - 1.25, 0.9, 0.15, H - 2.1); // side seams
+    } else if (o === 'hoodie') {
+      g.fillStyle = fc(sh(look.shirt, -0.16)); g.fillRect(mid - 1.8, H - 3.2, 3.6, 2.2);
+      g.fillStyle = fc(sh(look.shirt, -0.26)); g.fillRect(mid - 1.8, H - 3.2, 0.3, 2.2); g.fillRect(mid + 1.5, H - 3.2, 0.3, 2.2);
+      g.fillStyle = fc('#ffffff'); g.fillRect(mid - 0.8, 1.0, 0.2, 2.0); g.fillRect(mid + 0.6, 1.0, 0.2, 2.0);
+      g.fillStyle = fc(sh(look.shirt, -0.2)); g.fillRect(0, H - 0.8, W, 0.8);
     } else if (o === 'bellhop') {
       g.fillStyle = fc(look.gold); g.fillRect(0, 0, W, 0.7);
       g.fillStyle = 'rgba(255,255,255,0.3)'; g.fillRect(0, 0.7, W, 0.1); // braid piping highlight
@@ -623,6 +685,8 @@ export function getCharacterCanvas(key, look, dir, pose, scale = 1) {
     pose.breathe || 0,
     pose.action || '',
     pose.actionFrame || 0,
+    pose.emote || '',
+    Math.floor((pose.emoteFrame || 0) * 2) % 12,
     scale,
   ].join('|');
   if (!cache.has(k)) {

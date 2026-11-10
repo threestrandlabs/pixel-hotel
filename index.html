@@ -20,6 +20,8 @@
     <nav id="topButtons" class="action-bar">
       <button id="btnElevator" class="pixel-btn action-btn" title="Elevator Directory (E)"><span class="btn-icon">🛗</span><span class="btn-text">Elevator</span></button>
       <button id="btnMyRoom" class="pixel-btn action-btn" title="Go to My Room"><span class="btn-icon">🔑</span><span class="btn-text">My Room</span></button>
+      <button id="btnWardrobe" class="pixel-btn action-btn" title="Wardrobe / Avatar Creator"><span class="btn-icon">👔</span><span class="btn-text">Wardrobe</span></button>
+      <button id="btnEmotes" class="pixel-btn action-btn" title="Emotes (1-8)"><span class="btn-icon">👋</span><span class="btn-text">Emotes</span></button>
       <button id="btnInventory" class="pixel-btn action-btn" title="Inventory (I)"><span class="btn-icon">🛋️</span><span class="btn-text">Items</span></button>
       <button id="btnQuests" class="pixel-btn action-btn" title="Quests (Q)"><span class="btn-icon">📜</span><span class="btn-text">Quests</span></button>
       <button id="btnMultiplayer" class="pixel-btn action-btn" title="Multiplayer (friends &amp; party rooms)"><span class="btn-icon">🌐</span><span class="btn-text">Multi</span></button>
@@ -415,7 +417,7 @@
     </div>
   </div>
 
-  <!-- v0.8.10 Arcade Pool ("Rail & Pocket") 8-ball vs bot -->
+  <!-- v0.9.1 Arcade Pool ("Rail & Pocket") 8-ball vs bot -->
   <div id="poolGameModal" class="overlay hidden">
     <div class="overlay-box" style="max-width: 360px; text-align: center; position: relative;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
@@ -451,7 +453,7 @@
     </div>
   </div>
 
-  <!-- v0.8.10 Gumball Machine pull modal -->
+  <!-- v0.9.1 Gumball Machine pull modal -->
   <div id="gumballModal" class="overlay hidden">
     <div class="overlay-box gumball-box">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
@@ -473,7 +475,7 @@
     </div>
   </div>
 
-  <!-- v0.8.10 Gumball Trader trade modal -->
+  <!-- v0.9.1 Gumball Trader trade modal -->
   <div id="gumballTradeModal" class="overlay hidden">
     <div class="overlay-box gumball-box" style="max-width: 380px;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
@@ -485,7 +487,7 @@
     </div>
   </div>
 
-  <!-- v0.8.10 Gumball Library: full catalogue, owned in color, unowned as silhouettes -->
+  <!-- v0.9.1 Gumball Library: full catalogue, owned in color, unowned as silhouettes -->
   <div id="gumballLibraryModal" class="overlay hidden">
     <div class="overlay-box" style="max-width: 640px; width: 92%;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
@@ -494,6 +496,66 @@
       </div>
       <p class="gumball-hint" id="gumballLibraryProgress">0/20 collected</p>
       <div id="gumballLibraryGrid" class="gumball-library-grid"></div>
+    </div>
+  </div>
+
+  <!-- v0.9.0 Emote Wheel / Bar Popup -->
+  <div id="emoteBar" class="emote-bar hidden" role="toolbar" aria-label="Emotes">
+    <div class="emote-bar-inner">
+      <button class="pixel-btn emote-btn" data-emote="wave" title="Wave (1)"><span class="emote-icon">👋</span><span class="emote-label">Wave</span><kbd class="desktop-only">1</kbd></button>
+      <button class="pixel-btn emote-btn" data-emote="dance" title="Dance (2)"><span class="emote-icon">💃</span><span class="emote-label">Dance</span><kbd class="desktop-only">2</kbd></button>
+      <button class="pixel-btn emote-btn" data-emote="laugh" title="Laugh (3)"><span class="emote-icon">😂</span><span class="emote-label">Laugh</span><kbd class="desktop-only">3</kbd></button>
+      <button class="pixel-btn emote-btn" data-emote="clap" title="Clap (4)"><span class="emote-icon">👏</span><span class="emote-label">Clap</span><kbd class="desktop-only">4</kbd></button>
+      <button class="pixel-btn emote-btn" data-emote="heart" title="Heart (5)"><span class="emote-icon">❤️</span><span class="emote-label">Heart</span><kbd class="desktop-only">5</kbd></button>
+      <button class="pixel-btn emote-btn" data-emote="sleep" title="Sleep (6)"><span class="emote-icon">💤</span><span class="emote-label">Sleep</span><kbd class="desktop-only">6</kbd></button>
+      <button class="pixel-btn emote-btn" data-emote="cheer" title="Cheer (7)"><span class="emote-icon">🎉</span><span class="emote-label">Cheer</span><kbd class="desktop-only">7</kbd></button>
+      <button class="pixel-btn emote-btn" data-emote="thumbsup" title="Thumbs Up (8)"><span class="emote-icon">👍</span><span class="emote-label">Thumbs Up</span><kbd class="desktop-only">8</kbd></button>
+    </div>
+  </div>
+
+  <!-- v0.9.0 Avatar Creator Modal -->
+  <div id="avatarModal" class="overlay hidden">
+    <div class="overlay-box avatar-modal-box">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+        <h2 style="margin: 0; font-size: 17px; display: flex; align-items: center; gap: 8px;">👔 <span>Wardrobe &amp; Avatar</span></h2>
+        <button class="panel-close" id="btnAvatarCloseTop" data-close="avatarModal">✕</button>
+      </div>
+
+      <div class="avatar-modal-body">
+        <div class="avatar-preview-pane">
+          <div class="avatar-canvas-wrap">
+            <canvas id="avatarPreviewCanvas" width="160" height="200"></canvas>
+          </div>
+          <div class="avatar-rotate-bar">
+            <button id="btnRotateAvatarLeft" class="pixel-btn" title="Rotate Left">⟲</button>
+            <span id="avatarDirLabel" style="font-size: 11px; color: #bbb;">Front</span>
+            <button id="btnRotateAvatarRight" class="pixel-btn" title="Rotate Right">⟳</button>
+          </div>
+          <button id="btnRandomizeAvatar" class="pixel-btn" style="width: 100%; margin-top: 6px;">🎲 Randomise</button>
+        </div>
+
+        <div class="avatar-controls-pane">
+          <div class="avatar-tabs" id="avatarCategoryTabs">
+            <button class="pixel-btn avatar-tab-btn active" data-tab="skin">Skin</button>
+            <button class="pixel-btn avatar-tab-btn" data-tab="face">Face</button>
+            <button class="pixel-btn avatar-tab-btn" data-tab="hair">Hair</button>
+            <button class="pixel-btn avatar-tab-btn" data-tab="top">Top</button>
+            <button class="pixel-btn avatar-tab-btn" data-tab="bottom">Bottom</button>
+            <button class="pixel-btn avatar-tab-btn" data-tab="shoes">Shoes</button>
+            <button class="pixel-btn avatar-tab-btn" data-tab="accessory">Acc.</button>
+          </div>
+
+          <div id="avatarTabContent" class="avatar-tab-content"></div>
+        </div>
+      </div>
+
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px; border-top: 1px solid rgba(255,255,255,0.12); padding-top: 10px;">
+        <div id="avatarCoinCost" style="font-size: 12px; color: #ffd27a;"></div>
+        <div style="display: flex; gap: 8px;">
+          <button id="btnCancelAvatar" class="pixel-btn">Cancel</button>
+          <button id="btnSaveAvatar" class="pixel-btn pixel-btn-primary" style="background: #38b068; color: #fff; font-weight: bold;">💾 Save &amp; Wear</button>
+        </div>
+      </div>
     </div>
   </div>
 </div>

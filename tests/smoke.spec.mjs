@@ -963,7 +963,7 @@ async function runMobilePortraitSmokeTest(browser) {
   const consoleErrors = [];
   const pageErrors = [];
   page.on('console', (msg) => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
-  page.on('pageerror', (err) => pageErrors.push(String(err)));
+  page.on('pageerror', (err) => pageErrors.push(err?.stack || String(err)));
 
   try {
     await page.goto(BASE_URL, { waitUntil: 'load' });
@@ -1239,6 +1239,55 @@ async function runMobilePortraitSmokeTest(browser) {
     await page.waitForTimeout(200);
     const chatTextMobile = await page.textContent('#chatLog');
     check('mobile: chat send works and appears in chat log', chatTextMobile.includes('mobile hello'));
+
+    // v0.9.0 Avatar creator & emote interaction on 390x844 touch viewport
+    const lookBefore = await page.evaluate(() => window.__pixelHotel.getPlayerLook());
+    await page.click('#btnWardrobe');
+    await page.waitForTimeout(150);
+    check('mobile: avatar creator opens via wardrobe button', (await page.locator('#avatarModal:not(.hidden)').count()) === 1);
+    await checkOverflow('mobile: avatar modal open at 390x844');
+
+    // Change options: switch to hair tab, select a hairstyle and hair colour
+    await page.click('[data-tab="hair"]');
+    await page.waitForTimeout(80);
+    const hairChoices = page.locator('#avatarTabContent .avatar-choice-btn');
+    if ((await hairChoices.count()) > 1) {
+      await hairChoices.nth(1).click();
+      await page.waitForTimeout(60);
+    }
+
+    // Switch to top tab and select a top option
+    await page.click('[data-tab="top"]');
+    await page.waitForTimeout(80);
+    const topChoices = page.locator('#avatarTabContent .avatar-choice-btn');
+    if ((await topChoices.count()) > 1) {
+      await topChoices.nth(1).click();
+      await page.waitForTimeout(60);
+    }
+
+    // Save and wear
+    await page.click('#btnSaveAvatar');
+    await page.waitForTimeout(150);
+    check('mobile: avatar creator closes on save', (await page.locator('#avatarModal.hidden').count()) === 1);
+
+    const lookAfter = await page.evaluate(() => window.__pixelHotel.getPlayerLook());
+    check('mobile: player look was updated after saving avatar', lookAfter && JSON.stringify(lookAfter) !== JSON.stringify(lookBefore));
+
+    // Emotes: open emote bar, trigger emote, check active emote & speech bubble
+    await page.click('#btnEmotes');
+    await page.waitForTimeout(100);
+    check('mobile: emote bar opens', (await page.locator('#emoteBar:not(.hidden)').count()) === 1);
+    await checkOverflow('mobile: emote bar open');
+
+    await page.click('button[data-emote="wave"]');
+    await page.waitForTimeout(100);
+    check('mobile: emote bar closes after triggering emote', (await page.locator('#emoteBar.hidden').count()) === 1);
+
+    const emoteStatus = await page.evaluate(() => {
+      const p = window.__pixelHotel.getState().player;
+      return { emote: p.emote, bubbleText: p.bubbleText };
+    });
+    check('mobile: player wave emote and speech bubble icon active', emoteStatus.emote === 'wave' && emoteStatus.bubbleText === '👋');
 
     await page.screenshot({ path: path.join(SCREENSHOT_DIR, '11-mobile-portrait-390x844.png') });
 

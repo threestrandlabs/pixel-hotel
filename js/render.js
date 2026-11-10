@@ -294,6 +294,7 @@ function lerpColor(a, b, t) {
   return `#${((1 << 24) + (r << 16) + (g << 8) + bl).toString(16).slice(1)}`;
 }
 function hexToRgb(hex) {
+  if (!hex || typeof hex !== 'string') return { r: 0, g: 0, b: 0 };
   const n = parseInt(hex.replace('#', ''), 16);
   return { r: (n >> 16) & 0xff, g: (n >> 8) & 0xff, b: n & 0xff };
 }
@@ -1628,8 +1629,10 @@ function drawCharacter(ctx, e, screenX, screenY, dpr = 1, room = null) {
     breathe: e.breathe || 0,
     action: e.action || null,
     actionFrame: e.actionFrame || 0,
+    emote: e.emote || null,
+    emoteFrame: e.emoteFrame || 0,
   };
-  const key = `${e.spriteKey}:${e.color}:${isSwimsuit ? 'swim' : 'norm'}:${e.look ? JSON.stringify(e.look) : ''}`;
+  const key = `${e.spriteKey}:${e.color}:${isSwimsuit ? 'swim' : 'norm'}:${e.look ? JSON.stringify(e.look) : ''}:${e.emote || ''}:${Math.floor((e.emoteFrame || 0) * 2) % 12}`;
   const { canvas, ox, oy, cssH } = getCharacterCanvas(key, look, e.dir, pose, dpr);
 
   // Faint mirrored reflection of avatar in the gym mirror wall

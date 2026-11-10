@@ -4,8 +4,9 @@
 import { SAVE_VERSION, STARTING_COINS, ROOMS, SEED_FURNITURE, TILE, getCatalogueItem } from './data.js';
 import { initQuestState } from './quests.js';
 import { footprintCells, isFurnitureWalkable, isTileBlockedByFurniture } from './inventory.js';
+import { DEFAULT_PLAYER_LOOK } from './avatar.js';
 
-export const SAVE_KEY = 'pixelHotel.save.v1';
+export const SAVE_KEY = 'pixelHotel.save.v1'; // gitleaks:allow
 export const DEFAULT_ZOOM = 1.85;
 
 export function createDefaultState() {
@@ -21,7 +22,8 @@ export function createDefaultState() {
     inventory: [],
     rooms,
     quests: initQuestState(),
-    player: { room: 'lobby', x: ROOMS.lobby.spawn.x, y: ROOMS.lobby.spawn.y, dir: 'down', sitting: null, activity: null, outfit: 'normal', roomTier: 1 },
+    player: { room: 'lobby', x: ROOMS.lobby.spawn.x, y: ROOMS.lobby.spawn.y, dir: 'down', sitting: null, activity: null, outfit: 'normal', roomTier: 1, look: { ...DEFAULT_PLAYER_LOOK } },
+    avatarCustomized: false,
     stats: { greetedNpcs: [], visitedRooms: ['lobby'], placedCount: 0, myRoomPlacedCount: 0, activitiesUsed: [] },
     arcade: {
       dailyCoins: 0,
@@ -504,16 +506,38 @@ const MIGRATIONS = {
       settings: { ...def.settings, ...oldSettings },
     };
   },
-  // v0.8.10: adds arcade Pool (8-ball) win/streak stats and the local Gumball
-  // collection (counts, first-obtained dates, trade history).
+  // v0.9.0: adds player avatar look (skin, hair, top, bottom, shoes, accessory).
   9: (old) => {
+    const def = createDefaultState();
+    const oldPlayer = (old.player && typeof old.player === 'object') ? { ...old.player } : {};
+    const existingLook = (oldPlayer.look && typeof oldPlayer.look === 'object') ? oldPlayer.look : {};
+    const mergedLook = {
+      ...DEFAULT_PLAYER_LOOK,
+      ...existingLook,
+      hair: existingLook.hair || existingLook.hairColor || DEFAULT_PLAYER_LOOK.hair,
+      hairStyle: existingLook.hairStyle || DEFAULT_PLAYER_LOOK.hairStyle,
+    };
+    return {
+      ...def,
+      ...old,
+      version: 10,
+      player: {
+        ...def.player,
+        ...oldPlayer,
+        look: mergedLook,
+      },
+    };
+  },
+  // v0.9.1: adds arcade Pool (8-ball) win/streak stats and the local Gumball
+  // collection (counts, first-obtained dates, trade history).
+  10: (old) => {
     const def = createDefaultState();
     const oldPool = (old.pool && typeof old.pool === 'object') ? old.pool : {};
     const oldGumballs = (old.gumballs && typeof old.gumballs === 'object') ? old.gumballs : {};
     return {
       ...def,
       ...old,
-      version: 10,
+      version: 11,
       pool: {
         wins: typeof oldPool.wins === 'number' ? oldPool.wins : 0,
         losses: typeof oldPool.losses === 'number' ? oldPool.losses : 0,
@@ -630,7 +654,7 @@ export function loadState(storage) {
     ...data,
     rooms: { ...def.rooms, ...data.rooms },
     quests: { ...def.quests, ...data.quests },
-    player: { ...def.player, ...data.player, room: playerRoom },
+    player: { ...def.player, ...data.player, room: playerRoom, look: { ...def.player.look, ...(data.player?.look || {}) } },
     stats: { ...def.stats, ...data.stats },
     settings: mergedSettings,
   };
