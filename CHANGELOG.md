@@ -4,6 +4,31 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.8.8] - 2026-11-11
+
+### Added
+
+- **Mobile-Friendly Portrait Mode & Touch Controls (`index.html`, `css/style.css`, `js/main.js`)**:
+  - Full mobile portrait support at viewports such as 390×844 and 360×780 with `user-scalable=no, viewport-fit=cover` viewport meta, `100dvh` units, and `safe-area-inset` support for notches and home bars.
+  - Crisp pixelated rendering (`imageSmoothingEnabled = false`) and `devicePixelRatio` handling preserved across screen orientation changes.
+  - Seamless touch controls: touchscreen tap to walk and interact with furniture, NPCs, doors, and arcade cabinets; two-finger pinch to zoom; one-finger drag to pan the camera; long-press to cancel placement or trigger item actions; `touch-action: none` on game and arcade canvases to prevent accidental page scroll/zoom.
+  - Compact HUD layout in portrait: streamlined top bar with brand, room indicator, coin balance, and quick settings/help; fixed bottom action bar with clear icon buttons meeting minimum 44px tap targets.
+  - Panels open as bottom sheets sliding up with clear close buttons and drag handles, never overflowing off screen.
+  - Cassette music player automatically minimises to a sleek small pill at the top left of the canvas on mobile portrait.
+  - Virtual keyboard support: dynamically tracks `window.visualViewport` to elevate `#chatDock` by `--keyboard-offset`, ensuring the chat input is never hidden behind the on-screen keyboard.
+- **Touch-Playable Arcade Games (`index.html`, `css/style.css`, `js/arcade/ui.js`)**:
+  - Touch support for all 3 arcade games:
+    - Noodle Snake: swipe gestures on the canvas (up/down/left/right) plus on-screen 4-way D-pad buttons (>=44px).
+    - Block Drop: swipe gestures (left/right to move, down to soft/hard drop, tap or swipe up to rotate) plus on-screen D-pad and Action Buttons (Rotate and Drop).
+    - Brick Bash: touch and drag to slide the paddle directly under the finger, tap left/right to move, plus on-screen Left/Right buttons.
+- **Soundtrack Cleanup & Modernization (`audio/music/`, `js/audio.js`, `README.md`)**:
+  - Removed legacy 10 tracks (`01-grand-lobby.mp3` through `10-rooftop.mp3`) and cleaned up all "Classic" playlist entries and code/credits.
+  - All music files strictly reside in `audio/music/v2/`.
+  - Bumped `SAVE_VERSION` to 9 with migration 8 safely cleaning up any legacy or deprecated saved track selections.
+- **Tests & Verification (`tests/logic.test.mjs`, `tests/smoke.spec.mjs`)**:
+  - Added unit tests verifying portrait projection at 390×844 and 360×780, playlist integrity (all v2 files existing on disk, zero deleted files), and save migration from v8 to v9.
+  - Extended Playwright smoke test with mobile portrait test suite (390×844, `hasTouch: true`, `isMobile: true`) verifying loading, tap-to-walk, min 44px tap targets, opening and closing every panel, touch D-pad arcade input, and viewport overflow assertions.
+
 ## [0.8.7] - 2026-11-11
 
 ### Added
@@ -313,7 +338,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
-- 8 original distinctive catalogue furniture and decor items with unique geometry and sensible pricing (no external assets, no Habbo copies):
+- 8 original distinctive catalogue furniture and decor items with unique geometry and sensible pricing (no external assets, no external game copies):
   - **Luminous Reef Tank** (`aquarium`): 2x1 oceanic aquarium with living coral reef and darting neon clownfish.
   - **Tea-Pearl Boba Bar** (`boba_bar`): 2x1 specialty drink counter with dual tea urns, cup sealer, and boba cups.
   - **Retro Pixel Arcade** (`mini_arcade`): 1x1 upright coin-op arcade cabinet with glowing CRT monitor and illuminated marquee.

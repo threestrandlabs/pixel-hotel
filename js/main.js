@@ -139,14 +139,15 @@ function syncCanvasSize() {
   const dpr = Math.max(1, window.devicePixelRatio || 1);
   const cssW = Math.max(1, Math.round(rect.width || 960));
   const cssH = Math.max(1, Math.round(rect.height || 600));
-  const targetW = Math.round(cssW * dpr);
-  const targetH = Math.round(cssH * dpr);
+  const targetW = Math.max(1, Math.round((rect.width || 960) * dpr));
+  const targetH = Math.max(1, Math.round((rect.height || 600) * dpr));
   if (canvas.width !== targetW || canvas.height !== targetH || ui.dpr !== dpr || ui.cssW !== cssW || ui.cssH !== cssH) {
     canvas.width = targetW;
     canvas.height = targetH;
     ui.cssW = cssW;
     ui.cssH = cssH;
     ui.dpr = dpr;
+    ctx.imageSmoothingEnabled = false;
   }
 }
 
@@ -154,6 +155,32 @@ if (typeof ResizeObserver !== 'undefined') {
   new ResizeObserver(() => syncCanvasSize()).observe(canvas);
 }
 window.addEventListener('resize', syncCanvasSize);
+window.addEventListener('orientationchange', () => {
+  setTimeout(() => {
+    syncCanvasSize();
+    recenterCamera(player.x, player.y);
+  }, 120);
+});
+if (typeof screen !== 'undefined' && screen.orientation?.addEventListener) {
+  screen.orientation.addEventListener('change', () => {
+    setTimeout(() => {
+      syncCanvasSize();
+      recenterCamera(player.x, player.y);
+    }, 120);
+  });
+}
+
+function initVisualViewport() {
+  if (typeof window === 'undefined' || !window.visualViewport) return;
+  const updateViewport = () => {
+    const vv = window.visualViewport;
+    const keyboardOffset = Math.max(0, Math.round(window.innerHeight - (vv.height + vv.offsetTop)));
+    document.documentElement.style.setProperty('--keyboard-offset', `${keyboardOffset}px`);
+  };
+  window.visualViewport.addEventListener('resize', updateViewport);
+  window.visualViewport.addEventListener('scroll', updateViewport);
+}
+initVisualViewport();
 
 // ---------- room/state helpers ----------
 
@@ -1211,7 +1238,7 @@ function frame(now) {
 
 function getCanvasPos(evt) {
   const rect = canvas.getBoundingClientRect();
-  const p = evt.touches ? evt.touches[0] : evt;
+  const p = (evt.touches && evt.touches[0]) || (evt.changedTouches && evt.changedTouches[0]) || evt;
   return { x: p.clientX - rect.left, y: p.clientY - rect.top };
 }
 
@@ -1228,12 +1255,38 @@ function pickTile(evt) {
   return pickTileAt(x, y);
 }
 
+function handleCanvasTap(cx, cy) {
+  if (ui.placing) {
+    const tile = pickTileAt(cx, cy);
+    if (!tile) return;
+    audio.playSfx('click');
+    confirmPlacement(tile);
+    return;
+  }
+  const hit = hitTestNpc(cx, cy);
+  if (hit && hit.kind === 'npc') {
+    audio.playSfx('click');
+    startNpcDialogue(hit.id);
+    return;
+  }
+  const tile = pickTileAt(cx, cy);
+  if (!tile) return;
+  audio.playSfx('click');
+  const room = currentRoomDef();
+  const roomRuntime = currentRoomRuntime();
+  const furn = interactiveFurnitureAt(room, roomRuntime, tile.x, tile.y);
+  if (furn && tryInteractPlayer(furn)) {
+    return;
+  }
+  tryWalkPlayer(tile.x, tile.y);
+}
+
 canvas.addEventListener('mousemove', (evt) => {
   if (ui.dragging) {
     const { x, y } = getCanvasPos(evt);
     const dx = x - ui.dragLast.x;
     const dy = y - ui.dragLast.y;
-    if (Math.abs(dx) > 2 || Math.abs(dy) > 2) ui.dragMoved = true;
+    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) ui.dragMoved = true;
     if (ui.dragMoved) {
       ui.camera.panX += dx;
       ui.camera.panY += dy;
@@ -1260,34 +1313,72 @@ canvas.addEventListener('wheel', (evt) => {
   setZoomAtPoint(ui.camera.zoom + delta, x, y);
 }, { passive: false });
 
-// Pinch-to-zoom (two-finger touch)
+// Touch controls: pinch-to-zoom, one-finger drag pan, tap to walk/interact, long-press
 function touchDist(evt) {
   const [a, b] = evt.touches;
   return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
 }
+
+let touchStartPos = null;
+let touchStartTime = 0;
+let longPressTimer = null;
+
 canvas.addEventListener('touchstart', (evt) => {
   if (evt.touches.length === 2) {
+    if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
     ui.pinchDist = touchDist(evt);
+    ui.dragging = false;
   } else if (evt.touches.length === 1) {
     ui.dragging = true;
     ui.dragMoved = false;
-    ui.dragLast = getCanvasPos(evt);
+    const pos = getCanvasPos(evt);
+    ui.dragLast = pos;
+    touchStartPos = pos;
+    touchStartTime = performance.now();
+
+    if (longPressTimer) clearTimeout(longPressTimer);
+    longPressTimer = setTimeout(() => {
+      longPressTimer = null;
+      if (!ui.dragMoved && touchStartPos) {
+        if (ui.placing) {
+          cancelPlacing();
+          audio.playSfx('click');
+        } else {
+          const tile = pickTileAt(touchStartPos.x, touchStartPos.y);
+          if (tile && state.player.room === 'myroom') {
+            const room = currentRoomDef();
+            const roomRuntime = currentRoomRuntime();
+            const furn = furnitureAt(room, roomRuntime, tile.x, tile.y);
+            if (furn) {
+              startPlacing({ instanceId: furn.instanceId, itemId: furn.itemId, moveInstanceId: furn.instanceId });
+              audio.playSfx('click');
+            }
+          }
+        }
+      }
+    }, 550);
   }
-}, { passive: true });
+}, { passive: false });
+
 canvas.addEventListener('touchmove', (evt) => {
   if (evt.touches.length === 2 && ui.pinchDist) {
+    evt.preventDefault();
+    if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
     const dist = touchDist(evt);
     const rect = canvas.getBoundingClientRect();
     const cx = (evt.touches[0].clientX + evt.touches[1].clientX) / 2 - rect.left;
     const cy = (evt.touches[0].clientY + evt.touches[1].clientY) / 2 - rect.top;
     setZoomAtPoint(ui.camera.zoom * (dist / ui.pinchDist), cx, cy);
     ui.pinchDist = dist;
-    evt.preventDefault();
   } else if (evt.touches.length === 1 && ui.dragging) {
     const { x, y } = getCanvasPos(evt);
     const dx = x - ui.dragLast.x;
     const dy = y - ui.dragLast.y;
-    if (Math.abs(dx) > 2 || Math.abs(dy) > 2) ui.dragMoved = true;
+    const totalDist = touchStartPos ? Math.hypot(x - touchStartPos.x, y - touchStartPos.y) : 0;
+    if (totalDist > 8) {
+      ui.dragMoved = true;
+      if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+    }
     if (ui.dragMoved) {
       ui.camera.panX += dx;
       ui.camera.panY += dy;
@@ -1296,35 +1387,31 @@ canvas.addEventListener('touchmove', (evt) => {
     }
   }
 }, { passive: false });
-canvas.addEventListener('touchend', () => { ui.pinchDist = null; ui.dragging = false; });
+
+canvas.addEventListener('touchend', () => {
+  if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+  ui.pinchDist = null;
+  ui.dragging = false;
+
+  if (!ui.dragMoved && touchStartPos && (performance.now() - touchStartTime < 450)) {
+    const pos = touchStartPos;
+    touchStartPos = null;
+    ui.lastTouchTapTime = performance.now();
+    handleCanvasTap(pos.x, pos.y);
+  }
+  setTimeout(() => { ui.dragMoved = false; }, 60);
+});
 
 canvas.addEventListener('click', (evt) => {
+  if (ui.lastTouchTapTime && (performance.now() - ui.lastTouchTapTime < 400)) {
+    return;
+  }
   if (ui.dragMoved) { ui.dragMoved = false; return; }
   const { x: cx, y: cy } = getCanvasPos(evt);
-  if (ui.placing) {
-    const tile = pickTileAt(cx, cy);
-    if (!tile) return;
-    audio.playSfx('click');
-    confirmPlacement(tile);
-    return;
-  }
-  const hit = hitTestNpc(cx, cy);
-  if (hit && hit.kind === 'npc') {
-    audio.playSfx('click');
-    startNpcDialogue(hit.id);
-    return;
-  }
-  const tile = pickTileAt(cx, cy);
-  if (!tile) return;
-  audio.playSfx('click');
-  const room = currentRoomDef();
-  const roomRuntime = currentRoomRuntime();
-  const furn = interactiveFurnitureAt(room, roomRuntime, tile.x, tile.y);
-  if (furn && tryInteractPlayer(furn)) {
-    return;
-  }
-  tryWalkPlayer(tile.x, tile.y);
+  handleCanvasTap(cx, cy);
 });
+
+canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
 document.getElementById('chatForm').addEventListener('submit', (e) => {
   e.preventDefault();
@@ -1490,7 +1577,11 @@ document.getElementById('btnInventory').addEventListener('click', () => togglePa
 document.getElementById('btnQuests').addEventListener('click', () => togglePanel('questPanel'));
 document.getElementById('btnMultiplayer').addEventListener('click', () => togglePanel('multiplayerPanel'));
 document.querySelectorAll('.panel-close').forEach((btn) => {
-  btn.addEventListener('click', () => document.getElementById(btn.dataset.close).classList.add('hidden'));
+  btn.addEventListener('click', () => {
+    if (btn.dataset.close) {
+      document.getElementById(btn.dataset.close)?.classList.add('hidden');
+    }
+  });
 });
 // Elevator directory is a centred modal: clicking the dimmed backdrop (not the box itself) closes it.
 document.getElementById('elevatorPanel').addEventListener('click', (e) => {
@@ -2142,6 +2233,7 @@ window.__pixelHotel = {
     refreshAudioUi();
   }, // 0.5 noon, 0 midnight
   getSaveVersion: () => SAVE_VERSION,
+  getVersion: () => '0.8.8',
   getRemoteMultiplayer: () => getRemoteMultiplayerEntities(performance.now()),
   walkTo: (x, y) => tryWalkPlayer(x, y),
   interactWith: (itemIdOrInstanceId, immediate = false) => {
@@ -2178,6 +2270,7 @@ window.__pixelHotel = {
   openArcadeLeaderboard: (gameId, scope) => openArcadeLeaderboard(gameId, scope),
   closeArcadeLeaderboard: () => closeArcadeLeaderboard(),
   getArcadeState: () => getActiveArcadeState(),
+  getActiveArcadeState: () => getActiveArcadeState(),
   getSupabaseClient: () => getSupabaseClient(),
   setNpcActivity: (npcId, itemIdOrInstanceId) => {
     const npc = npcRuntimes.find((n) => n.id === npcId || n.id.endsWith(`_${npcId}`));

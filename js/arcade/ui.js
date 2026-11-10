@@ -64,6 +64,8 @@ export function openArcadeGame(gameId = 'noodle_snake') {
     activeGame = createBlockDropGame({ cols: 10, rows: 18 });
   }
 
+  updateTouchControlsVisibility(gameId);
+
   keyState = {};
   lastTickTime = performance.now();
 
@@ -511,6 +513,153 @@ function escapeText(str) {
   }[m]));
 }
 
+let paddleHoldInterval = null;
+
+function updateTouchControlsVisibility(gameId) {
+  const upBtn = document.getElementById('arcadeUp');
+  const downBtn = document.getElementById('arcadeDown');
+  const leftBtn = document.getElementById('arcadeLeft');
+  const rightBtn = document.getElementById('arcadeRight');
+  const actBtns = document.getElementById('arcadeActionButtons');
+
+  if (gameId === 'noodle_snake') {
+    if (upBtn) upBtn.style.visibility = 'visible';
+    if (downBtn) downBtn.style.visibility = 'visible';
+    if (leftBtn) leftBtn.style.visibility = 'visible';
+    if (rightBtn) rightBtn.style.visibility = 'visible';
+    if (actBtns) actBtns.style.display = 'none';
+  } else if (gameId === 'block_drop') {
+    if (upBtn) upBtn.style.visibility = 'hidden';
+    if (downBtn) downBtn.style.visibility = 'visible';
+    if (leftBtn) leftBtn.style.visibility = 'visible';
+    if (rightBtn) rightBtn.style.visibility = 'visible';
+    if (actBtns) actBtns.style.display = 'flex';
+  } else if (gameId === 'brick_bash') {
+    if (upBtn) upBtn.style.visibility = 'hidden';
+    if (downBtn) downBtn.style.visibility = 'hidden';
+    if (leftBtn) leftBtn.style.visibility = 'visible';
+    if (rightBtn) rightBtn.style.visibility = 'visible';
+    if (actBtns) actBtns.style.display = 'none';
+  }
+}
+
+function handleArcadeAction(action) {
+  if (!activeGame || activeGame.gameOver) return;
+
+  if (activeGameId === 'noodle_snake') {
+    if (['up', 'down', 'left', 'right'].includes(action)) {
+      setSnakeDirection(activeGame, action);
+    }
+  } else if (activeGameId === 'block_drop') {
+    if (['left', 'right', 'down', 'rotate', 'drop'].includes(action)) {
+      moveBlockDrop(activeGame, action);
+    }
+  } else if (activeGameId === 'brick_bash') {
+    if (action === 'left' || action === 'right') {
+      movePaddle(activeGame, action);
+    }
+  }
+}
+
+function startPaddleHold(dir) {
+  if (paddleHoldInterval) clearInterval(paddleHoldInterval);
+  handleArcadeAction(dir);
+  paddleHoldInterval = setInterval(() => {
+    if (activeGame && !activeGame.gameOver && activeGameId === 'brick_bash') {
+      movePaddle(activeGame, dir);
+    }
+  }, 40);
+}
+
+function stopPaddleHold() {
+  if (paddleHoldInterval) {
+    clearInterval(paddleHoldInterval);
+    paddleHoldInterval = null;
+  }
+}
+
+function bindArcadeCanvasTouch() {
+  const canvas = document.getElementById('arcadeCanvas');
+  if (!canvas) return;
+
+  let touchStartX = 0;
+  let touchStartY = 0;
+  let touchStartTime = 0;
+  let touchMoved = false;
+
+  canvas.addEventListener('touchstart', (e) => {
+    if (!activeGame || activeGame.gameOver) return;
+    if (e.touches.length !== 1) return;
+    const touch = e.touches[0];
+    touchStartX = touch.clientX;
+    touchStartY = touch.clientY;
+    touchStartTime = performance.now();
+    touchMoved = false;
+
+    if (activeGameId === 'brick_bash') {
+      const rect = canvas.getBoundingClientRect();
+      const scale = activeGame.width / rect.width;
+      const targetX = (touch.clientX - rect.left) * scale;
+      activeGame.paddle.x = Math.max(0, Math.min(activeGame.width - activeGame.paddle.w, targetX - activeGame.paddle.w / 2));
+    }
+  }, { passive: false });
+
+  canvas.addEventListener('touchmove', (e) => {
+    if (!activeGame || activeGame.gameOver) return;
+    if (e.touches.length !== 1) return;
+    e.preventDefault();
+    const touch = e.touches[0];
+    const dx = touch.clientX - touchStartX;
+    const dy = touch.clientY - touchStartY;
+    if (Math.abs(dx) > 10 || Math.abs(dy) > 10) touchMoved = true;
+
+    if (activeGameId === 'brick_bash') {
+      const rect = canvas.getBoundingClientRect();
+      const scale = activeGame.width / rect.width;
+      const targetX = (touch.clientX - rect.left) * scale;
+      activeGame.paddle.x = Math.max(0, Math.min(activeGame.width - activeGame.paddle.w, targetX - activeGame.paddle.w / 2));
+    }
+  }, { passive: false });
+
+  canvas.addEventListener('touchend', (e) => {
+    if (!activeGame || activeGame.gameOver) return;
+    const touch = e.changedTouches[0];
+    if (!touch) return;
+    const dx = touch.clientX - touchStartX;
+    const dy = touch.clientY - touchStartY;
+    const absDx = Math.abs(dx);
+    const absDy = Math.abs(dy);
+    const elapsed = performance.now() - touchStartTime;
+
+    if (activeGameId === 'noodle_snake') {
+      if (absDx > 20 || absDy > 20) {
+        if (absDx > absDy) {
+          setSnakeDirection(activeGame, dx > 0 ? 'right' : 'left');
+        } else {
+          setSnakeDirection(activeGame, dy > 0 ? 'down' : 'up');
+        }
+      }
+    } else if (activeGameId === 'block_drop') {
+      if (absDx > 25 && absDx > absDy) {
+        moveBlockDrop(activeGame, dx > 0 ? 'right' : 'left');
+      } else if (dy > 30 && absDy > absDx) {
+        moveBlockDrop(activeGame, elapsed < 220 && dy > 60 ? 'drop' : 'down');
+      } else if (dy < -25 && absDy > absDx) {
+        moveBlockDrop(activeGame, 'rotate');
+      } else if (!touchMoved) {
+        moveBlockDrop(activeGame, 'rotate');
+      }
+    } else if (activeGameId === 'brick_bash') {
+      if (!touchMoved) {
+        const rect = canvas.getBoundingClientRect();
+        const tapX = touch.clientX - rect.left;
+        if (tapX < rect.width * 0.45) movePaddle(activeGame, 'left');
+        else if (tapX > rect.width * 0.55) movePaddle(activeGame, 'right');
+      }
+    }
+  }, { passive: false });
+}
+
 function bindArcadeDomEvents() {
   document.getElementById('btnArcadeClose')?.addEventListener('click', closeArcadeGame);
   document.getElementById('btnArcadePlayAgain')?.addEventListener('click', () => {
@@ -521,6 +670,44 @@ function bindArcadeDomEvents() {
   });
 
   document.getElementById('btnLeaderboardClose')?.addEventListener('click', closeArcadeLeaderboard);
+
+  // D-pad touch buttons
+  const dpadButtons = [
+    { id: 'arcadeUp', action: 'up' },
+    { id: 'arcadeDown', action: 'down' },
+    { id: 'arcadeLeft', action: 'left' },
+    { id: 'arcadeRight', action: 'right' },
+    { id: 'arcadeRotate', action: 'rotate' },
+    { id: 'arcadeDrop', action: 'drop' },
+  ];
+
+  dpadButtons.forEach(({ id, action }) => {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+
+    let lastHandled = 0;
+    const trigger = (e) => {
+      e.preventDefault();
+      if (Date.now() - lastHandled < 60) return;
+      lastHandled = Date.now();
+      if (activeGameId === 'brick_bash' && (action === 'left' || action === 'right')) {
+        startPaddleHold(action);
+      } else {
+        handleArcadeAction(action);
+      }
+    };
+
+    btn.addEventListener('pointerdown', trigger);
+    btn.addEventListener('click', trigger);
+
+    if (action === 'left' || action === 'right') {
+      btn.addEventListener('pointerup', stopPaddleHold);
+      btn.addEventListener('pointercancel', stopPaddleHold);
+      btn.addEventListener('pointerleave', stopPaddleHold);
+    }
+  });
+
+  bindArcadeCanvasTouch();
 
   document.querySelectorAll('[data-arcade-game]').forEach((btn) => {
     btn.addEventListener('click', () => {

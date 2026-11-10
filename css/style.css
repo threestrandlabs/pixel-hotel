@@ -7,28 +7,35 @@ html, body {
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   font-size: 14px;
   height: 100%;
+  height: 100dvh;
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
+  -webkit-touch-callout: none;
 }
 
 #app {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto 1fr auto;
   grid-template-areas:
     "topbar"
     "game"
     "chat";
   height: 100vh;
+  height: 100dvh;
+  width: 100%;
+  max-width: 100vw;
+  overflow: hidden;
   gap: 6px;
-  padding: 6px;
+  padding: env(safe-area-inset-top, 6px) env(safe-area-inset-right, 6px) env(safe-area-inset-bottom, 6px) env(safe-area-inset-left, 6px);
+  box-sizing: border-box;
 }
 
 #topbar {
   grid-area: topbar;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   background: #2c2150;
   border: 3px solid #0e0a1d;
   border-radius: 8px;
@@ -46,7 +53,8 @@ html, body {
   font-weight: 600;
 }
 #coinsDisplay { margin-left: auto; font-size: 14px; font-weight: 700; color: #ffe08a; }
-#topButtons { display: flex; gap: 5px; flex-wrap: wrap; }
+#topQuickButtons { display: flex; gap: 5px; }
+#topButtons { display: flex; gap: 5px; flex-wrap: wrap; align-items: center; }
 
 .pixel-btn {
   font-family: inherit;
@@ -81,6 +89,9 @@ html, body {
   height: 100%;
   cursor: pointer;
   display: block;
+  touch-action: none;
+  -webkit-touch-callout: none;
+  user-select: none;
 }
 
 #toast {
@@ -712,14 +723,414 @@ kbd {
 .mp-like-btn.active { background: #a23a5a; color: #fff; }
 .mp-member { justify-content: space-between; }
 
-@media (max-width: 860px) {
-  .panel {
+/* Arcade Touch Controls (On-Screen D-Pad & Action Buttons) */
+.arcade-touch-controls {
+  margin-top: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid #5c4a96;
+  border-radius: 6px;
+  user-select: none;
+  touch-action: none;
+}
+.arcade-dpad {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.arcade-dpad-row {
+  display: flex;
+  gap: 34px;
+}
+.arcade-dpad-btn {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 6px;
+  font-size: 17px;
+  background: #342654;
+  border: 2px solid #5c4a96;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #00e5ff;
+  touch-action: none;
+  cursor: pointer;
+}
+.arcade-dpad-btn:active {
+  background: #00e5ff;
+  color: #1b1430;
+}
+.arcade-action-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.arcade-act-btn {
+  min-width: 90px;
+  min-height: 44px;
+  padding: 8px 12px;
+  font-size: 13px;
+  background: #4a2a68;
+  border: 2px solid #ff4081;
+  color: #ffd27a;
+  border-radius: 6px;
+  touch-action: none;
+  cursor: pointer;
+}
+.arcade-act-btn:active {
+  background: #ff4081;
+  color: #fff;
+}
+
+/* Action button base layout on desktop */
+.action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.action-btn .btn-icon {
+  line-height: 1;
+}
+.action-btn .btn-text {
+  line-height: 1;
+}
+
+/* ==========================================================================
+   v0.8.8 Mobile Portrait Mode & Responsive UI Cleanup
+   Optimized for portrait phones (390x844, 360x780) and touch devices
+   ========================================================================== */
+@media (max-width: 768px), (orientation: portrait) and (max-width: 960px) {
+  #app {
+    width: 100%;
+    max-width: 100vw;
+    overflow: hidden;
+    grid-template-columns: minmax(0, 1fr);
+    padding: env(safe-area-inset-top, 4px) env(safe-area-inset-right, 4px) env(safe-area-inset-bottom, 4px) env(safe-area-inset-left, 4px);
+    gap: 4px;
+    box-sizing: border-box;
+  }
+
+  /* Compact top bar */
+  #topbar {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    min-width: 0;
+    padding: 4px 6px;
+    gap: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: nowrap;
+    background: #241b3f;
+    border: 2px solid #0e0a1d;
+    min-height: 42px;
+  }
+  #brand {
+    font-size: 13px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  #roomName {
+    font-size: 11px;
+    padding: 2px 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 105px;
+    min-width: 0;
+    margin: 0;
+  }
+  #coinsDisplay {
+    font-size: 12px;
+    white-space: nowrap;
+    margin-left: 0;
+    flex-shrink: 0;
+  }
+  #topQuickButtons {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+  #topQuickButtons .pixel-btn {
+    min-width: 38px;
+    min-height: 38px;
+    padding: 4px;
+    font-size: 15px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Game canvas area */
+  #gameArea {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+
+  /* Bottom action bar with clear icon buttons and >= 44px tap targets */
+  #topButtons.action-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    max-width: 100vw;
+    box-sizing: border-box;
+    height: 52px;
+    background: #241b3f;
+    border-top: 2px solid #5c4a96;
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    padding: 2px 4px calc(env(safe-area-inset-bottom, 0px) + 2px) 4px;
+    z-index: 25;
+    box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.5);
+  }
+  .action-btn {
+    flex: 1;
+    min-width: 44px;
+    min-height: 44px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2px 1px;
+    gap: 2px;
+    border-radius: 6px;
+    background: #392b60;
+    border: 1px solid #140e28;
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.1);
+  }
+  .action-btn:active {
+    background: #503d85;
+    transform: translateY(1px);
+  }
+  .action-btn .btn-icon {
+    font-size: 16px;
+    line-height: 1;
+  }
+  .action-btn .btn-text {
+    font-size: 9.5px;
+    font-weight: 600;
+    color: #e5dcff;
+    line-height: 1;
+  }
+  .desktop-only {
+    display: none !important;
+  }
+
+  /* Chat dock: compact & responsive to on-screen keyboard via visualViewport */
+  #chatDock {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    padding: 4px 6px;
+    max-height: 100px;
+    margin-bottom: calc(54px + env(safe-area-inset-bottom, 0px) + var(--keyboard-offset, 0px));
+    border-radius: 8px;
+    background: rgba(36, 27, 63, 0.95);
+    z-index: 10;
+  }
+  #chatLog {
+    max-height: 38px;
+    font-size: 11.5px;
+    margin-bottom: 3px;
+  }
+  #chatForm input {
+    font-size: 13px;
+    padding: 6px 8px;
+    min-height: 36px;
+  }
+  #chatForm button {
+    min-width: 52px;
+    min-height: 44px;
+    font-size: 13px;
+    padding: 4px 10px;
+  }
+
+  /* Music player minimizes to a sleek small pill on mobile */
+  .music-player {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    bottom: auto;
+    width: auto;
+    max-width: 220px;
+    border-radius: 20px;
+    padding: 3px 8px;
+    background: rgba(20, 14, 40, 0.92);
+    border: 2px solid #5c4a96;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    z-index: 8;
+  }
+  .music-player .mp-cassette,
+  .music-player .mp-subtitle,
+  .music-player #mpVolume,
+  .music-player .mp-seek-row,
+  .music-player #mpShuffle,
+  .music-player #mpCollapse {
+    display: none !important;
+  }
+  .music-player .mp-bar {
+    padding: 2px;
+    gap: 6px;
+  }
+  .music-player .mp-title {
+    max-width: 105px;
+    font-size: 11.5px;
+  }
+  .music-player .mp-controls {
+    gap: 3px;
+  }
+  .music-player .mp-controls .pixel-btn {
+    padding: 2px 6px;
+    font-size: 11px;
+    min-height: 28px;
+  }
+
+  /* Zoom controls: compact in top right */
+  #zoomControls {
+    top: 8px;
+    right: 8px;
+    padding: 2px 4px;
+    gap: 3px;
+  }
+  #zoomControls .pixel-btn {
+    min-width: 28px;
+    min-height: 28px;
+    padding: 2px 6px;
+    font-size: 12px;
+  }
+  #zoomLevel {
+    font-size: 11px;
+    min-width: 34px;
+  }
+
+  /* Panels open as bottom sheets sliding up */
+  .panel:not(.elevator-modal-backdrop) {
+    position: fixed;
+    top: auto;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    max-width: 100vw;
+    max-height: 80vh;
+    max-height: 80dvh;
+    border-radius: 16px 16px 0 0;
+    border: 3px solid #5c4a96;
+    border-bottom: none;
+    box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.7);
+    z-index: 50;
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 8px);
+  }
+  .panel-header {
+    padding: 10px 14px;
+    position: relative;
+    border-radius: 13px 13px 0 0;
+  }
+  .panel-header::before {
+    content: '';
+    position: absolute;
+    top: 5px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 36px;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.35);
+    border-radius: 2px;
+  }
+  .panel-close {
+    min-width: 44px;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    cursor: pointer;
+  }
+  .tab-btn {
+    min-height: 42px;
+    font-size: 13px;
+  }
+  .category-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+  .category-tile {
+    min-height: 52px;
+    padding: 10px 6px;
+  }
+
+  /* Full screen / centered modals — never overflowing off screen */
+  .overlay {
+    padding: 8px;
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 8px);
+  }
+  .overlay-box {
+    max-width: calc(100vw - 16px) !important;
+    max-height: calc(100dvh - 24px) !important;
+    padding: 12px;
+    border-radius: 12px;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+  .elevator-modal-box {
+    max-width: calc(100vw - 16px) !important;
+    max-height: calc(100dvh - 32px) !important;
+    border-radius: 12px;
+  }
+  .elevator-modal-backdrop .panel-close,
+  #btnElevatorClose, #btnArcadeClose, #btnLeaderboardClose, #btnUpgradeClose, #btnSalonClose, #btnHelpClose {
+    min-width: 44px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+  .arcade-game-box {
+    max-width: calc(100vw - 16px) !important;
+    padding: 8px 10px;
+  }
+  #arcadeCanvasWrap {
+    width: min(320px, calc(100vw - 44px)) !important;
+    height: min(320px, calc(100vw - 44px)) !important;
+  }
+
+  /* Dialogue bar & placing bar */
+  .npc-dialogue-bar {
+    position: fixed;
+    bottom: calc(54px + env(safe-area-inset-bottom, 0px) + 8px);
     left: 8px;
     right: 8px;
     width: auto;
-    max-height: 50vh;
+    max-width: calc(100vw - 16px);
+    z-index: 30;
   }
-  #coinsDisplay { order: -1; margin-left: 0; }
+  #btnNpcDlgClose {
+    min-width: 36px;
+    min-height: 36px;
+  }
+  #placingBar {
+    position: fixed;
+    bottom: calc(54px + env(safe-area-inset-bottom, 0px) + 8px);
+    left: 8px;
+    right: 8px;
+    transform: none;
+    justify-content: center;
+    z-index: 30;
+  }
 }
 
 .elevator-item.disabled-floor {

@@ -1,5 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 import {
   findPath, retargetMover, advanceMover, createMoverState, canStep, smoothPath,
@@ -2189,7 +2195,7 @@ test('v0.8.5 audio: floor mapping resolves every floor to its matching v2 soundt
       assert.equal(info.label, expected.label, `${roomId} has label ${expected.label}`);
     }
 
-    // Verify extras and classic tracks in playlist
+    // Verify extras in playlist
     assert.ok(PLAYLIST.includes('main-menu'));
     assert.ok(PLAYLIST.includes('guest-room'));
     assert.ok(PLAYLIST.includes('renovation'));
@@ -2199,10 +2205,13 @@ test('v0.8.5 audio: floor mapping resolves every floor to its matching v2 soundt
     assert.equal(MUSIC_FILES['renovation'].src, 'audio/music/v2/renovation.mp3');
     assert.equal(MUSIC_FILES['event-map'].src, 'audio/music/v2/event-map.mp3');
 
-    // Classic tracks labeled "Classic: <old label>"
-    assert.equal(MUSIC_FILES['classic-lobby'].label, 'Classic: Grand Lobby Jazz Lounge');
-    assert.equal(MUSIC_FILES['classic-gym'].label, 'Classic: Gym Pulse Fitness Electronic');
-    assert.equal(MUSIC_FILES['classic-rooftop'].label, 'Classic: Rooftop Sunset Night House');
+    // Goal 2: All tracks must be in audio/music/v2/, no legacy classic-* tracks or deleted files
+    for (const [key, track] of Object.entries(MUSIC_FILES)) {
+      assert.ok(track.src.startsWith('audio/music/v2/'), `track ${key} (${track.src}) uses audio/music/v2/`);
+      assert.ok(!key.startsWith('classic-'), `track key ${key} is not a classic track`);
+      assert.ok(fs.existsSync(path.resolve(__dirname, '..', track.src)), `track file ${track.src} exists on disk`);
+    }
+    assert.equal(PLAYLIST.filter((k) => k.startsWith('classic-')).length, 0);
   } finally {
     if (synth) synth.stopLoop();
     delete global.Audio;
@@ -2291,4 +2300,67 @@ test('v0.8.5 persistence: shuffle setting defaults to false and round-trips thro
   const loadedOld = loadState(storage);
   assert.equal(loadedOld.settings.shuffle, false);
   assert.equal(loadedOld.settings.playerMinimized, true);
+});
+
+// ======================= v0.8.8 mobile portrait layout & music cleanup =======================
+test('v0.8.8 layout: portrait viewport projection (390x844 and 360x780) computes valid origins and round-trips screenToTile / tileToScreen', () => {
+  const viewports = [
+    { w: 390, h: 844, name: 'iPhone portrait 390x844' },
+    { w: 360, h: 780, name: 'Android portrait 360x780' },
+  ];
+
+  for (const vp of viewports) {
+    const room = ROOMS.lobby;
+    const { originX, originY } = computeOrigin(room, vp.w, vp.h);
+    assert.ok(Number.isFinite(originX), `${vp.name}: originX is finite (${originX})`);
+    assert.ok(Number.isFinite(originY), `${vp.name}: originY is finite (${originY})`);
+
+    const cam = centerCameraOnTile(room.spawn.x, room.spawn.y, room, vp.w, vp.h, 1.85);
+    assert.ok(Number.isFinite(cam.panX), `${vp.name}: cam.panX is finite`);
+    assert.ok(Number.isFinite(cam.panY), `${vp.name}: cam.panY is finite`);
+    assert.ok(cam.zoom >= 0.55 && cam.zoom <= 2.5, `${vp.name}: zoom clamped within sane bounds`);
+
+    // Screen -> tile -> screen round trip
+    const { sx: wx, sy: wy } = tileToScreen(room.spawn.x, room.spawn.y, originX, originY);
+    const { sx, sy } = worldToScreen(wx, wy, cam, vp.w, vp.h);
+    assert.ok(Number.isFinite(sx) && Number.isFinite(sy), `${vp.name}: worldToScreen produces finite screen coords`);
+
+    const t = screenToTile(sx, sy, originX, originY, cam, vp.w, vp.h);
+    assert.equal(t.x, room.spawn.x, `${vp.name}: round trip tile.x matches`);
+    assert.equal(t.y, room.spawn.y, `${vp.name}: round trip tile.y matches`);
+  }
+});
+
+test('v0.8.8 music: playlist strictly contains only audio/music/v2 tracks, zero deleted files, zero classic entries', () => {
+  assert.ok(PLAYLIST.length >= 14, `PLAYLIST has ${PLAYLIST.length} tracks (>=14)`);
+
+  for (const key of PLAYLIST) {
+    const def = MUSIC_FILES[key];
+    assert.ok(def, `PLAYLIST key ${key} exists in MUSIC_FILES`);
+    assert.ok(def.src.startsWith('audio/music/v2/'), `track ${key} (${def.src}) points to audio/music/v2/`);
+    assert.ok(!def.label.toLowerCase().includes('classic'), `track ${key} label does not mention classic`);
+    assert.ok(!key.startsWith('classic-'), `track key ${key} does not start with classic-`);
+
+    const fullPath = path.resolve(__dirname, '..', def.src);
+    assert.ok(fs.existsSync(fullPath), `track file ${def.src} exists on disk at ${fullPath}`);
+  }
+
+  // Confirm old tracks 01-*.mp3 .. 10-*.mp3 are not present on disk
+  const musicDir = path.resolve(__dirname, '..', 'audio/music');
+  const filesInMusicDir = fs.readdirSync(musicDir);
+  const oldFiles = filesInMusicDir.filter((f) => /^(0[1-9]|10)-.*\.mp3$/.test(f));
+  assert.equal(oldFiles.length, 0, `no deleted 01-..10- mp3 files remain on disk (found: ${oldFiles.join(',')})`);
+});
+
+test('v0.8.8 migration: v8 save migrates forward to v9, resetting deprecated trackId', () => {
+  const v8Save = createDefaultState();
+  v8Save.version = 8;
+  v8Save.settings.trackId = 'classic-lobby';
+
+  const storage = makeFakeStorage();
+  storage.setItem(SAVE_KEY, JSON.stringify(v8Save));
+
+  const loaded = loadState(storage);
+  assert.equal(loaded.version, 9, 'save migrated to version 9');
+  assert.equal(loaded.settings.trackId, 'lobby', 'legacy classic-lobby trackId reset to lobby');
 });

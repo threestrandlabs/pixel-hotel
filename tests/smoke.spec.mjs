@@ -932,6 +932,8 @@ async function main() {
     await context1x.close();
     await context2x.close();
 
+    await runMobilePortraitSmokeTest(browser);
+
     await runMultiplayerUiFlowTests(browser);
   } finally {
     if (browser) await browser.close().catch(() => {});
@@ -944,6 +946,214 @@ async function main() {
     process.exitCode = 1;
   } else {
     console.log('All smoke checks passed.');
+  }
+}
+
+// v0.8.8 Mobile-friendly portrait smoke test (390x844, hasTouch)
+async function runMobilePortraitSmokeTest(browser) {
+  console.log('Testing mobile portrait mode at 390x844 (hasTouch=true)...');
+  const contextMobile = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    deviceScaleFactor: 2,
+    hasTouch: true,
+    isMobile: true,
+  });
+  const page = await contextMobile.newPage();
+
+  const consoleErrors = [];
+  const pageErrors = [];
+  page.on('console', (msg) => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
+  page.on('pageerror', (err) => pageErrors.push(String(err)));
+
+  try {
+    await page.goto(BASE_URL, { waitUntil: 'load' });
+    await page.waitForFunction(() => window.__pixelHotel, null, { timeout: 8000 });
+    await page.waitForTimeout(300);
+
+    const checkOverflow = async (label) => {
+      const res = await page.evaluate(() => {
+        const doc = document.documentElement;
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+        const scrollW = doc.scrollWidth;
+        const issues = [];
+        const checked = document.querySelectorAll('#app, #topbar, #gameArea, #chatDock, #topButtons, .panel:not(.hidden), .overlay:not(.hidden), .overlay-box');
+        for (const el of checked) {
+          const r = el.getBoundingClientRect();
+          if (r.right > vw + 1.5 || r.left < -1.5) {
+            issues.push({ id: el.id, class: el.className, left: Math.round(r.left), right: Math.round(r.right), vw });
+          }
+        }
+        return { scrollW, vw, vh, horizontalOverflow: scrollW > vw, issues };
+      });
+      check(`${label}: document does not overflow horizontally`, !res.horizontalOverflow && res.issues.length === 0);
+      if (res.issues.length) console.error(`${label} overflowing elements:`, res.issues);
+    };
+
+    // First-run help overlay: close on mobile
+    const helpOpen = await page.locator('#helpOverlay:not(.hidden)').count();
+    check('mobile: help overlay is shown initially on first run', helpOpen === 1);
+    await checkOverflow('mobile: help overlay open');
+    await page.click('#btnHelpClose');
+    await page.waitForTimeout(100);
+    check('mobile: closing help overlay hides it', (await page.locator('#helpOverlay:not(.hidden)').count()) === 0);
+
+    // Check main screen viewport layout & canvas backing store
+    await checkOverflow('mobile: main game screen');
+
+    const canvasMetrics = await page.evaluate(() => {
+      const c = document.getElementById('gameCanvas');
+      const r = c.getBoundingClientRect();
+      return {
+        dpr: window.devicePixelRatio,
+        width: c.width,
+        height: c.height,
+        expectedW: Math.round(r.width * window.devicePixelRatio),
+        expectedH: Math.round(r.height * window.devicePixelRatio),
+      };
+    });
+    check(
+      'mobile: canvas backing store matches CSS dimensions * DPR at 390x844',
+      canvasMetrics.width === canvasMetrics.expectedW && canvasMetrics.height === canvasMetrics.expectedH
+    );
+
+    // Cassette player is minimized to a compact pill on mobile
+    const mpMobile = await page.evaluate(() => {
+      const mp = document.getElementById('musicPlayer');
+      const r = mp.getBoundingClientRect();
+      const cassetteVis = window.getComputedStyle(document.getElementById('mpCassette')).display !== 'none';
+      return { width: r.width, height: r.height, cassetteVis };
+    });
+    check('mobile: cassette tape is hidden and music player forms a small pill', !mpMobile.cassetteVis && mpMobile.width <= 230);
+
+    // Tap to walk: record position before, tap canvas with touchscreen, assert position changes
+    const playerBeforeTap = await page.evaluate(() => window.__pixelHotel.getState().player);
+    const canvasBox = await page.locator('#gameCanvas').boundingBox();
+    const tapX = canvasBox.x + canvasBox.width * 0.5 + 40;
+    const tapY = canvasBox.y + canvasBox.height * 0.5 + 40;
+    await page.touchscreen.tap(tapX, tapY);
+    await page.waitForFunction(
+      (start) => { const p = window.__pixelHotel.getState().player; return p.x !== start.x || p.y !== start.y; },
+      playerBeforeTap,
+      { timeout: 5000 },
+    ).catch(() => {});
+    const playerAfterTap = await page.evaluate(() => window.__pixelHotel.getState().player);
+    check('mobile: touchscreen tap on floor tile walks the avatar', playerBeforeTap.x !== playerAfterTap.x || playerBeforeTap.y !== playerAfterTap.y);
+
+    // Bottom action bar: audit tap targets >= 44px
+    const tapTargets = await page.evaluate(() => {
+      const btns = Array.from(document.querySelectorAll('#topButtons .action-btn:not(.desktop-only)'));
+      const small = [];
+      for (const b of btns) {
+        const r = b.getBoundingClientRect();
+        if (r.width < 43 || r.height < 43) {
+          small.push({ id: b.id, width: r.width, height: r.height });
+        }
+      }
+      return { total: btns.length, small };
+    });
+    check('mobile: bottom action bar buttons meet min 44px tap target requirements', tapTargets.total >= 5 && tapTargets.small.length === 0);
+    if (tapTargets.small.length) console.error('buttons below 44px:', tapTargets.small);
+
+    // Audit and test opening and closing each main panel as bottom sheets / modals:
+
+    // 1. Elevator directory
+    await page.click('#btnElevator');
+    await page.waitForTimeout(150);
+    check('mobile: elevator panel opens', await page.locator('#elevatorPanel:not(.hidden)').count() === 1);
+    await checkOverflow('mobile: elevator panel');
+    await page.click('[data-close="elevatorPanel"]');
+    await page.waitForTimeout(100);
+    check('mobile: elevator panel closes', await page.locator('#elevatorPanel.hidden').count() === 1);
+
+    // 2. Inventory / Shop
+    await page.click('#btnInventory');
+    await page.waitForTimeout(150);
+    check('mobile: inventory panel opens as bottom sheet', await page.locator('#inventoryPanel:not(.hidden)').count() === 1);
+    await checkOverflow('mobile: inventory panel');
+    await page.click('[data-close="inventoryPanel"]');
+    await page.waitForTimeout(100);
+    check('mobile: inventory panel closes', await page.locator('#inventoryPanel.hidden').count() === 1);
+
+    // 3. Quests
+    await page.click('#btnQuests');
+    await page.waitForTimeout(150);
+    check('mobile: quest panel opens as bottom sheet', await page.locator('#questPanel:not(.hidden)').count() === 1);
+    await checkOverflow('mobile: quest panel');
+    await page.click('[data-close="questPanel"]');
+    await page.waitForTimeout(100);
+    check('mobile: quest panel closes', await page.locator('#questPanel.hidden').count() === 1);
+
+    // 4. Multiplayer
+    await page.click('#btnMultiplayer');
+    await page.waitForTimeout(150);
+    check('mobile: multiplayer panel opens as bottom sheet', await page.locator('#multiplayerPanel:not(.hidden)').count() === 1);
+    await checkOverflow('mobile: multiplayer panel');
+    await page.click('[data-close="multiplayerPanel"]');
+    await page.waitForTimeout(100);
+    check('mobile: multiplayer panel closes', await page.locator('#multiplayerPanel.hidden').count() === 1);
+
+    // 5. Settings / Audio Mixer
+    await page.click('#btnMute');
+    await page.waitForTimeout(150);
+    check('mobile: audio settings panel opens as bottom sheet', await page.locator('#audioPanel:not(.hidden)').count() === 1);
+    await checkOverflow('mobile: audio panel');
+    await page.click('[data-close="audioPanel"]');
+    await page.waitForTimeout(100);
+    check('mobile: audio settings panel closes', await page.locator('#audioPanel.hidden').count() === 1);
+
+    // 6. Room Upgrade Agency modal
+    await page.click('#btnUpgradeRoom');
+    await page.waitForTimeout(150);
+    check('mobile: room upgrade agency modal opens', await page.locator('#roomUpgradeModal:not(.hidden)').count() === 1);
+    await checkOverflow('mobile: upgrade modal');
+    await page.click('#btnUpgradeClose');
+    await page.waitForTimeout(100);
+    check('mobile: room upgrade agency modal closes', await page.locator('#roomUpgradeModal.hidden').count() === 1);
+
+    // 7. Arcade game modal & touch controls
+    await page.evaluate(() => window.__pixelHotel.openArcadeGame('noodle_snake'));
+    await page.waitForTimeout(150);
+    check('mobile: arcade game modal opens', await page.locator('#arcadeGameModal:not(.hidden)').count() === 1);
+    await checkOverflow('mobile: arcade game modal');
+    const dpadCheck = await page.evaluate(() => {
+      const up = document.getElementById('arcadeUp');
+      const r = up ? up.getBoundingClientRect() : null;
+      return { exists: !!up, width: r?.width, height: r?.height };
+    });
+    check('mobile: arcade on-screen D-pad has min 44px tap targets', dpadCheck.exists && dpadCheck.width >= 43 && dpadCheck.height >= 43);
+    await page.click('#arcadeDown');
+    await page.waitForTimeout(60);
+    const arcadeState = await page.evaluate(() => window.__pixelHotel.getActiveArcadeState());
+    check('mobile: tapping d-pad button issues game input', arcadeState.game?.nextDir?.dy === 1 || arcadeState.game?.dir?.dy === 1);
+    await page.click('#btnArcadeClose');
+    await page.waitForTimeout(100);
+    check('mobile: arcade game modal closes', await page.locator('#arcadeGameModal.hidden').count() === 1);
+
+    // 8. Arcade leaderboard modal
+    await page.evaluate(() => window.__pixelHotel.openArcadeLeaderboard('noodle_snake', 'local'));
+    await page.waitForTimeout(150);
+    check('mobile: arcade leaderboard modal opens', await page.locator('#arcadeLeaderboardModal:not(.hidden)').count() === 1);
+    await checkOverflow('mobile: leaderboard modal');
+    await page.click('#btnLeaderboardClose');
+    await page.waitForTimeout(100);
+    check('mobile: arcade leaderboard modal closes', await page.locator('#arcadeLeaderboardModal.hidden').count() === 1);
+
+    // Chat dock & input with visualViewport
+    await page.fill('#chatInput', 'mobile hello!');
+    await page.click('#chatForm button[type="submit"]');
+    await page.waitForTimeout(200);
+    const chatTextMobile = await page.textContent('#chatLog');
+    check('mobile: chat send works and appears in chat log', chatTextMobile.includes('mobile hello'));
+
+    await page.screenshot({ path: path.join(SCREENSHOT_DIR, '11-mobile-portrait-390x844.png') });
+
+    check('mobile: no console errors', consoleErrors.length === 0);
+    if (consoleErrors.length) console.error(consoleErrors);
+    check('mobile: no uncaught page errors', pageErrors.length === 0);
+    if (pageErrors.length) console.error(pageErrors);
+  } finally {
+    await contextMobile.close();
   }
 }
 

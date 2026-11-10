@@ -9,8 +9,8 @@ live avatars/chat) only talks to a backend after you explicitly click
 **Connect** — see [`docs/v0.8-multiplayer.md`](docs/v0.8-multiplayer.md).
 
 This is an original homage to the cosy retro "virtual hotel" genre of the late
-90s/2000s. It is **not affiliated with, endorsed by, or associated with Habbo,
-Sulake, Nexon, or any other company** — every name, character, room, item and
+90s/2000s. It is **not affiliated with, endorsed by, or associated with Sulake,
+Nexon, or any other company** — every name, character, room, item and
 line of dialogue here is original, all pixel art/voxel rendering is generated
 procedurally in code, and the floor soundtrack is original music by James
 (see **Assets & Attribution** below).
@@ -94,7 +94,7 @@ Then open **http://localhost:8080** in a modern desktop or mobile browser.
   elliptical floor contact shadows, calibrated seating contact planes, and lighting
   matching room and character voxels.
 - Original v0.3.0 collection (8 distinctive new furniture/decor items with original
-  names, descriptions, and geometry; not copies of Habbo):
+  names, descriptions, and geometry; not copies of external games):
   - **Luminous Reef Tank** (`aquarium`): deep oceanic aquarium with living coral reef and darting clownfish.
   - **Tea-Pearl Boba Bar** (`boba_bar`): specialty counter brewing tapioca milk tea with tea urns and shaker machine.
   - **Retro Pixel Arcade** (`mini_arcade`): coin-op upright arcade cabinet running "Cosmic Bellhop".
@@ -185,9 +185,9 @@ exercised only against an in-memory mock (`tests/multiplayer.unit.test.mjs`).
 
 ## Assets & Attribution
 
-**Music by James.** Every floor's background track (`audio/music/01-grand-lobby.mp3`
-through `10-rooftop.mp3`) is original music composed and approved for use in this
-project by James; the files are shipped as-is and are never modified or re-encoded.
+**Music by James.** Every floor's background track (`audio/music/v2/*.mp3`)
+is original music composed and approved for use in this project by James;
+the files are shipped as-is and are never modified or re-encoded.
 
 Every other asset in this project is **generated procedurally in code** —
 volumetric 3D voxel character figures are modelled and projected in
@@ -202,4 +202,4 @@ the only networked feature is the opt-in Multiplayer panel described above.
 All character names, room names, dialogue, and item names are original
 creations for this project. Pixel Hotel is an independent homage to the cosy
 retro "virtual hotel" game genre and is not affiliated with, endorsed by, or
-associated with Habbo, Sulake, Nexon, or any other company or product.
+associated with Sulake, Nexon, or any other company or product.

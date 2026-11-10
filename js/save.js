@@ -478,6 +478,19 @@ const MIGRATIONS = {
       },
     };
   },
+  8: (old) => {
+    const def = createDefaultState();
+    const oldSettings = (old.settings && typeof old.settings === 'object') ? { ...old.settings } : {};
+    if (oldSettings.trackId && (String(oldSettings.trackId).startsWith('classic-') || !oldSettings.trackId)) {
+      oldSettings.trackId = 'lobby';
+    }
+    return {
+      ...def,
+      ...old,
+      version: 9,
+      settings: { ...def.settings, ...oldSettings },
+    };
+  },
 };
 
 function migrate(data) {

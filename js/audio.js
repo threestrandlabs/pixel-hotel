@@ -234,18 +234,6 @@ export const MUSIC_FILES = {
   'guest-room': { src: 'audio/music/v2/guest-room.mp3', label: 'Guest Room' },
   renovation: { src: 'audio/music/v2/renovation.mp3', label: 'Renovation' },
   'event-map': { src: 'audio/music/v2/event-map.mp3', label: 'Event Map' },
-
-  // Classic tracks (v1 legacy floor soundtrack)
-  'classic-lobby': { src: 'audio/music/01-grand-lobby.mp3', label: 'Classic: Grand Lobby Jazz Lounge' },
-  'classic-cafe': { src: 'audio/music/02-cafe-and-bar.mp3', label: 'Classic: Cafe and Bar Bossa Nova' },
-  'classic-restaurant': { src: 'audio/music/03-restaurant.mp3', label: 'Classic: Restaurant Smooth Jazz' },
-  'classic-gym': { src: 'audio/music/04-gym.mp3', label: 'Classic: Gym Pulse Fitness Electronic' },
-  'classic-pool': { src: 'audio/music/05-pool-and-spa.mp3', label: 'Classic: Pool and Spa Calm Ambient' },
-  'classic-arcade': { src: 'audio/music/06-arcade.mp3', label: 'Classic: Arcade Chiptune' },
-  'classic-library': { src: 'audio/music/07-library.mp3', label: 'Classic: Library Soft Piano' },
-  'classic-myroom': { src: 'audio/music/08-my-room.mp3', label: 'Classic: My Room Lofi Chill' },
-  'classic-garden': { src: 'audio/music/09-sky-garden.mp3', label: 'Classic: Sky Garden Nature Acoustic' },
-  'classic-rooftop': { src: 'audio/music/10-rooftop.mp3', label: 'Classic: Rooftop Sunset Night House' },
 };
 
 export const PLAYLIST = Object.keys(MUSIC_FILES);
@@ -633,7 +621,7 @@ export class ChiptuneAudio {
     }
   }
 
-  // ---------- file-backed floor soundtrack (audio/music/*.mp3), with procedural synth fallback ----------
+  // ---------- file-backed floor soundtrack (audio/music/v2/*.mp3), with procedural synth fallback ----------
 
   _loadTrackAssets(trackId) {
     this._getFileTrack(trackId);

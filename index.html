@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
 <title>Pixel Hotel</title>
 <link rel="stylesheet" href="css/style.css" />
 </head>
@@ -12,20 +12,22 @@
     <div id="brand">🏨 Pixel Hotel</div>
     <div id="roomName">Floor 1 — Grand Lobby</div>
     <div id="coinsDisplay">💰 <span id="coinsValue">0</span></div>
-    <div id="topButtons">
-      <button id="btnElevator" class="pixel-btn" title="Elevator Directory (E)">🛗 Elevator</button>
-      <button id="btnMyRoom" class="pixel-btn" title="Go to My Room">🔑 My Room</button>
-      <button id="btnUpgradeRoom" class="pixel-btn" title="Upgrade Room Tier">⭐ Upgrade Room</button>
-      <button id="btnInventory" class="pixel-btn" title="Inventory (I)">🛋️ Items</button>
-      <button id="btnQuests" class="pixel-btn" title="Quests (Q)">📜 Quests</button>
-      <button id="btnMultiplayer" class="pixel-btn" title="Multiplayer (friends &amp; party rooms)">🌐 Multiplayer</button>
-      <button id="btnMusicMute" class="pixel-btn" title="Mute/unmute Music (M)">🎵 On</button>
-      <button id="btnSfxMute" class="pixel-btn" title="Mute/unmute SFX">🔔 On</button>
-      <button id="btnMute" class="pixel-btn" title="Audio Mixer &amp; Volume">🎚️</button>
+    <div id="topQuickButtons">
+      <button id="btnMute" class="pixel-btn" title="Audio Mixer &amp; Settings">🎚️</button>
       <button id="btnHelp" class="pixel-btn" title="Help (H)">❓</button>
-      <button id="btnSave" class="pixel-btn" title="Save (S)">💾 Save</button>
-      <button id="btnReset" class="pixel-btn" title="Reset progress">♻️ Reset</button>
     </div>
+    <nav id="topButtons" class="action-bar">
+      <button id="btnElevator" class="pixel-btn action-btn" title="Elevator Directory (E)"><span class="btn-icon">🛗</span><span class="btn-text">Elevator</span></button>
+      <button id="btnMyRoom" class="pixel-btn action-btn" title="Go to My Room"><span class="btn-icon">🔑</span><span class="btn-text">My Room</span></button>
+      <button id="btnInventory" class="pixel-btn action-btn" title="Inventory (I)"><span class="btn-icon">🛋️</span><span class="btn-text">Items</span></button>
+      <button id="btnQuests" class="pixel-btn action-btn" title="Quests (Q)"><span class="btn-icon">📜</span><span class="btn-text">Quests</span></button>
+      <button id="btnMultiplayer" class="pixel-btn action-btn" title="Multiplayer (friends &amp; party rooms)"><span class="btn-icon">🌐</span><span class="btn-text">Multi</span></button>
+      <button id="btnUpgradeRoom" class="pixel-btn action-btn" title="Upgrade Room Tier"><span class="btn-icon">⭐</span><span class="btn-text">Upgrade</span></button>
+      <button id="btnMusicMute" class="pixel-btn desktop-only" title="Mute/unmute Music (M)">🎵 On</button>
+      <button id="btnSfxMute" class="pixel-btn desktop-only" title="Mute/unmute SFX">🔔 On</button>
+      <button id="btnSave" class="pixel-btn desktop-only" title="Save (S)">💾 Save</button>
+      <button id="btnReset" class="pixel-btn desktop-only" title="Reset progress">♻️ Reset</button>
+    </nav>
   </header>
 
   <main id="gameArea">
@@ -312,7 +314,7 @@
     <div class="overlay-box" style="max-width: 540px;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
         <h2>🏨 Room Upgrade Agency</h2>
-        <button class="panel-close" id="btnUpgradeClose">✕</button>
+        <button class="panel-close" id="btnUpgradeClose" data-close="roomUpgradeModal">✕</button>
       </div>
       <p style="margin-bottom: 12px; font-size: 13px; color: #555;">Upgrade your private room to higher hotel floors with larger layouts and luxurious floorings. Placed furniture migrates safely.</p>
       <div id="roomUpgradeList" style="display: flex; flex-direction: column; gap: 10px;"></div>
@@ -324,7 +326,7 @@
     <div class="overlay-box arcade-game-box" style="max-width: 380px; text-align: center; position: relative;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
         <h2 id="arcadeGameTitle" style="margin: 0; font-size: 16px;">🕹️ Arcade Game</h2>
-        <button class="panel-close" id="btnArcadeClose">✕</button>
+        <button class="panel-close" id="btnArcadeClose" data-close="arcadeGameModal">✕</button>
       </div>
 
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-size: 13px; background: rgba(0,0,0,0.3); padding: 4px 10px; border-radius: 4px;">
@@ -332,8 +334,8 @@
         <div>🪙 Daily: <b id="arcadeDailyCoins" style="color: #ffd27a;">0/50</b></div>
       </div>
 
-      <div style="position: relative; width: 320px; height: 320px; margin: 0 auto; background: #000; border: 2px solid #5c4a96; border-radius: 4px; overflow: hidden;">
-        <canvas id="arcadeCanvas" width="320" height="320" style="display: block; image-rendering: pixelated; width: 320px; height: 320px;"></canvas>
+      <div id="arcadeCanvasWrap" style="position: relative; width: 320px; height: 320px; max-width: calc(100vw - 44px); max-height: calc(100vw - 44px); margin: 0 auto; background: #000; border: 2px solid #5c4a96; border-radius: 4px; overflow: hidden;">
+        <canvas id="arcadeCanvas" width="320" height="320" style="display: block; image-rendering: pixelated; width: 100%; height: 100%; touch-action: none;"></canvas>
 
         <div id="arcadeGameOverOverlay" class="hidden" style="position: absolute; inset: 0; background: rgba(10, 6, 24, 0.88); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 16px;">
           <h3 style="color: #ff4081; margin: 0; font-size: 22px;">GAME OVER</h3>
@@ -346,8 +348,24 @@
         </div>
       </div>
 
+      <!-- On-screen touch controls -->
+      <div id="arcadeTouchControls" class="arcade-touch-controls">
+        <div id="arcadeDpad" class="arcade-dpad">
+          <button id="arcadeUp" class="pixel-btn arcade-dpad-btn arcade-up" data-dir="up" aria-label="Up">▲</button>
+          <div class="arcade-dpad-row">
+            <button id="arcadeLeft" class="pixel-btn arcade-dpad-btn arcade-left" data-dir="left" aria-label="Left">◀</button>
+            <button id="arcadeRight" class="pixel-btn arcade-dpad-btn arcade-right" data-dir="right" aria-label="Right">▶</button>
+          </div>
+          <button id="arcadeDown" class="pixel-btn arcade-dpad-btn arcade-down" data-dir="down" aria-label="Down">▼</button>
+        </div>
+        <div id="arcadeActionButtons" class="arcade-action-buttons">
+          <button id="arcadeRotate" class="pixel-btn arcade-act-btn" data-act="rotate">⟳ Rotate</button>
+          <button id="arcadeDrop" class="pixel-btn arcade-act-btn" data-act="drop">▼ Drop</button>
+        </div>
+      </div>
+
       <div style="margin-top: 10px; display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: #aaa;">
-        <span>Controls: <kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd> / <kbd>WASD</kbd></span>
+        <span>Controls: <kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd> / Touch &amp; Swipe</span>
         <span><kbd>Esc</kbd> to quit</span>
       </div>
     </div>
@@ -358,7 +376,7 @@
     <div class="overlay-box" style="max-width: 440px; width: 90%;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
         <h2 style="margin: 0; font-size: 17px;">🏆 Arcade Hall of Fame</h2>
-        <button class="panel-close" id="btnLeaderboardClose">✕</button>
+        <button class="panel-close" id="btnLeaderboardClose" data-close="arcadeLeaderboardModal">✕</button>
       </div>
 
       <!-- Game Tabs -->
