@@ -36,6 +36,13 @@
   <main id="gameArea">
     <canvas id="gameCanvas" width="960" height="600"></canvas>
     <div id="toast" class="hidden"></div>
+    <div id="minigameHud" class="hidden minigame-hud">
+      <div class="minigame-hud-header">
+        <span id="minigameHudTitle">🎮 Mini-Game</span>
+        <button id="btnMinigameHudLeave" class="pixel-btn minigame-hud-leave" title="Leave Game">✕</button>
+      </div>
+      <div id="minigameHudContent" class="minigame-hud-content"></div>
+    </div>
     <div id="zoomControls">
       <button id="btnZoomOut" class="pixel-btn" title="Zoom Out (-)">−</button>
       <span id="zoomLevel">185%</span>
@@ -213,7 +220,10 @@
       </div>
       <div id="mpRoomActiveRow" class="hidden">
         <p>Invite code: <b id="mpRoomCode"></b></p>
-        <button id="btnMpLeaveRoom" class="pixel-btn">Leave Room</button>
+        <div style="display: flex; gap: 6px; margin-bottom: 8px;">
+          <button id="btnMpLeaveRoom" class="pixel-btn">Leave Room</button>
+          <button id="btnMpGames" class="pixel-btn">🎮 Games</button>
+        </div>
         <div id="mpMemberList"></div>
       </div>
     </div>
@@ -554,6 +564,67 @@
         <div style="display: flex; gap: 8px;">
           <button id="btnCancelAvatar" class="pixel-btn">Cancel</button>
           <button id="btnSaveAvatar" class="pixel-btn pixel-btn-primary" style="background: #38b068; color: #fff; font-weight: bold;">💾 Save &amp; Wear</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- v0.11 Group Mini-Games Modal -->
+  <div id="minigameModal" class="overlay hidden">
+    <div class="overlay-box minigame-modal-box" style="max-width: 480px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+        <h2 style="margin: 0; font-size: 16px;">🎮 Party Mini-Games</h2>
+        <button class="panel-close" id="btnMinigameModalClose" data-close="minigameModal">✕</button>
+      </div>
+
+      <div id="minigameDailyCapWrap" class="minigame-daily-bar">
+        🪙 Daily Mini-Game Coins: <b id="minigameDailyCoins">0/60</b>
+      </div>
+
+      <!-- Host View -->
+      <div id="minigameHostView" class="minigame-view hidden">
+        <p class="mp-hint" style="margin-bottom: 10px;">Select a game to start with party members (2-8 players):</p>
+        <div class="minigame-card-list">
+          <div class="minigame-card">
+            <div class="minigame-card-icon">🙈</div>
+            <div class="minigame-card-info">
+              <b>Hotel Hide &amp; Seek</b>
+              <p>Seeker counts down, hiders disperse on the floor. Seeker tags by walking adjacent!</p>
+            </div>
+            <button class="pixel-btn btn-start-minigame" data-game="hide_seek">Start</button>
+          </div>
+          <div class="minigame-card">
+            <div class="minigame-card-icon">🪑</div>
+            <div class="minigame-card-info">
+              <b>Musical Chairs</b>
+              <p>Music plays and stops at random. Race to sit on a chair — one fewer chair each round!</p>
+            </div>
+            <button class="pixel-btn btn-start-minigame" data-game="musical_chairs">Start</button>
+          </div>
+          <div class="minigame-card">
+            <div class="minigame-card-icon">💡</div>
+            <div class="minigame-card-info">
+              <b>Pixel Trivia</b>
+              <p>10-question multiple choice round (Singapore &amp; general knowledge). Answer fast for speed bonuses!</p>
+            </div>
+            <button class="pixel-btn btn-start-minigame" data-game="trivia">Start</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Guest / Join Prompt View -->
+      <div id="minigameGuestView" class="minigame-view hidden">
+        <div id="minigameInviteCard" class="minigame-invite-card hidden">
+          <div id="minigameInviteIcon" style="font-size: 32px; margin-bottom: 6px;">🎮</div>
+          <h3 id="minigameInviteTitle" style="margin: 0 0 6px 0; font-size: 15px;">Party Game Invite</h3>
+          <p id="minigameInviteDesc" style="font-size: 12.5px; color: #ccc; margin-bottom: 12px;"></p>
+          <div style="display: flex; gap: 8px; justify-content: center;">
+            <button id="btnMinigameJoin" class="pixel-btn" style="background: #2e7d32;">Join Game</button>
+            <button id="btnMinigameDecline" class="pixel-btn">Decline</button>
+          </div>
+        </div>
+        <div id="minigameGuestWaiting" class="mp-hint" style="text-align: center; padding: 18px 0;">
+          Waiting for the party host to start a mini-game...
         </div>
       </div>
     </div>

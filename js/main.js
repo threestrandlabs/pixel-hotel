@@ -2323,6 +2323,11 @@ function init() {
     getMyRoomPlaced: () => state.rooms.myroom.placed,
     enterVisitScene: (displayName, roomData) => enterVisitScene(displayName, roomData),
     exitVisitScene: () => exitVisitScene(),
+    getSaveState: () => state,
+    showToast: (msg) => showToast(msg),
+    playMusic: (trackId) => { audio.setTrack(trackId, true); audio.play(); },
+    stopMusic: () => audio.stopLoop(),
+    playSfx: (id) => audio.playSfx(id),
   });
   initArcadeUI({
     getState: () => state,
@@ -2441,7 +2446,7 @@ window.__pixelHotel = Object.assign(window.__pixelHotel || {}, {
     refreshAudioUi();
   }, // 0.5 noon, 0 midnight
   getSaveVersion: () => SAVE_VERSION,
-  getVersion: () => '0.9.1',
+  getVersion: () => '0.11.0',
   getRemoteMultiplayer: () => getRemoteMultiplayerEntities(performance.now()),
   walkTo: (x, y) => tryWalkPlayer(x, y),
   openAvatarCreator: () => openAvatarModal(),

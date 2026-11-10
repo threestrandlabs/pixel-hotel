@@ -47,6 +47,10 @@ export function createDefaultState() {
       lastTradeDate: '',
       tradesAcceptedToday: [],
     },
+    minigames: {
+      dailyCoins: 0,
+      lastRewardDate: '',
+    },
     settings: {
       muted: false,
       musicMuted: false,
@@ -550,6 +554,20 @@ const MIGRATIONS = {
         totalPulls: typeof oldGumballs.totalPulls === 'number' ? oldGumballs.totalPulls : 0,
         lastTradeDate: typeof oldGumballs.lastTradeDate === 'string' ? oldGumballs.lastTradeDate : '',
         tradesAcceptedToday: Array.isArray(oldGumballs.tradesAcceptedToday) ? [...oldGumballs.tradesAcceptedToday] : [],
+      },
+    };
+  },
+  // v0.11.0: adds party mini-game daily coin reward tracking.
+  11: (old) => {
+    const def = createDefaultState();
+    const oldMinigames = (old.minigames && typeof old.minigames === 'object') ? old.minigames : {};
+    return {
+      ...def,
+      ...old,
+      version: 12,
+      minigames: {
+        dailyCoins: typeof oldMinigames.dailyCoins === 'number' ? oldMinigames.dailyCoins : 0,
+        lastRewardDate: typeof oldMinigames.lastRewardDate === 'string' ? oldMinigames.lastRewardDate : '',
       },
     };
   },

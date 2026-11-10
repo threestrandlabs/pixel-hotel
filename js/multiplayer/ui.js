@@ -31,6 +31,9 @@ import {
 import { validateAvatarLook } from '../avatar.js';
 import { EMOTE_ICONS } from '../emotes.js';
 import { getMutedUserIds, setUserMuted, getLastDisplayName, setLastDisplayName } from './localPrefs.js';
+import {
+  initMinigamesUI, setMultiplayerContext, handleMinigameBroadcast, tickMinigameUI, getMinigameEntities,
+} from '../minigames/ui.js';
 
 export const MULTIPLAYER_ROOM_ID = 'myroom';
 
@@ -374,6 +377,9 @@ function subscribeChannel(code) {
       state.bubbles.set(validated.userId, { text: EMOTE_ICONS[validated.emote] || '👋', until: performance.now() + 3000 });
       state.host?.onRemoteEmote?.(validated.userId, validated.emote);
     })
+    .on('broadcast', { event: 'minigame' }, ({ payload }) => {
+      handleMinigameBroadcast(payload);
+    })
     .on('broadcast', { event: 'kicked' }, async ({ payload }) => {
       const validated = validateKickedPayload(payload);
       if (!validated || validated.targetUserId !== state.profile.id) return;
@@ -408,6 +414,12 @@ async function enterPartyRoom(code, isOwner) {
   state.members.clear();
   state.bubbles.clear();
   state.channel = subscribeChannel(code);
+  setMultiplayerContext({
+    roomCode: code,
+    isRoomOwner: isOwner,
+    profile: state.profile,
+    channel: state.channel,
+  });
   state.host.switchRoom(MULTIPLAYER_ROOM_ID);
   renderRoomTab();
 }
@@ -452,6 +464,12 @@ async function leaveRoomIfAny() {
   state.members.clear();
   state.bubbles.clear();
   state.previousLocalRoom = null;
+  setMultiplayerContext({
+    roomCode: null,
+    isRoomOwner: false,
+    profile: state.profile,
+    channel: null,
+  });
   if (prevRoom && state.host) state.host.switchRoom(prevRoom);
   renderRoomTab();
 }
@@ -471,6 +489,15 @@ async function leaveRoomIfAny() {
  */
 export function initMultiplayerUI(host) {
   state.host = host;
+  initMinigamesUI({
+    getSaveState: () => host.getSaveState?.(),
+    showToast: (msg) => host.showToast?.(msg),
+    playMusic: (track) => host.playMusic?.(track),
+    stopMusic: () => host.stopMusic?.(),
+    playSfx: (id) => host.playSfx?.(id),
+    isUserMuted: (userId) => state.mutedUserIds.has(userId),
+    getPartyMembers: () => Array.from(state.members.entries()).map(([id, m]) => ({ id, displayName: m.displayName || 'Guest' })),
+  });
   renderConnectTab();
   renderRoomTab();
   byId('btnMpConnect')?.addEventListener('click', handleConnectClick);
@@ -488,6 +515,7 @@ export function initMultiplayerUI(host) {
 
 /** Call once per frame from main.js's frame(now) loop. */
 export function tickMultiplayer(now, player) {
+  tickMinigameUI(now, player);
   if (!state.channel || !state.roomCode) return;
   if (!shouldSendPositionUpdate(state.lastPositionSentAt, now, POSITION_SEND_INTERVAL_MS)) return;
   state.lastPositionSentAt = now;
@@ -565,5 +593,6 @@ export function getRemoteMultiplayerEntities(now) {
       look: meta.look || null,
     });
   }
+  list.push(...getMinigameEntities(now));
   return list;
 }

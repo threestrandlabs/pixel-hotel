@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 
+## [0.11.0] - 2026-11-11
+
+#### Added
+
+- **Party Mini-Games (`js/minigames/minigames.js`, `js/minigames/triviaData.js`, `js/minigames/ui.js`, `index.html`, `css/style.css`)**:
+  - Three original party room group mini-games (2–8 players) coordinated over Supabase Realtime broadcast channels:
+    1. **Hotel Hide & Seek**: One seeker counts down while other players disperse and hide across the floor. The seeker tags players by walking adjacent (Chebyshev distance <= 1 tile). Includes countdown and seeking phases, timer, survivor lists, and results banner.
+    2. **Musical Chairs**: Soundtrack plays from existing v2 audio tracks and stops at a random interval. Players race to sit on available chairs placed in the room. Unseated players are eliminated each round until the last player standing wins.
+    3. **Pixel Trivia**: 10-question multiple-choice quiz covering Singapore heritage and general knowledge with 25 original seed questions. Questions feature a 10-second timer, speed bonus scoring (100 base + 5 pts/second remaining), reveal phase with fun facts, and a final ranked scoreboard.
+  - Authoritative host model: game state is broadcast and validated by the party room owner with input rate limiting, strict payload shaping, and respect for mute and kick states.
+  - Modest coin rewards upon completing games with daily cap tracking (`MINIGAME_DAILY_COIN_CAP = 60`) persisted in player save state.
+  - "Games" button (`#btnMpGames`) in the multiplayer active party room tab opening the game launcher and join prompt modals.
+  - In-game HUD overlay displaying live roles, countdowns, question cards, and chair claim controls.
+  - Save file version bumped to 12 (`SAVE_VERSION = 12`) with a lossless migration preserving existing players' coins, inventory, and progress.
+- **Responsive Mobile Action Bar Polish (`css/style.css`)**:
+  - Fixed horizontal overflow of the bottom action bar on narrow portrait phones (360px and 390px wide).
+  - Scaled action button widths, icons, and text with ellipsis truncation so all buttons including "Upgrade" fit completely within viewports down to 360px while preserving standard >=44px touch target heights.
+
+#### Tests
+
+- Added `tests/minigames.unit.test.mjs` verifying payload validation, Hide & Seek state machine, Musical Chairs state machine, Pixel Trivia round progression, mocked Realtime bus synchronization, and daily coin reward caps.
+- Added smoke test steps in `tests/smoke.spec.mjs` verifying the Games modal, HUD display, Realtime broadcast state, and mobile action bar layout at 360px and 390px.
+
 ## [0.9.1] - 2026-11-11
 
 ### Added

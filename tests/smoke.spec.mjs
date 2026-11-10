@@ -1160,6 +1160,26 @@ async function runMobilePortraitSmokeTest(browser) {
       mpBox360 && zoomBox360 && (mpBox360.x + mpBox360.width < zoomBox360.x)
     );
 
+    // Verify bottom action bar fits at 360px and 390px without horizontal overflow
+    for (const w of [360, 390]) {
+      await page.setViewportSize({ width: w, height: 800 });
+      await page.waitForTimeout(60);
+      const barFit = await page.evaluate(() => {
+        const bar = document.getElementById('topButtons');
+        const upgrade = document.getElementById('btnUpgradeRoom');
+        const r = upgrade.getBoundingClientRect();
+        return {
+          barScrollW: bar.scrollWidth,
+          barClientW: bar.clientWidth,
+          upgradeRight: r.right,
+          vw: window.innerWidth,
+        };
+      });
+      check(`mobile: action bar fits at ${w}px wide without horizontal scrolling`, barFit.barScrollW <= barFit.barClientW + 1);
+      check(`mobile: Upgrade button fits within viewport at ${w}px wide`, barFit.upgradeRight <= barFit.vw + 1);
+    }
+    await page.setViewportSize({ width: 360, height: 780 });
+
     // 9. Salon modal & top close button
     await page.evaluate(() => document.getElementById('salonModal')?.classList.remove('hidden'));
     await page.waitForTimeout(100);
@@ -1493,6 +1513,25 @@ async function runMultiplayerUiFlowTests(browser) {
     const chatLogAfterMutedMsg = await page.textContent('#chatLog');
     check('mp: mute — a muted member\'s further chat does not reach the chat log',
       chatLogAfterMutedMsg === chatLogBeforeMutedMsg);
+
+    // ---- v0.11: Group Mini-Games in party room ----
+    // Host opens Games modal
+    await page.click('#btnMpGames');
+    await page.waitForTimeout(150);
+    check('mp: minigames — host opens Games modal with game selection', await page.locator('#minigameHostView:not(.hidden)').count() === 1);
+
+    // Host starts a game (Trivia)
+    await page.click('[data-game="trivia"]');
+    await page.waitForTimeout(200);
+    check('mp: minigames — host starting game displays minigame HUD', await page.locator('#minigameHud:not(.hidden)').count() === 1);
+
+    const hudHasContent = (await page.locator('#minigameHudContent').textContent()).trim().length > 0;
+    check('mp: minigames — game HUD displays question and scoreboard state', hudHasContent);
+
+    // Host leaves game to clean up
+    await page.click('#btnMinigameHudLeave');
+    await page.waitForTimeout(100);
+    check('mp: minigames — leaving game dismisses HUD', await page.locator('#minigameHud.hidden').count() === 1);
 
     // security: a non-owner member (Dave) broadcasting a spoofed "kicked" event targeting the OWNER
     // must be ignored — the owner's client verifies against check_kicked_from_room, not the broadcast alone.
