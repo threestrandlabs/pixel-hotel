@@ -8,7 +8,7 @@ export const TILE = {
   VOID: 4,
 };
 
-export const SAVE_VERSION = 9;
+export const SAVE_VERSION = 10;
 
 // Grid is row-major: grid[y][x]
 export function makeRoomGrid(w, h, { doors = [], windows = [], cutouts = [] } = {}) {
@@ -568,6 +568,7 @@ export const CATALOGUE = [
   { id: 'arcade_drop_1', name: 'Block Drop (Puzzle)', price: 100, category: 'entertainment', footprint: { w: 1, h: 1 }, seat: false, interaction: 'arcade_block_drop', arcadeGame: 'block_drop', emissive: { color: '#00b0ff', radius: 52, intensity: 0.38 }, spriteKey: 'arcadeDrop1', unlockRequires: null, description: 'Classic falling block line-clearer arcade cabinet.' },
   { id: 'arcade_drop_2', name: 'Block Drop (Deluxe)', price: 100, category: 'entertainment', footprint: { w: 1, h: 1 }, seat: false, interaction: 'arcade_block_drop', arcadeGame: 'block_drop', emissive: { color: '#ffd600', radius: 52, intensity: 0.38 }, spriteKey: 'arcadeDrop2', unlockRequires: null, description: 'Deluxe competitive cabinet running Block Drop.' },
   { id: 'arcade_leaderboard', name: 'Arcade Hall of Fame', price: 120, category: 'entertainment', footprint: { w: 2, h: 1 }, seat: false, interaction: 'arcade_leaderboard', emissive: { color: '#00e5ff', radius: 64, intensity: 0.44 }, spriteKey: 'arcadeLeaderboard', unlockRequires: null, description: 'Grand digital scoreboard tracking local and global arcade champions.' },
+  { id: 'wardrobe', name: 'Oak Wardrobe', price: 40, category: 'decor', footprint: { w: 1, h: 1 }, seat: false, interaction: 'wardrobe', spriteKey: 'wardrobe', unlockRequires: null, description: 'A polished oak wardrobe with brass handles for changing your look.' },
 ].map((item) => ({
   ...item,
   walkable: typeof item.walkable === 'boolean' ? item.walkable : Boolean(item.flat),
@@ -973,6 +974,7 @@ export const SEED_FURNITURE = {
     { itemId: 'armchair', x: 2, y: 4, rot: 1 },
     { itemId: 'lamp', x: 8, y: 2, rot: 0 },
     { itemId: 'plant', x: 1, y: 1, rot: 0 },
+    { itemId: 'wardrobe', x: 1, y: 3, rot: 0 },
     { itemId: 'stool', x: 2, y: 6, rot: 0 },
   ],
   garden: [

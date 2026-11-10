@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 
+## [0.9.0] - 2026-11-11
+
+#### Added
+
+- **Avatar Creator Modal (`js/avatar.js`, `js/avatarModal.js`, `index.html`, `css/style.css`)**:
+  - Full-featured avatar customizer accessible on first launch for new players, via the "Wardrobe" action bar button (`👔`), and by interacting with the wardrobe furniture in My Room.
+  - 7 customization categories:
+    - Skin tones (warm peach, fair porcelain, golden olive, rich umber, deep espresso).
+    - Face presets (classic, gentle, bright, starry eyes with optional lashes; smile, grin, smirk, neutral mouths).
+    - Hairstyles & hair colours (classic short, bob cut, ponytail, spiky, long flowing, minimal bald, and shop-unlockable retro curls; 8 Azure salon hair dyes).
+    - Top styles & colours (classic tee, cosy hoodie, knit cardigan, hotel jacket, smart coat, summer dress; 8 vibrant fabric colors).
+    - Bottom styles & colours (trousers, tailored skirt; 6 palette colors).
+    - Shoe colours (white kicks, black leather, brown loafers, and unlockable red sneakers, blue trainers, golden soles).
+    - Accessories (none, wire glasses, baseball cap with peaked visor, audio headphones with headband & earcups; 5 accent colors).
+  - Live rotating voxel preview canvas rendering the 3D isometric avatar across 4 directions (Front, Left, Back, Right).
+  - 🎲 Randomise button generating harmonious unlocked styles.
+  - Shop-unlockable premium items purchased directly with coins; core basics are completely free.
+  - Touch-friendly responsive design fitting viewports down to 360×780 portrait as well as widescreen desktop, with >=44px tap targets.
+  - Save file version bumped to 10 (`SAVE_VERSION = 10`) with a lossless migration preserving existing players' salon hairstyles and looks.
+- **Wardrobe Furniture (`js/data.js`, `js/sprites.js`)**:
+  - Added interactive oak wardrobe cabinet (`wardrobe`) to the catalogue and seeded in My Room. Walking up and interacting opens the Wardrobe / Avatar Creator modal.
+- **Emotes System (`js/emotes.js`, `js/voxel.js`, `index.html`, `css/style.css`)**:
+  - Emote bar popup toggled via the action bar button (`👋`) or number keys 1–8 on desktop.
+  - 8 expressive emotes: Wave (`👋`), Dance (`💃`), Laugh (`😂`), Clap (`👏`), Heart (`❤️`), Sleep (`💤`), Cheer (`🎉`), and Thumbs Up (`👍`).
+  - Animated voxel character poses and speech-bubble emoji icons floating above the avatar for ~3 seconds.
+  - Rate limited to at most 1 emote per second.
+  - Nearby NPCs occasionally wave back when the player waves near them.
+- **Multiplayer Presence Sync & Security (`js/multiplayer/ui.js`, `js/multiplayer/realtimeRoom.js`, `js/multiplayer/filter.js`)**:
+  - Live synchronization of avatar looks and active emotes with multiplayer peers through Realtime presence.
+  - Strict input validation (`validateAvatarLook`, `validateEmotePayload`) rejecting unknown option IDs or malformed hex codes, and enforcing independent 1-second receive throttling per sender.
+  - Respects mute and kick settings.
+- **Tests & Verification (`tests/avatar.unit.test.mjs`, `tests/smoke.spec.mjs`)**:
+  - Added unit test suite for avatar validation, malicious payload sanitation, randomizeLook, save migration v9→v10, emote registry, and rate limiting.
+  - Added mobile portrait smoke test step in `tests/smoke.spec.mjs` verifying opening the avatar creator on a 390×844 touch viewport, changing options, saving, and triggering emotes.
+
 ## [0.8.9] - 2026-11-11
 
 #### Added

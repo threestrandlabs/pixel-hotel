@@ -93,6 +93,7 @@ function outline(sprite, color) {
 }
 
 function shade(hex, amt) {
+  if (!hex || typeof hex !== 'string') return '#000000';
   const c = hex.replace('#', '');
   const num = parseInt(c, 16);
   let r = (num >> 16) & 0xff;
@@ -2615,7 +2616,24 @@ export const FURNITURE_BUILDERS = {
   arcadeDrop1: (rot) => buildArcadeDrop1(rot),
   arcadeDrop2: (rot) => buildArcadeDrop2(rot),
   arcadeLeaderboard: (rot) => buildArcadeLeaderboard(rot),
+  wardrobe: (rot) => buildWardrobeSprite(rot),
 };
+
+export function buildWardrobeSprite(rot = 0) {
+  const WOOD = ['#9e6030', '#7e4820', '#5c3214'];
+  const TRIM = ['#b8743c', '#985828', '#703e18'];
+  const BRASS = ['#f6c667', '#d89b34', '#a06e1e'];
+  const PLINTH = ['#7c441c', '#623414', '#48240c'];
+  return isoSprite(1, 1, 56, (box) => {
+    box(0.08, 0.08, 0.92, 0.92, 0, 4, ...PLINTH);
+    box(0.10, 0.10, 0.90, 0.90, 4, 52, ...WOOD);
+    box(0.06, 0.06, 0.94, 0.94, 52, 56, ...TRIM);
+    box(0.14, 0.14, 0.48, 0.86, 6, 50, ...TRIM);
+    box(0.52, 0.14, 0.86, 0.86, 6, 50, ...TRIM);
+    box(0.44, 0.87, 0.47, 0.92, 26, 32, ...BRASS);
+    box(0.53, 0.87, 0.56, 0.92, 26, 32, ...BRASS);
+  });
+}
 
 export function shadeColor(hex, amt) {
   return shade(hex, amt);

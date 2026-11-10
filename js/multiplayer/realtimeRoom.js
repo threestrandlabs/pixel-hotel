@@ -12,6 +12,7 @@ export const POSITION_SEND_INTERVAL_MS = 120;
 export const AVATAR_LERP_MS = 160;
 export const POSITION_RECEIVE_MIN_INTERVAL_MS = 60;
 export const CHAT_RECEIVE_MIN_INTERVAL_MS = 500;
+export const EMOTE_RECEIVE_MIN_INTERVAL_MS = 1000;
 
 // ---------- pure helpers (unit-testable) ----------
 
@@ -154,4 +155,10 @@ export function broadcastChatBubble(channel, text, extraPayload = {}) {
 /** Owner-side convenience: tells the kicked client's channel to disconnect itself (best-effort UX only). */
 export function broadcastKicked(channel, targetUserId) {
   return channel.send({ type: 'broadcast', event: 'kicked', payload: { targetUserId } });
+}
+
+/** Sends an emote broadcast to peers in the party room. */
+export function broadcastEmote(channel, emote, extraPayload = {}) {
+  channel.send({ type: 'broadcast', event: 'emote', payload: { ...extraPayload, emote } });
+  return { ok: true, emote };
 }

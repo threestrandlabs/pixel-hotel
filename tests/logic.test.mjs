@@ -2534,6 +2534,24 @@ test('v0.8.8 migration: v8 save migrates forward to v9, resetting deprecated tra
   storage.setItem(SAVE_KEY, JSON.stringify(v8Save));
 
   const loaded = loadState(storage);
-  assert.equal(loaded.version, 9, 'save migrated to version 9');
+  assert.equal(loaded.version, SAVE_VERSION, 'save migrated to latest version');
   assert.equal(loaded.settings.trackId, 'lobby', 'legacy classic-lobby trackId reset to lobby');
+});
+
+test('v0.9.0 migration: v9 save migrates forward to v10, keeping existing player look as defaults', () => {
+  const v9Save = createDefaultState();
+  v9Save.version = 9;
+  v9Save.player.look = { hairStyle: 'bob', hairColor: '#b83828' };
+
+  const storage = makeFakeStorage();
+  storage.setItem(SAVE_KEY, JSON.stringify(v9Save));
+
+  const loaded = loadState(storage);
+  assert.equal(loaded.version, SAVE_VERSION, 'save migrated to version 10');
+  assert.equal(loaded.player.look.hairStyle, 'bob', 'preserves existing salon hairstyle');
+  assert.equal(loaded.player.look.hair, '#b83828', 'preserves existing salon hair color');
+  assert.equal(loaded.player.look.shirt, '#4da3ff', 'defaults shirt to sky blue');
+  assert.equal(loaded.player.look.outfit, 'tee', 'defaults outfit to tee');
+  assert.equal(loaded.player.look.pants, '#2c3e63', 'defaults pants to denim');
+  assert.equal(loaded.player.look.accessory, 'none', 'defaults accessory to none');
 });

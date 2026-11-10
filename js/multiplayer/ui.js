@@ -19,14 +19,17 @@ import {
 } from './guestbook.js';
 import {
   createRoom, joinRoomByCode, kickUser, checkKicked, openRoomChannel,
-  broadcastPosition, broadcastChatBubble, broadcastKicked,
+  broadcastPosition, broadcastChatBubble, broadcastKicked, broadcastEmote,
   shouldSendPositionUpdate, createRemoteAvatarInterpolator, createReceiveThrottle,
   POSITION_SEND_INTERVAL_MS, POSITION_RECEIVE_MIN_INTERVAL_MS, CHAT_RECEIVE_MIN_INTERVAL_MS,
+  EMOTE_RECEIVE_MIN_INTERVAL_MS,
 } from './realtimeRoom.js';
 import {
   escapeHtml, validateDisplayName, normalizeFriendCode, normalizeInviteCode,
-  validatePositionPayload, validateChatPayload, validateKickedPayload,
+  validatePositionPayload, validateChatPayload, validateKickedPayload, validateEmotePayload,
 } from './filter.js';
+import { validateAvatarLook } from '../avatar.js';
+import { EMOTE_ICONS } from '../emotes.js';
 import { getMutedUserIds, setUserMuted, getLastDisplayName, setLastDisplayName } from './localPrefs.js';
 
 export const MULTIPLAYER_ROOM_ID = 'myroom';
@@ -48,7 +51,9 @@ const state = {
   interpolator: createRemoteAvatarInterpolator(),
   posThrottle: createReceiveThrottle(POSITION_RECEIVE_MIN_INTERVAL_MS),
   chatThrottle: createReceiveThrottle(CHAT_RECEIVE_MIN_INTERVAL_MS),
+  emoteThrottle: createReceiveThrottle(EMOTE_RECEIVE_MIN_INTERVAL_MS),
   lastPositionSentAt: 0,
+  lastLocalEmoteAt: 0,
   previousLocalRoom: null,
 };
 
@@ -313,7 +318,13 @@ function subscribeChannel(code) {
         seen.add(userId);
         const meta = metas[metas.length - 1] || {};
         const prev = state.members.get(userId) || {};
-        state.members.set(userId, { ...prev, displayName: meta.displayName || prev.displayName, outfit: meta.outfit || prev.outfit || 'normal' });
+        const validLook = validateAvatarLook(meta.look);
+        state.members.set(userId, {
+          ...prev,
+          displayName: meta.displayName || prev.displayName,
+          outfit: meta.outfit || prev.outfit || 'normal',
+          look: validLook || prev.look || null,
+        });
       }
       for (const userId of Array.from(state.members.keys())) {
         if (!seen.has(userId)) {
@@ -321,6 +332,7 @@ function subscribeChannel(code) {
           state.interpolator.remove(userId);
           state.posThrottle.remove(userId);
           state.chatThrottle.remove(userId);
+          state.emoteThrottle.remove(userId);
         }
       }
       renderMemberList();
@@ -347,6 +359,21 @@ function subscribeChannel(code) {
       state.bubbles.set(validated.userId, { text: validated.text, until: performance.now() + 3200 });
       state.host?.onRemoteChat?.(displayNameFor(validated.userId), validated.text);
     })
+    .on('broadcast', { event: 'emote' }, ({ payload }) => {
+      const validated = validateEmotePayload(payload);
+      if (!validated || validated.userId === state.profile.id) return;
+      if (!state.members.has(validated.userId)) return;
+      if (state.mutedUserIds.has(validated.userId)) return;
+      if (!state.emoteThrottle.allow(validated.userId, performance.now())) return;
+      const mem = state.members.get(validated.userId);
+      if (mem) {
+        mem.emote = validated.emote;
+        mem.emoteUntil = performance.now() + 3000;
+        mem.emoteFrame = 0;
+      }
+      state.bubbles.set(validated.userId, { text: EMOTE_ICONS[validated.emote] || '👋', until: performance.now() + 3000 });
+      state.host?.onRemoteEmote?.(validated.userId, validated.emote);
+    })
     .on('broadcast', { event: 'kicked' }, async ({ payload }) => {
       const validated = validateKickedPayload(payload);
       if (!validated || validated.targetUserId !== state.profile.id) return;
@@ -364,7 +391,11 @@ function subscribeChannel(code) {
     })
     .subscribe((status) => {
       if (status === 'SUBSCRIBED') {
-        channel.track({ displayName: state.profile.display_name, outfit: state.host?.getPlayerOutfit?.() || 'normal' });
+        channel.track({
+          displayName: state.profile.display_name,
+          outfit: state.host?.getPlayerOutfit?.() || 'normal',
+          look: state.host?.getPlayerLook?.() || null,
+        });
       }
     });
   return channel;
@@ -478,8 +509,33 @@ export function notifyLocalChat(text) {
 /** Broadcasts updated outfit to peers in party room presence. */
 export function updateLocalOutfit(outfit) {
   if (state.channel && state.profile) {
-    state.channel.track({ displayName: state.profile.display_name, outfit: outfit || 'normal' });
+    state.channel.track({
+      displayName: state.profile.display_name,
+      outfit: outfit || 'normal',
+      look: state.host?.getPlayerLook?.() || null,
+    });
   }
+}
+
+/** Broadcasts updated avatar look to peers in party room presence. */
+export function updateLocalLook(look) {
+  if (state.channel && state.profile) {
+    state.channel.track({
+      displayName: state.profile.display_name,
+      outfit: state.host?.getPlayerOutfit?.() || 'normal',
+      look: look || null,
+    });
+  }
+}
+
+/** Broadcasts an emote to peers in the party room with rate limiting (max 1/s). */
+export function notifyLocalEmote(emote) {
+  if (!state.channel || !state.profile) return false;
+  const now = performance.now();
+  if (now - state.lastLocalEmoteAt < 1000) return false;
+  state.lastLocalEmoteAt = now;
+  broadcastEmote(state.channel, emote, { userId: state.profile.id, displayName: state.profile.display_name });
+  return true;
 }
 
 /** Returns render-ready entities for every remote avatar currently in the shared party room. */
@@ -491,15 +547,22 @@ export function getRemoteMultiplayerEntities(now) {
     const pos = state.interpolator.getPosition(userId, now);
     if (!pos) continue;
     const bubble = state.bubbles.get(userId);
+    const isEmoteActive = meta.emote && meta.emoteUntil > now;
+    if (isEmoteActive) {
+      meta.emoteFrame = (meta.emoteFrame || 0) + 0.15;
+    }
     list.push({
       id: `mp-${userId}`,
       x: pos.x, y: pos.y, dir: meta.dir || 'down', frame: 0, walking: false,
       sitting: false, lying: false, blink: false, breathe: 0,
       action: meta.action || (meta.outfit === 'swimsuit' ? 'swim' : null), actionFrame: 0, depth: undefined,
+      emote: isEmoteActive ? meta.emote : null,
+      emoteFrame: isEmoteActive ? meta.emoteFrame : 0,
       spriteKey: 'player', kind: 'remote_player', color: '#7fd9ff',
       nameTag: meta.displayName || 'Guest',
       bubbleText: bubble && bubble.until > now ? bubble.text : null,
       outfit: meta.outfit || 'normal',
+      look: meta.look || null,
     });
   }
   return list;

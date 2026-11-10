@@ -16,13 +16,16 @@ import {
 import { audio, formatTime, trackForRoom } from './audio.js';
 import {
   initMultiplayerUI, getRemoteMultiplayerEntities, tickMultiplayer, notifyLocalChat, publishOwnRoomSnapshot,
-  updateLocalOutfit,
+  updateLocalOutfit, updateLocalLook, notifyLocalEmote,
 } from './multiplayer/ui.js';
-import { getSupabaseClient } from './multiplayer/client.js';
+import { getSupabaseClient, isMultiplayerLoaded } from './multiplayer/client.js';
 import {
   initArcadeUI, openArcadeGame, closeArcadeGame,
   openArcadeLeaderboard, closeArcadeLeaderboard, getActiveArcadeState,
 } from './arcade/ui.js';
+import { initAvatarModal, openAvatarModal, closeAvatarModal, isAvatarModalOpen } from './avatarModal.js';
+import { DEFAULT_PLAYER_LOOK, validateAvatarLook } from './avatar.js';
+import { EMOTES, EMOTE_IDS, EMOTE_ICONS, EMOTE_DURATION_MS, isEmoteAllowed } from './emotes.js';
 
 const STEP_MS = 240;
 const DAY_CYCLE_MS = 120000;
@@ -409,6 +412,9 @@ function applyInteractionArrival(mover, pending, isPlayer = false, immediate = f
     }
     if (placed.itemId === 'salon_chair') {
       if (!immediate) openSalonModal();
+    }
+    if (placed.itemId === 'wardrobe') {
+      if (!immediate) openAvatarModal();
     }
     if (placed.itemId.startsWith('arcade_snake')) {
       openArcadeGame('noodle_snake');
@@ -923,7 +929,7 @@ function renderChatLog() {
 }
 
 function escapeHtml(s) {
-  return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
 function nearestNpcInRange(range = 3) {
@@ -1154,6 +1160,15 @@ function buildEntities(now = performance.now()) {
   const pOff = entityPhaseOffset('player');
   const inWater = isWaterTile(roomDef, roomRuntime, Math.round(player.renderX), Math.round(player.renderY));
   const pAction = (inWater || player.activity?.kind === 'swim') ? 'swim' : (!player.walking && player.activity ? player.activity.kind : null);
+
+  const isPlayerEmote = player.emote && player.emoteUntil > now;
+  if (isPlayerEmote) {
+    player.emoteFrame = (player.emoteFrame || 0) + 0.15;
+  } else if (player.emote) {
+    player.emote = null;
+    player.emoteFrame = 0;
+  }
+
   list.push({
     id: 'player',
     x: player.renderX, y: player.renderY, dir: player.dir, frame: player.frame, walking: player.walking,
@@ -1162,6 +1177,8 @@ function buildEntities(now = performance.now()) {
     breathe: player.walking ? 0 : Math.floor((now + pOff) / 1400) % 2,
     action: pAction,
     actionFrame: computeActionFrame(pAction, now, pOff),
+    emote: isPlayerEmote ? player.emote : null,
+    emoteFrame: isPlayerEmote ? player.emoteFrame : 0,
     depth: entityDepth(player), spriteKey: 'player', kind: 'player',
     outfit: state.player.outfit || 'normal',
     look: state.player.look || null,
@@ -1172,6 +1189,13 @@ function buildEntities(now = performance.now()) {
     const nOff = entityPhaseOffset(n.id);
     const nInWater = isWaterTile(roomDef, roomRuntime, Math.round(n.renderX), Math.round(n.renderY));
     const nAction = (nInWater || n.activity?.kind === 'swim') ? 'swim' : (!n.walking && n.activity ? n.activity.kind : null);
+    const isNpcEmote = n.emote && n.emoteUntil > now;
+    if (isNpcEmote) {
+      n.emoteFrame = (n.emoteFrame || 0) + 0.15;
+    } else if (n.emote) {
+      n.emote = null;
+      n.emoteFrame = 0;
+    }
     list.push({
       id: n.id,
       x: n.renderX, y: n.renderY, dir: n.dir, frame: n.frame, walking: n.walking,
@@ -1180,11 +1204,13 @@ function buildEntities(now = performance.now()) {
       breathe: n.walking ? 0 : Math.floor((now + nOff) / 1400) % 2,
       action: nAction,
       actionFrame: computeActionFrame(nAction, now, nOff),
+      emote: isNpcEmote ? n.emote : null,
+      emoteFrame: isNpcEmote ? n.emoteFrame : 0,
       depth: entityDepth(n),
       spriteKey: n.id, kind: 'npc', color: n.def.color,
       nameTag: n.def.isStaff ? `${n.def.name} · Staff` : (n.def.homeFloor ? `${n.def.name} · F${n.def.homeFloor}` : n.def.name),
       outfit: n.id === 'marina' ? 'swimsuit' : 'normal',
-      bubbleText: n.bubble ? n.bubble.text : null,
+      bubbleText: n.bubble ? n.bubble.text : (n.bubbleUntil && n.bubbleUntil > now ? n.bubbleText : null),
     });
   }
   list.push(...getRemoteMultiplayerEntities(now));
@@ -1512,6 +1538,8 @@ document.getElementById('btnNpcDlgClose').addEventListener('click', closeNpcDial
 window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     if (!document.getElementById('helpOverlay').classList.contains('hidden')) hideHelp();
+    else if (isAvatarModalOpen()) closeAvatarModal();
+    else if (!document.getElementById('emoteBar')?.classList.contains('hidden')) toggleEmoteBar(false);
     else if (!document.getElementById('arcadeGameModal').classList.contains('hidden')) closeArcadeGame();
     else if (!document.getElementById('arcadeLeaderboardModal').classList.contains('hidden')) closeArcadeLeaderboard();
     else if (!document.getElementById('elevatorPanel').classList.contains('hidden')) document.getElementById('elevatorPanel').classList.add('hidden');
@@ -1520,6 +1548,10 @@ window.addEventListener('keydown', (e) => {
     else cancelPlacing();
   }
   else if (getActiveArcadeState().isOpen) return;
+  else if (e.key >= '1' && e.key <= '8' && !isTypingTarget(e)) {
+    const idx = parseInt(e.key, 10) - 1;
+    if (idx >= 0 && idx < EMOTES.length) triggerEmote(EMOTES[idx].id);
+  }
   else if (e.key.toLowerCase() === 'r' && ui.placing) rotatePlacing();
   else if ((e.key === '+' || e.key === '=') && !isTypingTarget(e)) stepZoom(0.15);
   else if (e.key === '-' && !isTypingTarget(e)) stepZoom(-0.15);
@@ -1531,7 +1563,7 @@ window.addEventListener('keydown', (e) => {
   else if (e.key.toLowerCase() === 'h' && !isTypingTarget(e)) showHelp();
   else if (e.key.toLowerCase() === 's' && !isTypingTarget(e)) manualSave();
 });
-function isTypingTarget(e) { return e.target && e.target.tagName === 'INPUT'; }
+function isTypingTarget(e) { return e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA'); }
 
 // ---------- panels ----------
 
@@ -2183,7 +2215,62 @@ function autoSave() {
 }
 setInterval(autoSave, 15000);
 
+let lastEmoteTime = 0;
+function toggleEmoteBar(force) {
+  const bar = document.getElementById('emoteBar');
+  if (!bar) return;
+  if (typeof force === 'boolean') {
+    bar.classList.toggle('hidden', !force);
+  } else {
+    bar.classList.toggle('hidden');
+  }
+}
+
+function triggerEmote(emoteId) {
+  if (!EMOTE_IDS.has(emoteId)) return false;
+  const now = performance.now();
+  if (!isEmoteAllowed(lastEmoteTime, now)) {
+    showToast('Emote cooldown (1s)');
+    return false;
+  }
+  lastEmoteTime = now;
+  player.emote = emoteId;
+  player.emoteUntil = now + EMOTE_DURATION_MS;
+  player.emoteFrame = 0;
+  player.bubbleText = EMOTE_ICONS[emoteId];
+  player.bubbleUntil = now + EMOTE_DURATION_MS;
+  audio.playSfx('click');
+  toggleEmoteBar(false);
+  notifyLocalEmote(emoteId);
+
+  // Nearby NPCs occasionally react when player waves
+  if (emoteId === 'wave') {
+    for (const n of npcRuntimes) {
+      if (n.room !== state.player.room) continue;
+      const dist = Math.hypot(n.x - player.x, n.y - player.y);
+      if (dist <= 3.5) {
+        if (Math.random() < 0.75) {
+          setTimeout(() => {
+            if (n.room === state.player.room) {
+              n.emote = 'wave';
+              n.emoteUntil = performance.now() + 2500;
+              n.emoteFrame = 0;
+              n.bubbleText = '👋';
+              n.bubbleUntil = performance.now() + 2500;
+            }
+          }, 350 + Math.random() * 300);
+        }
+      }
+    }
+  }
+  return true;
+}
+
 // ---------- init ----------
+
+window.__pixelHotel = Object.assign(window.__pixelHotel || {}, {
+  getPlayerLook: () => state.player.look || DEFAULT_PLAYER_LOOK,
+});
 
 function init() {
   syncCanvasSize();
@@ -2204,16 +2291,55 @@ function init() {
     switchRoom: (roomId) => switchRoom(roomId),
     getPlayerRoom: () => state.player.room,
     getPlayerOutfit: () => state.player.outfit || 'normal',
+    getPlayerLook: () => state.player.look || DEFAULT_PLAYER_LOOK,
     onRemoteChat: (who, text) => pushChatLine(who, text),
+    onRemoteEmote: (userId, emote) => {},
     getMyRoomPlaced: () => state.rooms.myroom.placed,
     enterVisitScene: (displayName, roomData) => enterVisitScene(displayName, roomData),
     exitVisitScene: () => exitVisitScene(),
   });
   initArcadeUI({
     getState: () => state,
-    getClient: () => getSupabaseClient(),
+    getClient: () => ((isMultiplayerLoaded() || (typeof window !== 'undefined' && typeof window.__mpTestClientFactory === 'function')) ? getSupabaseClient() : null),
     showToast: (msg) => showToast(msg),
   });
+  initAvatarModal({
+    getState: () => state,
+    getCoins: () => state.coins,
+    spendCoins: (cost) => {
+      refreshCoins();
+      saveState(window.localStorage, state);
+    },
+    onLookSaved: (look) => {
+      state.player.look = look;
+      player.look = look;
+      state.avatarCustomized = true;
+      saveState(window.localStorage, state);
+      updateLocalLook(state.player.look);
+      showToast('Avatar saved! Looking sharp ✨');
+    },
+    showToast: (msg) => showToast(msg),
+  });
+
+  document.getElementById('btnWardrobe')?.addEventListener('click', () => openAvatarModal());
+  document.getElementById('btnEmotes')?.addEventListener('click', () => toggleEmoteBar());
+  document.querySelectorAll('.emote-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      triggerEmote(btn.dataset.emote);
+    });
+  });
+
+  const AVATAR_SEEN_KEY = 'pixelHotel.avatarSeen.v1'; // gitleaks:allow
+  if (window.localStorage.getItem(HELP_SEEN_KEY)) {
+    window.localStorage.setItem(AVATAR_SEEN_KEY, '1');
+  }
+  document.getElementById('btnHelpClose')?.addEventListener('click', () => {
+    if (!state.avatarCustomized && !window.localStorage.getItem(AVATAR_SEEN_KEY)) {
+      window.localStorage.setItem(AVATAR_SEEN_KEY, '1');
+      openAvatarModal();
+    }
+  });
+
   const isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || (window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
   if (isTouch) {
     document.body.classList.add('has-touch');
@@ -2227,7 +2353,7 @@ init();
 
 // ---------- debug hooks for tests ----------
 
-window.__pixelHotel = {
+window.__pixelHotel = Object.assign(window.__pixelHotel || {}, {
   getState: () => ({
     coins: state.coins,
     room: state.player.room,
@@ -2240,6 +2366,9 @@ window.__pixelHotel = {
       lying: !!player.lying,
       activity: player.activity,
       buff: state.player.buff,
+      look: state.player.look,
+      emote: player.emote,
+      bubbleText: (player.bubbleUntil && player.bubbleUntil > performance.now()) ? player.bubbleText : null,
     },
     inventory: state.inventory,
     rooms: state.rooms,
@@ -2247,6 +2376,7 @@ window.__pixelHotel = {
     unlocked: state.unlocked,
     settings: state.settings,
     arcade: state.arcade,
+    avatarCustomized: state.avatarCustomized,
   }),
   getAudioState: () => ({
     gestureUnlocked: audio.gestureUnlocked,
@@ -2264,9 +2394,13 @@ window.__pixelHotel = {
     refreshAudioUi();
   }, // 0.5 noon, 0 midnight
   getSaveVersion: () => SAVE_VERSION,
-  getVersion: () => '0.8.9',
+  getVersion: () => '0.9.0',
   getRemoteMultiplayer: () => getRemoteMultiplayerEntities(performance.now()),
   walkTo: (x, y) => tryWalkPlayer(x, y),
+  openAvatarCreator: () => openAvatarModal(),
+  closeAvatarCreator: () => closeAvatarModal(),
+  triggerEmote: (emote) => triggerEmote(emote),
+  getPlayerLook: () => state.player.look || DEFAULT_PLAYER_LOOK,
   interactWith: (itemIdOrInstanceId, immediate = false) => {
     if (itemIdOrInstanceId === 'pool_water' && state.player.outfit !== 'swimsuit') {
       state.player.outfit = 'swimsuit';
@@ -2304,7 +2438,7 @@ window.__pixelHotel = {
   closeArcadeLeaderboard: () => closeArcadeLeaderboard(),
   getArcadeState: () => getActiveArcadeState(),
   getActiveArcadeState: () => getActiveArcadeState(),
-  getSupabaseClient: () => getSupabaseClient(),
+  getSupabaseClient: () => ((isMultiplayerLoaded() || (typeof window !== 'undefined' && typeof window.__mpTestClientFactory === 'function')) ? getSupabaseClient() : null),
   setNpcActivity: (npcId, itemIdOrInstanceId) => {
     const npc = npcRuntimes.find((n) => n.id === npcId || n.id.endsWith(`_${npcId}`));
     if (!npc) return false;
@@ -2424,4 +2558,4 @@ window.__pixelHotel = {
     audio._handleFileError(trackId || audio.trackId);
     return audio.getMoodInfo();
   },
-};
+});

@@ -178,3 +178,15 @@ export function validateKickedPayload(payload) {
   if (!isValidUserId(payload.targetUserId)) return null;
   return { targetUserId: payload.targetUserId };
 }
+
+const VALID_EMOTES = new Set(['wave', 'dance', 'laugh', 'clap', 'heart', 'sleep', 'cheer', 'thumbsup']);
+
+/** Validates an incoming "emote" broadcast payload. Returns { userId, emote, displayName } or null. */
+export function validateEmotePayload(payload) {
+  if (!payload || typeof payload !== 'object') return null;
+  if (!isValidUserId(payload.userId)) return null;
+  if (typeof payload.emote !== 'string' || !VALID_EMOTES.has(payload.emote)) return null;
+  const displayName = typeof payload.displayName === 'string'
+    ? payload.displayName.slice(0, DISPLAY_NAME_MAX_LEN) : null;
+  return { userId: payload.userId, emote: payload.emote, displayName };
+}
