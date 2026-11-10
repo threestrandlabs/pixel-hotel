@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.8.5] - 2026-11-10
+
+### Added
+
+- **Music by James v2 floor soundtrack (`audio/music/v2/`, `js/audio.js`)**: Each floor now plays its matching v2 soundtrack track composed by James (Floor 1 Hotel Lobby, Floor 2 Cafe & Bar, Floor 3 Restaurant, Floor 4 Gym, Floor 5 Pool & Spa, Floor 6 Arcade, Floor 7 Library, Floor 8 My Room, Floor 9 Sky Garden, Floor 42 Rooftop) with clean, concise labels ("Hotel Lobby", "Cafe & Bar", etc.).
+- **Playlist extras & classic tracks (`js/audio.js`)**: Added 4 new v2 extras (`main-menu`, `guest-room`, `renovation`, `event-map`), with `renovation` playing while the Room Upgrade Agency modal is open and smoothly restoring the floor audio on modal close. Preserved all 10 classic tracks in `audio/music/*.mp3` as playlist extras labeled "Classic: <old label>".
+- **Cassette player playlist & shuffle toggle (`index.html`, `css/style.css`, `js/audio.js`, `js/main.js`)**: Added playlist continuous-play support that advances to the next track on track completion. Added tactile previous/next transport buttons and a shuffle toggle in the expanded cassette player styled to the retro cassette look. Entering any floor starts that floor's theme track.
+- **Settings persistence**: Shuffle mode (`state.settings.shuffle`) and player minimised state (`state.settings.playerMinimized`) persist durably across saves and reload.
+- **Lazy-loading audio**: Audio files are fetched on demand only when played, eliminating eager preloading of sequential tracks.
+- **Procedural fallback**: Maintained the procedural Web Audio multi-room synth fallback if any audio file fails to load or decode.
+
 ## [0.8.4] - 2026-11-10
 
 ### Added

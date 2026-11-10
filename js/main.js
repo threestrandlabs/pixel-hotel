@@ -13,7 +13,7 @@ import {
   renderRoom, computeOrigin, screenToTile, tileToScreen, worldToScreen, hitTestNpc, getItemIconDataUrl,
   DEFAULT_ZOOM, MIN_ZOOM, MAX_ZOOM, clampZoom, zoomAtPoint, centerCameraOnTile,
 } from './render.js';
-import { audio, formatTime } from './audio.js';
+import { audio, formatTime, trackForRoom } from './audio.js';
 import {
   initMultiplayerUI, getRemoteMultiplayerEntities, tickMultiplayer, notifyLocalChat, publishOwnRoomSnapshot,
 } from './multiplayer/ui.js';
@@ -506,7 +506,23 @@ function openRoomUpgradeModal() {
     });
   });
 
+  ui.preUpgradeTrackId = audio.trackId;
+  ui.preUpgradeAutoFollow = audio.autoFollowRoom;
+  audio.setTrack('renovation', false);
+  refreshMusicPlayer();
   modal.classList.remove('hidden');
+}
+
+function closeRoomUpgradeModal() {
+  const modal = document.getElementById('roomUpgradeModal');
+  if (!modal || modal.classList.contains('hidden')) return;
+  modal.classList.add('hidden');
+  if (audio.trackId === 'renovation') {
+    const restoreId = (ui.preUpgradeAutoFollow || !ui.preUpgradeTrackId) ? trackForRoom(state.player.room) : ui.preUpgradeTrackId;
+    audio.setAutoFollowRoom(ui.preUpgradeAutoFollow !== false);
+    audio.setTrack(restoreId, false);
+    refreshMusicPlayer();
+  }
 }
 
 function upgradeRoom(newTier) {
@@ -524,7 +540,7 @@ function upgradeRoom(newTier) {
   saveState(window.localStorage, state);
   updateRoomLabel();
   refreshElevatorPanel();
-  document.getElementById('roomUpgradeModal')?.classList.add('hidden');
+  closeRoomUpgradeModal();
   showToast(`Upgraded to ${tierDef.name} on Floor ${tierDef.floor}! 🎉`);
 }
 
@@ -775,7 +791,7 @@ function switchRoom(roomId, toTile) {
   if (!targetDef) return false;
   document.getElementById('poolPromptModal')?.classList.add('hidden');
   document.getElementById('salonModal')?.classList.add('hidden');
-  document.getElementById('roomUpgradeModal')?.classList.add('hidden');
+  closeRoomUpgradeModal();
   const dest = toTile || targetDef.spawn;
   state.player.room = roomId;
   player.x = dest.x;
@@ -1374,6 +1390,7 @@ window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     if (!document.getElementById('helpOverlay').classList.contains('hidden')) hideHelp();
     else if (!document.getElementById('elevatorPanel').classList.contains('hidden')) document.getElementById('elevatorPanel').classList.add('hidden');
+    else if (!document.getElementById('roomUpgradeModal').classList.contains('hidden')) closeRoomUpgradeModal();
     else if (ui.activeDialogue) closeNpcDialogue();
     else cancelPlacing();
   }
@@ -1418,11 +1435,9 @@ function openElevatorPanel() {
 document.getElementById('btnElevator').addEventListener('click', () => togglePanel('elevatorPanel'));
 document.getElementById('btnMyRoom').addEventListener('click', () => travelByElevator('myroom'));
 document.getElementById('btnUpgradeRoom')?.addEventListener('click', openRoomUpgradeModal);
-document.getElementById('btnUpgradeClose')?.addEventListener('click', () => {
-  document.getElementById('roomUpgradeModal')?.classList.add('hidden');
-});
+document.getElementById('btnUpgradeClose')?.addEventListener('click', closeRoomUpgradeModal);
 document.getElementById('roomUpgradeModal')?.addEventListener('click', (e) => {
-  if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden');
+  if (e.target === e.currentTarget) closeRoomUpgradeModal();
 });
 
 document.getElementById('btnPoolSwimLaps')?.addEventListener('click', () => {
@@ -1770,6 +1785,10 @@ function refreshMusicPlayer() {
     autoBtn.classList.toggle('active', info.autoFollowRoom);
     autoBtn.textContent = info.autoFollowRoom ? 'Auto: Room' : 'Manual';
   }
+  const shuffleBtn = document.getElementById('mpShuffle');
+  if (shuffleBtn) {
+    shuffleBtn.classList.toggle('active', !!info.shuffle);
+  }
   if (!isSeekingProgressBar) {
     const cur = audio.getCurrentTime();
     const dur = audio.getDuration();
@@ -1797,6 +1816,12 @@ function refreshMusicPlayer() {
 document.getElementById('mpPlayPause')?.addEventListener('click', () => { audio.togglePlayPause(); refreshMusicPlayer(); });
 document.getElementById('mpPrev')?.addEventListener('click', () => { audio.prevTrack(); refreshMusicPlayer(); });
 document.getElementById('mpNext')?.addEventListener('click', () => { audio.nextTrack(); refreshMusicPlayer(); });
+document.getElementById('mpShuffle')?.addEventListener('click', () => {
+  const nextShuf = audio.toggleShuffle();
+  state.settings.shuffle = nextShuf;
+  saveState(window.localStorage, state);
+  refreshMusicPlayer();
+});
 document.getElementById('mpAutoFollow')?.addEventListener('click', () => {
   const nowAuto = !audio.getMoodInfo().autoFollowRoom;
   audio.setAutoFollowRoom(nowAuto);
@@ -2040,6 +2065,7 @@ function init() {
   updateZoomLabel();
   audio.configure(state.settings);
   audio.setAutoFollowRoom(state.settings.autoFollowRoom);
+  audio.onTrackChange = () => refreshMusicPlayer();
   audio.setRoomMood(state.player.room, ui.phase, currentRoomDef().floor || 1);
   refreshAudioUi();
   applyPlayerMinimized();
@@ -2224,6 +2250,7 @@ window.__pixelHotel = {
     autoFollowRoom: audio.autoFollowRoom,
     info: audio.getMoodInfo(),
     minimized: document.getElementById('musicPlayer')?.classList.contains('minimized') || false,
+    shuffle: !!audio.shuffle,
     currentTime: audio.getCurrentTime(),
     duration: audio.getDuration(),
   }),

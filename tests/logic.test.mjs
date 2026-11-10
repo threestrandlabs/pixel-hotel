@@ -23,7 +23,7 @@ import {
   clampZoom, zoomAtPoint, centerCameraOnTile, screenToTile, worldToScreen,
   DEFAULT_ZOOM, MIN_ZOOM, MAX_ZOOM, deviceScale,
 } from '../js/render.js';
-import { ChiptuneAudio, MOOD_PROFILES, MUSIC_FILES, moodForRoom, formatTime } from '../js/audio.js';
+import { ChiptuneAudio, MOOD_PROFILES, MUSIC_FILES, PLAYLIST, TRACK_ORDER, moodForRoom, formatTime } from '../js/audio.js';
 
 // ---------- fake localStorage ----------
 function makeFakeStorage(initial = {}) {
@@ -1494,11 +1494,11 @@ test('v0.7.1 audio: floor MP3s play per room, crossfade between floors, and fall
     synth = new ChiptuneAudio(FakeAudioContext);
     synth.unlockGesture();
 
-    // Gym floor resolves to the 04-gym.mp3 file and plays it (not the procedural fallback)
+    // Gym floor resolves to the v2 gym.mp3 file and plays it (not the procedural fallback)
     synth.setRoomMood('gym', 0.5, 4);
     let info = synth.getMoodInfo();
     assert.equal(info.src, MUSIC_FILES.gym.src);
-    assert.ok(info.src.endsWith('04-gym.mp3'));
+    assert.ok(info.src.endsWith('gym.mp3'));
     assert.equal(info.usingFile, true);
     assert.equal(info.label, MUSIC_FILES.gym.label);
     assert.equal(synth.fileNodes.gym.el.paused, false, 'the gym file element is playing');
@@ -2131,4 +2131,162 @@ test('v0.8.3 pool & spa: Olympic pool layout, changing cubicles, and swimsuit ga
   assert.ok(massageBeds.length >= 1, 'massage beds in spa');
 
   assert.ok(hasDoorArrivalRoute(poolRoom, placed), 'elevator landing is reachable');
+});
+
+// ======================= v0.8.5 Music by James v2 floor soundtrack & cassette playlist =======================
+
+test('v0.8.5 audio: floor mapping resolves every floor to its matching v2 soundtrack file with clean labels', () => {
+  const expectedFloorTracks = {
+    lobby: { src: 'audio/music/v2/hotel-lobby.mp3', label: 'Hotel Lobby' },
+    cafe: { src: 'audio/music/v2/cafe-and-bar.mp3', label: 'Cafe & Bar' },
+    restaurant: { src: 'audio/music/v2/restaurant.mp3', label: 'Restaurant' },
+    gym: { src: 'audio/music/v2/gym.mp3', label: 'Gym' },
+    pool: { src: 'audio/music/v2/pool-and-spa.mp3', label: 'Pool & Spa' },
+    arcade: { src: 'audio/music/v2/arcade.mp3', label: 'Arcade' },
+    library: { src: 'audio/music/v2/library.mp3', label: 'Library' },
+    myroom: { src: 'audio/music/v2/my-room.mp3', label: 'My Room' },
+    garden: { src: 'audio/music/v2/sky-garden.mp3', label: 'Sky Garden' },
+    rooftop: { src: 'audio/music/v2/rooftop.mp3', label: 'Rooftop' },
+  };
+
+  class FakeAudioContext {
+    constructor() {
+      this.state = 'running';
+      this.currentTime = 0;
+      this.sampleRate = 22050;
+      this.destination = {};
+    }
+    createGain() { return { gain: { value: 0.0001, setValueAtTime() {}, linearRampToValueAtTime() {}, cancelScheduledValues() {} }, connect() {}, disconnect() {} }; }
+    createBiquadFilter() { return { type: 'lowpass', frequency: { value: 1000 }, Q: { value: 0.7 }, connect() {} }; }
+    createOscillator() { return { type: 'sine', frequency: { value: 440, setValueAtTime() {} }, connect() {}, start() {}, stop() {} }; }
+    createBuffer() { return { getChannelData: () => new Float32Array(100) }; }
+    createBufferSource() { return { buffer: null, connect() {}, start() {}, stop() {} }; }
+    createMediaElementSource() { return { connect() {}, disconnect() {} }; }
+    resume() { this.state = 'running'; }
+  }
+
+  class FakeAudioElement {
+    constructor() { this.loop = false; this.preload = ''; this._src = ''; this.paused = true; }
+    set src(v) { this._src = v; }
+    get src() { return this._src; }
+    addEventListener() {}
+    play() { this.paused = false; return Promise.resolve(); }
+    pause() { this.paused = true; }
+  }
+
+  global.Audio = FakeAudioElement;
+  let synth;
+  try {
+    synth = new ChiptuneAudio(FakeAudioContext);
+    synth.unlockGesture();
+
+    for (const [roomId, expected] of Object.entries(expectedFloorTracks)) {
+      synth.setRoomMood(roomId, 0.5, 1);
+      const info = synth.getMoodInfo();
+      assert.equal(info.src, expected.src, `${roomId} maps to ${expected.src}`);
+      assert.equal(info.label, expected.label, `${roomId} has label ${expected.label}`);
+    }
+
+    // Verify extras and classic tracks in playlist
+    assert.ok(PLAYLIST.includes('main-menu'));
+    assert.ok(PLAYLIST.includes('guest-room'));
+    assert.ok(PLAYLIST.includes('renovation'));
+    assert.ok(PLAYLIST.includes('event-map'));
+    assert.equal(MUSIC_FILES['main-menu'].src, 'audio/music/v2/main-menu.mp3');
+    assert.equal(MUSIC_FILES['guest-room'].src, 'audio/music/v2/guest-room.mp3');
+    assert.equal(MUSIC_FILES['renovation'].src, 'audio/music/v2/renovation.mp3');
+    assert.equal(MUSIC_FILES['event-map'].src, 'audio/music/v2/event-map.mp3');
+
+    // Classic tracks labeled "Classic: <old label>"
+    assert.equal(MUSIC_FILES['classic-lobby'].label, 'Classic: Grand Lobby Jazz Lounge');
+    assert.equal(MUSIC_FILES['classic-gym'].label, 'Classic: Gym Pulse Fitness Electronic');
+    assert.equal(MUSIC_FILES['classic-rooftop'].label, 'Classic: Rooftop Sunset Night House');
+  } finally {
+    if (synth) synth.stopLoop();
+    delete global.Audio;
+  }
+});
+
+test('v0.8.5 audio: playlist advance automatically continues to the next track on track ended', () => {
+  class FakeAudioElement {
+    constructor() {
+      this.loop = false;
+      this.preload = '';
+      this._src = '';
+      this.paused = true;
+      this.listeners = {};
+    }
+    set src(v) { this._src = v; }
+    get src() { return this._src; }
+    addEventListener(event, fn) {
+      this.listeners[event] = this.listeners[event] || [];
+      this.listeners[event].push(fn);
+    }
+    emit(event) {
+      (this.listeners[event] || []).forEach((fn) => fn());
+    }
+    play() { this.paused = false; return Promise.resolve(); }
+    pause() { this.paused = true; }
+  }
+
+  global.Audio = FakeAudioElement;
+  let synth;
+  try {
+    synth = new ChiptuneAudio();
+    synth.setTrack(PLAYLIST[0]);
+    assert.equal(synth.trackId, PLAYLIST[0]);
+
+    // Simulating the track ending advances to the next track in PLAYLIST
+    synth._handleTrackEnded(PLAYLIST[0]);
+    assert.equal(synth.trackId, PLAYLIST[1]);
+
+    synth._handleTrackEnded(PLAYLIST[1]);
+    assert.equal(synth.trackId, PLAYLIST[2]);
+  } finally {
+    if (synth) synth.stopLoop();
+    delete global.Audio;
+  }
+});
+
+test('v0.8.5 audio: prev/next wrap around the full playlist bounds', () => {
+  let synth;
+  try {
+    synth = new ChiptuneAudio();
+    synth.shuffle = false;
+
+    // Start at first track
+    synth.setTrack(PLAYLIST[0]);
+    assert.equal(synth.trackId, PLAYLIST[0]);
+
+    // prevTrack from index 0 wraps to the last track
+    synth.prevTrack();
+    assert.equal(synth.trackId, PLAYLIST[PLAYLIST.length - 1]);
+
+    // nextTrack from the last track wraps to index 0
+    synth.nextTrack();
+    assert.equal(synth.trackId, PLAYLIST[0]);
+  } finally {
+    if (synth) synth.stopLoop();
+  }
+});
+
+test('v0.8.5 persistence: shuffle setting defaults to false and round-trips through saveState/loadState', () => {
+  const fresh = createDefaultState();
+  assert.equal(fresh.settings.shuffle, false);
+
+  const storage = makeFakeStorage();
+  fresh.settings.shuffle = true;
+  saveState(storage, fresh);
+
+  const loaded = loadState(storage);
+  assert.equal(loaded.settings.shuffle, true);
+
+  // An older save without shuffle setting defaults to false
+  const oldSave = createDefaultState();
+  delete oldSave.settings.shuffle;
+  oldSave.settings.playerMinimized = true;
+  storage.setItem(SAVE_KEY, JSON.stringify(oldSave));
+  const loadedOld = loadState(storage);
+  assert.equal(loadedOld.settings.shuffle, false);
+  assert.equal(loadedOld.settings.playerMinimized, true);
 });

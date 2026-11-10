@@ -456,10 +456,17 @@ async function main() {
     check('Auto: follow room toggle re-enables room-following', mpAfterAuto.info.autoFollowRoom === true);
     // ---- v0.8.3: cassette player minimise toggle & seek bar ----
     check('cassette tape view is visible in expanded player', await page.locator('#mpCassette').isVisible());
+    check('shuffle toggle is visible in expanded player', await page.locator('#mpShuffle').isVisible());
+    await page.click('#mpShuffle');
+    await page.waitForTimeout(80);
+    const mpShufOn = await page.evaluate(() => window.__pixelHotel.getState().settings.shuffle);
+    check('shuffle toggle updates state and persists in save settings', mpShufOn === true);
+    await page.click('#mpShuffle');
+    await page.waitForTimeout(80);
     await page.click('#mpCollapse');
     await page.waitForTimeout(80);
     const mpMin = await page.evaluate(() => window.__pixelHotel.getMusicPlayerState());
-    check('music player minimise toggle collapses to compact size', mpMin.minimized === true && !(await page.locator('#mpCassette').isVisible()) && (await page.locator('#mpProgressBar').isVisible()));
+    check('music player minimise toggle collapses to compact size', mpMin.minimized === true && !(await page.locator('#mpCassette').isVisible()) && !(await page.locator('#mpShuffle').isVisible()) && (await page.locator('#mpProgressBar').isVisible()));
     await page.click('#mpCollapse');
     await page.waitForTimeout(80);
     const mpExp = await page.evaluate(() => window.__pixelHotel.getMusicPlayerState());
@@ -616,26 +623,26 @@ async function main() {
     const roomLabelGym = await page.textContent('#roomName');
     check('floor indicator updates for Gym', roomLabelGym.includes('Floor 4') && roomLabelGym.includes('Gym'));
 
-    // ---- v0.7.1: gym floor plays the 04-gym.mp3 file (James's soundtrack), not the procedural fallback ----
+    // ---- v0.8.5: gym floor plays the v2 gym.mp3 file (Music by James), not the procedural fallback ----
     await page.waitForTimeout(400);
     const gymAudio = await page.evaluate(() => window.__pixelHotel.getAudioState().mood);
-    check('gym floor music resolves to the 04-gym.mp3 file', gymAudio.src === 'audio/music/04-gym.mp3');
+    check('gym floor music resolves to the gym.mp3 file', gymAudio.src === 'audio/music/v2/gym.mp3');
     check('gym floor music plays the file track, not the procedural fallback', gymAudio.usingFile === true && gymAudio.fallback === false);
-    check('music player shows the gym floor track title', gymAudio.label === 'Gym Pulse Fitness Electronic');
+    check('music player shows the gym floor track title', gymAudio.label === 'Gym');
 
-    // ---- v0.7.1: switching floors crossfades to the new floor's file track ----
+    // ---- v0.8.5: switching floors crossfades to the new floor's file track ----
     await page.evaluate(() => window.__pixelHotel.takeElevator('library'));
     await page.waitForTimeout(400);
     const libraryAudio = await page.evaluate(() => window.__pixelHotel.getAudioState().mood);
-    check('switching floors crossfades to the new floor\'s file', libraryAudio.src === 'audio/music/07-library.mp3' && libraryAudio.usingFile === true);
-    check('music player shows the library floor track title', libraryAudio.label === 'Library Soft Piano');
+    check('switching floors crossfades to the new floor\'s file', libraryAudio.src === 'audio/music/v2/library.mp3' && libraryAudio.usingFile === true);
+    check('music player shows the library floor track title', libraryAudio.label === 'Library');
     await page.evaluate(() => window.__pixelHotel.takeElevator('gym'));
     await page.waitForTimeout(400);
 
-    // ---- v0.7.1: a failed music file falls back to the procedural synth track ----
+    // ---- a failed music file falls back to the procedural synth track ----
     const fallbackInfo = await page.evaluate(() => window.__pixelHotel.simulateMusicFileError('gym'));
     check('a failing music file marks that track as fallback', fallbackInfo.fallback === true && fallbackInfo.usingFile === false);
-    check('fallback keeps the procedural synth title instead of the file label', fallbackInfo.label !== 'Gym Pulse Fitness Electronic' && fallbackInfo.label.length > 0);
+    check('fallback keeps the procedural synth title instead of the file label', fallbackInfo.label !== 'Gym' && fallbackInfo.label.length > 0);
 
     const tmInteract = await page.evaluate(() => window.__pixelHotel.interactWith('treadmill', true));
     const gymAfterTm = await page.evaluate(() => window.__pixelHotel.getState().player);

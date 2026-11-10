@@ -214,25 +214,42 @@ export const ROOM_TRACKS = {
   },
 };
 
-export const TRACK_ORDER = [
-  'lobby', 'cafe', 'restaurant', 'gym', 'pool',
-  'arcade', 'library', 'myroom', 'garden', 'rooftop',
-];
-
-// James's original floor soundtrack files (one per floor, ~2min, loop=true). If a
+// James's original floor & extra soundtrack files (Music by James). If a
 // file fails to load/decode/play, playback falls back to the procedural ROOM_TRACKS synth.
 export const MUSIC_FILES = {
-  lobby: { src: 'audio/music/01-grand-lobby.mp3', label: 'Grand Lobby Jazz Lounge' },
-  cafe: { src: 'audio/music/02-cafe-and-bar.mp3', label: 'Cafe and Bar Bossa Nova' },
-  restaurant: { src: 'audio/music/03-restaurant.mp3', label: 'Restaurant Smooth Jazz' },
-  gym: { src: 'audio/music/04-gym.mp3', label: 'Gym Pulse Fitness Electronic' },
-  pool: { src: 'audio/music/05-pool-and-spa.mp3', label: 'Pool and Spa Calm Ambient' },
-  arcade: { src: 'audio/music/06-arcade.mp3', label: 'Arcade Chiptune' },
-  library: { src: 'audio/music/07-library.mp3', label: 'Library Soft Piano' },
-  myroom: { src: 'audio/music/08-my-room.mp3', label: 'My Room Lofi Chill' },
-  garden: { src: 'audio/music/09-sky-garden.mp3', label: 'Sky Garden Nature Acoustic' },
-  rooftop: { src: 'audio/music/10-rooftop.mp3', label: 'Rooftop Sunset Night House' },
+  // Floor tracks (v2)
+  lobby: { src: 'audio/music/v2/hotel-lobby.mp3', label: 'Hotel Lobby' },
+  cafe: { src: 'audio/music/v2/cafe-and-bar.mp3', label: 'Cafe & Bar' },
+  restaurant: { src: 'audio/music/v2/restaurant.mp3', label: 'Restaurant' },
+  gym: { src: 'audio/music/v2/gym.mp3', label: 'Gym' },
+  pool: { src: 'audio/music/v2/pool-and-spa.mp3', label: 'Pool & Spa' },
+  arcade: { src: 'audio/music/v2/arcade.mp3', label: 'Arcade' },
+  library: { src: 'audio/music/v2/library.mp3', label: 'Library' },
+  myroom: { src: 'audio/music/v2/my-room.mp3', label: 'My Room' },
+  garden: { src: 'audio/music/v2/sky-garden.mp3', label: 'Sky Garden' },
+  rooftop: { src: 'audio/music/v2/rooftop.mp3', label: 'Rooftop' },
+
+  // Extras (v2)
+  'main-menu': { src: 'audio/music/v2/main-menu.mp3', label: 'Main Menu' },
+  'guest-room': { src: 'audio/music/v2/guest-room.mp3', label: 'Guest Room' },
+  renovation: { src: 'audio/music/v2/renovation.mp3', label: 'Renovation' },
+  'event-map': { src: 'audio/music/v2/event-map.mp3', label: 'Event Map' },
+
+  // Classic tracks (v1 legacy floor soundtrack)
+  'classic-lobby': { src: 'audio/music/01-grand-lobby.mp3', label: 'Classic: Grand Lobby Jazz Lounge' },
+  'classic-cafe': { src: 'audio/music/02-cafe-and-bar.mp3', label: 'Classic: Cafe and Bar Bossa Nova' },
+  'classic-restaurant': { src: 'audio/music/03-restaurant.mp3', label: 'Classic: Restaurant Smooth Jazz' },
+  'classic-gym': { src: 'audio/music/04-gym.mp3', label: 'Classic: Gym Pulse Fitness Electronic' },
+  'classic-pool': { src: 'audio/music/05-pool-and-spa.mp3', label: 'Classic: Pool and Spa Calm Ambient' },
+  'classic-arcade': { src: 'audio/music/06-arcade.mp3', label: 'Classic: Arcade Chiptune' },
+  'classic-library': { src: 'audio/music/07-library.mp3', label: 'Classic: Library Soft Piano' },
+  'classic-myroom': { src: 'audio/music/08-my-room.mp3', label: 'Classic: My Room Lofi Chill' },
+  'classic-garden': { src: 'audio/music/09-sky-garden.mp3', label: 'Classic: Sky Garden Nature Acoustic' },
+  'classic-rooftop': { src: 'audio/music/10-rooftop.mp3', label: 'Classic: Rooftop Sunset Night House' },
 };
+
+export const PLAYLIST = Object.keys(MUSIC_FILES);
+export const TRACK_ORDER = PLAYLIST;
 
 // Backward-compatible MOOD_PROFILES map including legacy aliases ('spa', 'night') and all 10 room tracks
 export const MOOD_PROFILES = {
@@ -300,6 +317,8 @@ export class ChiptuneAudio {
 
     this.playing = true;
     this.autoFollowRoom = true;
+    this.shuffle = false;
+    this.onTrackChange = null;
     this.roomId = 'lobby';
     this.floor = 1;
     this.phase = 0.5;
@@ -455,6 +474,9 @@ export class ChiptuneAudio {
     if (typeof settings.autoFollowRoom === 'boolean') {
       this.autoFollowRoom = settings.autoFollowRoom;
     }
+    if (typeof settings.shuffle === 'boolean') {
+      this.shuffle = settings.shuffle;
+    }
     this._syncGains();
     if (this.gestureUnlocked) {
       if ((this.musicMuted || !this.playing || this.musicVolume <= 0) && (this.sfxMuted || this.ambienceMuted || this.ambienceVolume <= 0)) {
@@ -536,6 +558,15 @@ export class ChiptuneAudio {
     return this.setPlaying(!this.playing);
   }
 
+  setShuffle(shuffle) {
+    this.shuffle = !!shuffle;
+    return this.shuffle;
+  }
+
+  toggleShuffle() {
+    return this.setShuffle(!this.shuffle);
+  }
+
   setAutoFollowRoom(autoFollow) {
     this.autoFollowRoom = !!autoFollow;
     if (this.autoFollowRoom) {
@@ -545,27 +576,46 @@ export class ChiptuneAudio {
   }
 
   setTrack(trackId, manual = false) {
-    if (!ROOM_TRACKS[trackId]) return this.getTrackInfo();
+    if (!MUSIC_FILES[trackId] && !ROOM_TRACKS[trackId]) return this.getTrackInfo();
     if (manual) this.autoFollowRoom = false;
     const changed = this.trackId !== trackId;
     this.trackId = trackId;
     if (changed) {
       this._loadTrackAssets(trackId);
       this._crossfadeRestartLoop();
+      if (typeof this.onTrackChange === 'function') {
+        try { this.onTrackChange(this.getTrackInfo()); } catch (_) {}
+      }
     }
     return this.getTrackInfo();
   }
 
-  nextTrack() {
-    const idx = TRACK_ORDER.indexOf(this.trackId);
-    const nextId = TRACK_ORDER[(idx + 1 + TRACK_ORDER.length) % TRACK_ORDER.length];
-    return this.setTrack(nextId, true);
+  nextTrack(manual = true) {
+    const list = PLAYLIST;
+    let nextId;
+    if (this.shuffle && list.length > 1) {
+      const curIdx = list.indexOf(this.trackId);
+      const randOffset = 1 + Math.floor(Math.random() * (list.length - 1));
+      nextId = list[(curIdx + randOffset) % list.length];
+    } else {
+      const idx = list.indexOf(this.trackId);
+      nextId = list[(idx + 1 + list.length) % list.length];
+    }
+    return this.setTrack(nextId, manual);
   }
 
-  prevTrack() {
-    const idx = TRACK_ORDER.indexOf(this.trackId);
-    const prevId = TRACK_ORDER[(idx - 1 + TRACK_ORDER.length) % TRACK_ORDER.length];
-    return this.setTrack(prevId, true);
+  prevTrack(manual = true) {
+    const list = PLAYLIST;
+    let prevId;
+    if (this.shuffle && list.length > 1) {
+      const curIdx = list.indexOf(this.trackId);
+      const randOffset = 1 + Math.floor(Math.random() * (list.length - 1));
+      prevId = list[(curIdx + randOffset) % list.length];
+    } else {
+      const idx = list.indexOf(this.trackId);
+      prevId = list[(idx - 1 + list.length) % list.length];
+    }
+    return this.setTrack(prevId, manual);
   }
 
   _crossfadeRestartLoop() {
@@ -587,8 +637,6 @@ export class ChiptuneAudio {
 
   _loadTrackAssets(trackId) {
     this._getFileTrack(trackId);
-    const idx = TRACK_ORDER.indexOf(trackId);
-    if (idx !== -1) this._getFileTrack(TRACK_ORDER[(idx + 1) % TRACK_ORDER.length]);
   }
 
   _getFileTrack(trackId) {
@@ -604,13 +652,20 @@ export class ChiptuneAudio {
       this.fileFallback[trackId] = true;
       return null;
     }
-    el.loop = true;
+    el.loop = false;
     el.preload = 'auto';
     el.src = def.src;
     el.addEventListener('error', () => this._handleFileError(trackId));
+    el.addEventListener('ended', () => this._handleTrackEnded(trackId));
     node = { el, source: null, gain: null };
     this.fileNodes[trackId] = node;
     return node;
+  }
+
+  _handleTrackEnded(trackId) {
+    if (this.activeFileTrackId === trackId || this.trackId === trackId) {
+      this.nextTrack(false);
+    }
   }
 
   _connectFileNode(trackId, node) {
@@ -676,7 +731,11 @@ export class ChiptuneAudio {
     }
     const prevId = this.activeFileTrackId;
     const crossfade = !!(prevId && prevId !== trackId);
-    if (crossfade) this._fadeOutActiveFileTrack(1.1);
+    if (crossfade) {
+      this._fadeOutActiveFileTrack(1.1);
+      node._seekTime = null;
+      node._pendingSeek = null;
+    }
     const fadeSec = crossfade ? 1.1 : 0.4;
     const now = ctx.currentTime || 0;
     const target = Math.max(0.0001, this._effectiveMusicTarget());
@@ -723,7 +782,8 @@ export class ChiptuneAudio {
     this.mood = nextMood;
 
     let trackChanged = false;
-    if (this.autoFollowRoom) {
+    const roomChanged = prevRoom !== this.roomId;
+    if (roomChanged || this.autoFollowRoom) {
       const targetTrack = trackForRoom(this.roomId);
       if (targetTrack !== this.trackId) {
         this.trackId = targetTrack;
@@ -731,10 +791,10 @@ export class ChiptuneAudio {
         this._loadTrackAssets(targetTrack);
       }
     }
-    if (prevRoom !== this.roomId) {
+    if (roomChanged) {
       this._syncGains(0.08);
     }
-    if ((moodChanged || trackChanged) && this.timer) {
+    if ((moodChanged || trackChanged) && (this.timer || this.gestureUnlocked)) {
       this._crossfadeRestartLoop();
     }
     return this.getMoodInfo();
@@ -747,14 +807,14 @@ export class ChiptuneAudio {
   getMoodInfo() {
     const track = this.getTrackProfile();
     const moodProfile = MOOD_PROFILES[this.mood] || track;
-    const fileDef = MUSIC_FILES[track.id];
-    const fallback = !!this.fileFallback[track.id];
+    const fileDef = MUSIC_FILES[this.trackId] || MUSIC_FILES[track.id];
+    const fallback = !!this.fileFallback[this.trackId];
     const usingFile = this._isFileTrackActive();
     const label = (fileDef && !fallback) ? fileDef.label : (this.isNight ? `${track.title} (Night)` : track.title);
     return {
       mood: this.mood,
-      trackId: track.id,
-      title: track.title,
+      trackId: this.trackId,
+      title: (fileDef && !fallback) ? fileDef.label : track.title,
       genre: track.genre,
       label,
       moodLabel: this.isNight && this.mood !== 'night' ? `${moodProfile.label} (Night)` : moodProfile.label,
@@ -762,6 +822,7 @@ export class ChiptuneAudio {
       isNight: this.isNight,
       playing: this.playing && !this.musicMuted && this.musicVolume > 0,
       autoFollowRoom: this.autoFollowRoom,
+      shuffle: this.shuffle,
       stepMs: track.stepMs,
       cutoff: this.isNight ? Math.round(track.cutoff * 0.82) : track.cutoff,
       step: this.step,

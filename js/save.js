@@ -36,6 +36,7 @@ export function createDefaultState() {
       autoFollowRoom: true,
       helpShown: false,
       playerMinimized: false,
+      shuffle: false,
     },
   };
 }
@@ -477,6 +478,11 @@ export function loadState(storage) {
     mergedSettings.playerMinimized = rawSettings.playerMinimized;
   } else {
     mergedSettings.playerMinimized = false;
+  }
+  if (typeof rawSettings.shuffle === 'boolean') {
+    mergedSettings.shuffle = rawSettings.shuffle;
+  } else {
+    mergedSettings.shuffle = false;
   }
   mergedSettings.muted = !!(mergedSettings.musicMuted && mergedSettings.sfxMuted);
   return {
