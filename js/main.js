@@ -11,7 +11,7 @@ import {
 } from './npc.js';
 import {
   renderRoom, computeOrigin, screenToTile, tileToScreen, worldToScreen, hitTestNpc, getItemIconDataUrl,
-  DEFAULT_ZOOM, MIN_ZOOM, MAX_ZOOM, clampZoom, zoomAtPoint, centerCameraOnTile,
+  DEFAULT_ZOOM, MIN_ZOOM, MAX_ZOOM, clampZoom, zoomAtPoint, centerCameraOnTile, deadzoneCameraTarget,
 } from './render.js';
 import { audio, formatTime, trackForRoom } from './audio.js';
 import {
@@ -1257,7 +1257,9 @@ function frame(now) {
     width: room0.width, height: room0.height, isBlocked: playerBlocked, stepMs: STEP_MS, onArrive: onPlayerArrive,
   });
   if (player.walking && !ui.dragging) {
-    const target = centerCameraOnTile(player.renderX, player.renderY, room0, ui.cssW, ui.cssH, ui.camera.zoom);
+    const target = state.settings.followCamera
+      ? centerCameraOnTile(player.renderX, player.renderY, room0, ui.cssW, ui.cssH, ui.camera.zoom)
+      : deadzoneCameraTarget(player.renderX, player.renderY, room0, ui.cssW, ui.cssH, ui.camera);
     // Snapping the shared camera pan to whole device pixels (rather than letting
     // it drift sub-pixel) keeps every sprite's `blitDeviceAligned` rounding
     // consistent relative to each other frame-to-frame, which is what actually
@@ -1559,6 +1561,11 @@ document.getElementById('btnZoomIn').addEventListener('click', () => stepZoom(0.
 document.getElementById('btnZoomOut').addEventListener('click', () => stepZoom(-0.15));
 document.getElementById('btnZoomReset').addEventListener('click', resetZoom);
 document.getElementById('btnCenterPlayer').addEventListener('click', () => { recenterCamera(player.x, player.y, ui.camera.zoom); persistZoom(); });
+document.getElementById('btnFollowCamera').addEventListener('click', () => {
+  state.settings.followCamera = !state.settings.followCamera;
+  refreshFollowCameraButton();
+  saveState(window.localStorage, state);
+});
 document.getElementById('btnNpcDlgClose').addEventListener('click', closeNpcDialogue);
 
 window.addEventListener('keydown', (e) => {
@@ -1935,7 +1942,20 @@ function syncSettingsState() {
   if (typeof state.settings.ambienceMuted !== 'boolean') state.settings.ambienceMuted = false;
   if (typeof state.settings.autoFollowRoom !== 'boolean') state.settings.autoFollowRoom = true;
   if (typeof state.settings.playerMinimized !== 'boolean') state.settings.playerMinimized = false;
+  if (typeof state.settings.followCamera !== 'boolean') state.settings.followCamera = false;
   state.settings.muted = !!(state.settings.musicMuted && state.settings.sfxMuted);
+}
+
+function refreshFollowCameraButton() {
+  const btn = document.getElementById('btnFollowCamera');
+  if (!btn) return;
+  const on = !!state.settings.followCamera;
+  btn.classList.toggle('active', on);
+  btn.setAttribute('aria-pressed', String(on));
+  btn.textContent = on ? '📷 Follow: On' : '📷 Follow: Off';
+  btn.title = on
+    ? 'Follow Camera: On — the camera stays centred on you as you walk'
+    : 'Follow Camera: Off — the camera stays still and only pans when you near the screen edge';
 }
 
 function applyPlayerMinimized() {
@@ -2306,6 +2326,7 @@ function init() {
   refreshElevatorPanel();
   recenterCamera(player.x, player.y, ui.camera.zoom);
   updateZoomLabel();
+  refreshFollowCameraButton();
   audio.configure(state.settings);
   audio.setAutoFollowRoom(state.settings.autoFollowRoom);
   audio.onTrackChange = () => refreshMusicPlayer();
@@ -2446,7 +2467,7 @@ window.__pixelHotel = Object.assign(window.__pixelHotel || {}, {
     refreshAudioUi();
   }, // 0.5 noon, 0 midnight
   getSaveVersion: () => SAVE_VERSION,
-  getVersion: () => '0.11.0',
+  getVersion: () => '0.11.1',
   getRemoteMultiplayer: () => getRemoteMultiplayerEntities(performance.now()),
   walkTo: (x, y) => tryWalkPlayer(x, y),
   openAvatarCreator: () => openAvatarModal(),

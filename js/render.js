@@ -243,6 +243,35 @@ export function centerCameraOnTile(tx, ty, room, width, height, zoom = DEFAULT_Z
   return { zoom: clampedZoom, panX, panY };
 }
 
+// Default "Follow camera: Off" dead-zone: the camera only pans once the player's
+// screen position reaches within this fraction of the viewport edge, so the
+// camera stays still for small movements near the middle of the screen.
+export const CAMERA_DEADZONE_MARGIN = 0.2;
+
+// Target pan that keeps (tx,ty) within the dead-zone box of the viewport, under
+// the camera's current pan/zoom. Returns the unchanged pan if the player is
+// already inside the box. Callers ease ui.camera.panX/panY toward this target
+// (see main.js frame()) rather than snapping straight to it.
+export function deadzoneCameraTarget(tx, ty, room, width, height, camera, margin = CAMERA_DEADZONE_MARGIN) {
+  const { originX, originY } = computeOrigin(room, width, height);
+  const { sx, sy } = tileToScreen(tx, ty, originX, originY);
+  const zoom = camera?.zoom ?? 1;
+  const panX = camera?.panX ?? 0;
+  const panY = camera?.panY ?? 0;
+  const screen = worldToScreen(sx, sy, camera, width, height);
+  const minX = width * margin;
+  const maxX = width * (1 - margin);
+  const minY = height * margin;
+  const maxY = height * (1 - margin);
+  let dx = 0;
+  if (screen.sx < minX) dx = minX - screen.sx;
+  else if (screen.sx > maxX) dx = maxX - screen.sx;
+  let dy = 0;
+  if (screen.sy < minY) dy = minY - screen.sy;
+  else if (screen.sy > maxY) dy = maxY - screen.sy;
+  return { zoom, panX: panX + dx, panY: panY + dy };
+}
+
 export function zoomAtPoint(camera, newZoom, cursorX, cursorY, width, height) {
   const oldZoom = camera?.zoom ?? 1;
   const clamped = clampZoom(newZoom);

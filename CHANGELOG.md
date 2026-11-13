@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 
+## [0.11.1] - 2026-11-13
+
+#### Added
+
+- **Follow Camera toggle (`index.html`, `css/style.css`, `js/main.js`, `js/render.js`)**:
+  - New "Follow: Off/On" button directly below the zoom controls cluster (top right), styled to match, with a title/aria-label and a clear on/off visual state. Defaults **off**.
+  - **Off** (new default): the camera stays still while the player walks, and only pans once the player nears the edge of the visible viewport (a ~20% dead-zone margin on each side), smoothly easing them back inside so they never walk off screen. New pure `deadzoneCameraTarget()` helper in `js/render.js` computes the eased pan target.
+  - **On**: the previous always-centred follow behaviour, unchanged, including pixel-snapped panning to avoid shimmer.
+  - Both modes still immediately centre the camera on the player when entering a new floor/room, via the 🎯 button, and on page load. Manual drag/pinch panning keeps working in both modes.
+  - Setting persists in `state.settings.followCamera`. Save version bumped to 13 (`SAVE_VERSION = 13`) with a migration that sets existing players to **off**.
+  - Verified to fit without overlapping the music player on both desktop and a 390x844 touch phone.
+
+#### Fixed
+
+- **Rooftop stairwell now connects to the Sky Garden (`js/data.js`)**: the Rooftop's (F42) stairwell door previously only existed as a decorative locked "Staff Only" stub. It now functions as a real two-way connection to the Cloud Nine Sky Garden (F9), the highest public floor below the roof — "To Sky Garden" from the Rooftop and a new "To Roof" door from the Sky Garden — instead of implying a connection to the private, unvisitable guest floors (F10–F41).
+
+#### Tests
+
+- Added unit tests in `tests/logic.test.mjs` for the dead-zone camera target (stays still inside the dead-zone, eases only enough to reach the dead-zone edge, never lets the player drift off-screen over a long walk) and for the Follow Camera setting's default/persistence/migration.
+- Updated the rooftop door-data tests to assert the new Sky Garden stairwell connection in both directions, replacing the old decorative/locked-door assertions.
+- Added a smoke test step in `tests/smoke.spec.mjs` verifying the Follow Camera toggle exists below the zoom controls, defaults off, toggles via click (including `aria-pressed`), and does not overlap the music player at 390x844 and 360px wide.
+
 ## [0.11.0] - 2026-11-11
 
 #### Added

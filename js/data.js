@@ -8,7 +8,7 @@ export const TILE = {
   VOID: 4,
 };
 
-export const SAVE_VERSION = 12;
+export const SAVE_VERSION = 13;
 
 // Grid is row-major: grid[y][x]
 export function makeRoomGrid(w, h, { doors = [], windows = [], cutouts = [] } = {}) {
@@ -257,7 +257,7 @@ export const ROOMS = {
       { x0: 10, y0: 4, x1: 15, y1: 12, material: 'stone_path' },
     ],
     grid: makeRoomGrid(22, 18, {
-      doors: [{ x: 8, y: 0 }],
+      doors: [{ x: 8, y: 0 }, { x: 14, y: 0 }],
       windows: [
         { x: 4, y: 0 }, { x: 12, y: 0 }, { x: 20, y: 0 },
         { x: 0, y: 4 }, { x: 0, y: 10 }, { x: 0, y: 15 },
@@ -267,6 +267,8 @@ export const ROOMS = {
     spawn: { x: 8, y: 2 },
     doors: [
       { x: 8, y: 0, to: 'lobby', toTile: { x: 4, y: 2 }, elevator: true },
+      // Sky Garden is the highest public floor, so its stairwell leads straight up to the Rooftop.
+      { x: 14, y: 0, to: 'rooftop', toTile: { x: 6, y: 2 }, label: 'To Roof' },
     ],
   },
   rooftop: {
@@ -290,7 +292,8 @@ export const ROOMS = {
     }),
     spawn: { x: 6, y: 2 },
     doors: [
-      { x: 6, y: 0, label: 'Staff Only', locked: true },
+      // Stairwell down to the Sky Garden, the next public floor below the Rooftop.
+      { x: 6, y: 0, to: 'garden', toTile: { x: 14, y: 2 }, label: 'To Sky Garden' },
       { x: 12, y: 0, to: 'lobby', toTile: { x: 4, y: 2 }, elevator: true },
     ],
   },

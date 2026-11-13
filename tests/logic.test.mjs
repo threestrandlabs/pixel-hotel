@@ -27,7 +27,7 @@ import {
   tileToScreen, computeOrigin, computeGroundDy, computeCityGroundDy,
   projectIsoCityPoint, buildIsoCityLayout, computeCityVehicles, drawBackground,
   clampZoom, zoomAtPoint, centerCameraOnTile, screenToTile, worldToScreen,
-  DEFAULT_ZOOM, MIN_ZOOM, MAX_ZOOM, deviceScale,
+  DEFAULT_ZOOM, MIN_ZOOM, MAX_ZOOM, deviceScale, deadzoneCameraTarget, CAMERA_DEADZONE_MARGIN,
 } from '../js/render.js';
 import { ChiptuneAudio, MOOD_PROFILES, MUSIC_FILES, PLAYLIST, TRACK_ORDER, moodForRoom, formatTime } from '../js/audio.js';
 
@@ -1367,6 +1367,79 @@ test('v0.7.0 persistence: zoom level persists through saveState/loadState and st
   assert.ok(loaded2.settings.zoom <= MAX_ZOOM, 'out-of-range saved zoom is clamped on load');
 });
 
+test('v0.11.1 follow camera off: dead-zone target leaves the camera still while the player is well within the viewport', () => {
+  const room = ROOMS.lobby;
+  const width = 960, height = 600;
+  const camera = centerCameraOnTile(room.spawn.x, room.spawn.y, room, width, height, 1.5);
+  // Player hasn't moved from the tile the camera is already centred on, so they
+  // sit in the middle of the screen, nowhere near the 20% dead-zone edges.
+  const target = deadzoneCameraTarget(room.spawn.x, room.spawn.y, room, width, height, camera);
+  assert.equal(target.panX, camera.panX, 'camera pan is untouched when the player is inside the dead-zone');
+  assert.equal(target.panY, camera.panY, 'camera pan is untouched when the player is inside the dead-zone');
+});
+
+test('v0.11.1 follow camera off: dead-zone target pulls the camera only enough to put the player back at the dead-zone edge', () => {
+  const room = ROOMS.lobby;
+  const width = 960, height = 600;
+  const camera = centerCameraOnTile(room.spawn.x, room.spawn.y, room, width, height, 1.5);
+  // Walk the player far to the right (off the right edge of the dead-zone box).
+  const farTile = { x: room.spawn.x + 20, y: room.spawn.y };
+  const target = deadzoneCameraTarget(farTile.x, farTile.y, room, width, height, camera);
+  assert.notEqual(target.panX, camera.panX, 'camera pans once the player crosses the dead-zone edge');
+  // After applying the new pan, the player's screen x must land exactly on the right dead-zone edge.
+  const { originX, originY } = computeOrigin(room, width, height);
+  const { sx, sy } = tileToScreen(farTile.x, farTile.y, originX, originY);
+  const landed = worldToScreen(sx, sy, { ...camera, panX: target.panX, panY: target.panY }, width, height);
+  assert.ok(Math.abs(landed.sx - width * (1 - CAMERA_DEADZONE_MARGIN)) < 1, 'player screen x sits on the dead-zone edge, not re-centred');
+});
+
+test('v0.11.1 follow camera off: dead-zone target never lets the player drift outside the viewport', () => {
+  const room = ROOMS.lobby;
+  const width = 960, height = 600;
+  let camera = centerCameraOnTile(room.spawn.x, room.spawn.y, room, width, height, 1.5);
+  const { originX, originY } = computeOrigin(room, width, height);
+  // Simulate the player walking a long diagonal path; after each step the dead-zone
+  // target (applied instantly here, worst case vs. the real eased camera) must keep
+  // the player's screen position within the visible viewport.
+  for (let i = 1; i <= 30; i++) {
+    const tx = room.spawn.x + i, ty = room.spawn.y + i;
+    const target = deadzoneCameraTarget(tx, ty, room, width, height, camera);
+    camera = { zoom: target.zoom, panX: target.panX, panY: target.panY };
+    const { sx, sy } = tileToScreen(tx, ty, originX, originY);
+    const screen = worldToScreen(sx, sy, camera, width, height);
+    assert.ok(screen.sx >= -1 && screen.sx <= width + 1, `step ${i}: player stays within the horizontal viewport`);
+    assert.ok(screen.sy >= -1 && screen.sy <= height + 1, `step ${i}: player stays within the vertical viewport`);
+  }
+});
+
+test('v0.11.1 persistence: followCamera setting defaults to off and round-trips through saveState/loadState', () => {
+  const fresh = createDefaultState();
+  assert.equal(fresh.settings.followCamera, false, 'follow camera defaults off for a brand-new save');
+
+  const storage = makeFakeStorage();
+  const state = createDefaultState();
+  state.settings.followCamera = true;
+  saveState(storage, state);
+  const loaded = loadState(storage);
+  assert.equal(loaded.settings.followCamera, true, 'an explicit on setting survives save/load');
+});
+
+test('v0.11.1 migration: a pre-v0.11.1 save (no followCamera field) migrates to the latest version with followCamera off', () => {
+  const storage = makeFakeStorage();
+  const old = {
+    version: 12,
+    coins: 500,
+    rooms: { lobby: { placed: [] } },
+    player: { room: 'lobby', x: 4, y: 2 },
+    settings: { zoom: 2.0 },
+  };
+  storage.setItem(SAVE_KEY, JSON.stringify(old));
+  const loaded = loadState(storage);
+  assert.equal(loaded.version, SAVE_VERSION);
+  assert.equal(loaded.settings.followCamera, false, 'existing players migrate to follow camera off');
+  assert.equal(loaded.settings.zoom, 2.0, 'unrelated settings survive the migration');
+});
+
 test('v0.7.0 persistence: master and ambience volume settings round-trip', () => {
   const storage = makeFakeStorage();
   const state = createDefaultState();
@@ -1759,7 +1832,7 @@ test('v0.8.2 room dimensions: 16x area for Lobby/Restaurant/Pool, 4x area for ot
   assert.equal(ROOMS.myroom.height, 8);
 });
 
-test('v0.8.3 rooftop rework: floor 42, open-air balustrade, legacy lobby door removed, elevator reached, stair door decorative/staff only', () => {
+test('v0.11.1 rooftop rework: floor 42, open-air balustrade, legacy lobby door removed, elevator reached, stair door links to the Sky Garden (not a private F41 guest floor)', () => {
   assert.equal(ROOMS.rooftop.floor, 42);
   assert.equal(ROOMS.rooftop.isRooftop, true);
   assert.equal(ROOMS.rooftop.shape, 'open-air-rooftop');
@@ -1768,15 +1841,17 @@ test('v0.8.3 rooftop rework: floor 42, open-air balustrade, legacy lobby door re
   assert.ok(!ROOMS.lobby.doors.some((d) => d.to === 'rooftop'));
   assert.ok(!ROOMS.rooftop.doors.some((d) => d.to === 'lobby' && !d.elevator));
 
-  // Sky Garden to roof stair door removed (roof is reached via elevator)
-  const gardenToRoof = ROOMS.garden.doors.find((d) => d.to === 'rooftop');
-  assert.equal(gardenToRoof, undefined, 'Sky garden has no stair door to rooftop');
-
-  // Decorative locked staff door on rooftop
+  // Rooftop's stairwell door goes down to the Sky Garden, the highest public floor below the roof
   const roofStair = ROOMS.rooftop.doors.find((d) => !d.elevator);
-  assert.ok(roofStair, 'Rooftop has housing stair door');
-  assert.equal(roofStair.label, 'Staff Only');
-  assert.equal(roofStair.locked, true);
+  assert.ok(roofStair, 'Rooftop has a stair door');
+  assert.equal(roofStair.to, 'garden');
+  assert.ok(!roofStair.locked);
+  assert.match(roofStair.label, /Sky Garden/);
+
+  // Sky Garden's stairwell door goes up to the Rooftop
+  const gardenToRoof = ROOMS.garden.doors.find((d) => d.to === 'rooftop');
+  assert.ok(gardenToRoof, 'Sky Garden has a stair door up to the roof');
+  assert.equal(gardenToRoof.label, 'To Roof');
 
   // Elevator door exists on Rooftop
   const roofElevator = ROOMS.rooftop.doors.find((d) => d.elevator);
@@ -1971,7 +2046,7 @@ test('v0.8.3 persistence: playerMinimized setting defaults to false and round-tr
   assert.equal(loadedOld.settings.playerMinimized, false);
 });
 
-test('v0.8.3 rooftop housing structure: elevator and stairwell "To Floor 9" door mounted on solid housing block (x=4..14, y=0) with windows and unblocked arrival routes', () => {
+test('v0.11.1 rooftop housing structure: elevator and stairwell "To Sky Garden" door mounted on solid housing block (x=4..14, y=0) with windows and unblocked arrival routes', () => {
   const roof = ROOMS.rooftop;
   assert.equal(roof.isRooftop, true);
 
@@ -1980,8 +2055,9 @@ test('v0.8.3 rooftop housing structure: elevator and stairwell "To Floor 9" door
   assert.ok(stairDoor);
   assert.equal(stairDoor.x, 6);
   assert.equal(stairDoor.y, 0);
-  assert.equal(stairDoor.label, 'Staff Only');
-  assert.equal(stairDoor.locked, true);
+  assert.equal(stairDoor.to, 'garden');
+  assert.match(stairDoor.label, /Sky Garden/);
+  assert.ok(!stairDoor.locked);
 
   const elevDoor = roof.doors.find((d) => d.elevator);
   assert.ok(elevDoor);

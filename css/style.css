@@ -399,10 +399,16 @@ kbd {
   font-size: 12.5px;
 }
 
-#zoomControls {
+#cameraControls {
   position: absolute;
   top: 10px;
   right: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  z-index: 6;
+}
+#zoomControls {
   display: flex;
   align-items: center;
   gap: 4px;
@@ -410,7 +416,6 @@ kbd {
   border: 2px solid #0e0a1d;
   border-radius: 6px;
   padding: 4px;
-  z-index: 6;
 }
 #zoomControls .pixel-btn { padding: 4px 9px; font-size: 13px; }
 #zoomLevel {
@@ -419,6 +424,18 @@ kbd {
   font-size: 12.5px;
   font-weight: 700;
   color: #ffd27a;
+}
+#btnFollowCamera {
+  width: 100%;
+  box-sizing: border-box;
+  background: rgba(20, 14, 40, 0.85);
+  padding: 4px 6px;
+  font-size: 12px;
+  text-align: center;
+}
+#btnFollowCamera.active {
+  background: #2e8b57;
+  border-color: #163a26;
 }
 
 .item-icon {
@@ -1024,13 +1041,16 @@ kbd {
     min-width: 24px;
   }
 
-  /* Zoom controls: compact in top right */
-  #zoomControls {
+  /* Zoom + follow camera controls: compact in top right */
+  #cameraControls {
     top: 8px;
     right: 8px;
-    padding: 2px 4px;
     gap: 2px;
     max-width: 135px;
+  }
+  #zoomControls {
+    padding: 2px 4px;
+    gap: 2px;
   }
   #zoomControls .pixel-btn {
     min-width: 24px;
@@ -1041,6 +1061,11 @@ kbd {
   #zoomLevel {
     font-size: 10.5px;
     min-width: 28px;
+  }
+  #btnFollowCamera {
+    min-height: 26px;
+    padding: 2px 4px;
+    font-size: 10.5px;
   }
 
   /* Panels open as bottom sheets sliding up */
@@ -1231,9 +1256,11 @@ kbd {
   .music-player .mp-eq {
     display: none !important;
   }
-  #zoomControls {
+  #cameraControls {
     top: 6px;
     right: 6px;
+  }
+  #zoomControls {
     padding: 2px 3px;
     gap: 2px;
   }
@@ -1246,6 +1273,11 @@ kbd {
   #zoomLevel {
     font-size: 10px;
     min-width: 26px;
+  }
+  #btnFollowCamera {
+    min-height: 24px;
+    padding: 1px 3px;
+    font-size: 9.5px;
   }
   #topButtons.action-bar {
     padding: 2px 2px calc(env(safe-area-inset-bottom, 0px) + 2px) 2px;

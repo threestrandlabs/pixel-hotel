@@ -419,6 +419,28 @@ async function main() {
     const camAfterReset = await page.evaluate(() => window.__pixelHotel.getCamera());
     check('1:1 reset button restores the default zoom', Math.abs(camAfterReset.zoom - cam0.zoom) < 0.02);
 
+    // ---- v0.11.1: Follow Camera toggle, below the zoom controls cluster, defaults off ----
+    const followLayout = await page.evaluate(() => {
+      const zoomBox = document.getElementById('zoomControls').getBoundingClientRect();
+      const followBox = document.getElementById('btnFollowCamera').getBoundingClientRect();
+      return { zoomBottom: zoomBox.bottom, followTop: followBox.top };
+    });
+    check('Follow Camera toggle sits below the zoom controls cluster', followLayout.followTop >= followLayout.zoomBottom - 1);
+    const followDefault = await page.evaluate(() => window.__pixelHotel.getState().settings.followCamera);
+    check('Follow Camera defaults off', followDefault === false);
+    const followAriaBefore = await page.getAttribute('#btnFollowCamera', 'aria-pressed');
+    check('Follow Camera button reports off via aria-pressed', followAriaBefore === 'false');
+    await page.click('#btnFollowCamera');
+    await page.waitForTimeout(80);
+    const followAfterOn = await page.evaluate(() => window.__pixelHotel.getState().settings.followCamera);
+    const followAriaOn = await page.getAttribute('#btnFollowCamera', 'aria-pressed');
+    check('clicking Follow Camera turns it on', followAfterOn === true && followAriaOn === 'true');
+    await page.click('#btnFollowCamera');
+    await page.waitForTimeout(80);
+    const followAfterOff = await page.evaluate(() => window.__pixelHotel.getState().settings.followCamera);
+    const followAriaOff = await page.getAttribute('#btnFollowCamera', 'aria-pressed');
+    check('clicking Follow Camera again turns it back off', followAfterOff === false && followAriaOff === 'false');
+
     // Pointer -> tile -> screen mapping stays correct after zooming.
     await page.evaluate(() => window.__pixelHotel.setZoom(2.0));
     await page.waitForTimeout(80);
@@ -1036,6 +1058,23 @@ async function runMobilePortraitSmokeTest(browser) {
     });
     check('mobile: cassette tape is hidden and music player forms a small pill', !mpMobile.cassetteVis && mpMobile.width <= 230);
 
+    // v0.11.1: Follow Camera toggle fits on screen at 390x844 without overlapping the music player
+    const followMobile = await page.evaluate(() => {
+      const mp = document.getElementById('musicPlayer').getBoundingClientRect();
+      const follow = document.getElementById('btnFollowCamera').getBoundingClientRect();
+      const zoom = document.getElementById('zoomControls').getBoundingClientRect();
+      return {
+        mpRight: mp.right, followLeft: follow.left, followRight: follow.right,
+        vw: window.innerWidth, followTop: follow.top, zoomBottom: zoom.bottom,
+      };
+    });
+    check(
+      'mobile 390x844: Follow Camera toggle sits below zoom controls, on-screen, and clear of the music player',
+      followMobile.followTop >= followMobile.zoomBottom - 1 &&
+      followMobile.followRight <= followMobile.vw + 1 &&
+      followMobile.followLeft > followMobile.mpRight
+    );
+
     // Tap to walk: record position before, tap canvas with touchscreen, assert position changes
     const playerBeforeTap = await page.evaluate(() => window.__pixelHotel.getState().player);
     const canvasBox = await page.locator('#gameCanvas').boundingBox();
@@ -1158,6 +1197,11 @@ async function runMobilePortraitSmokeTest(browser) {
     check(
       'mobile 360px: cassette player and zoom controls do not overlap',
       mpBox360 && zoomBox360 && (mpBox360.x + mpBox360.width < zoomBox360.x)
+    );
+    const followBox360 = await page.locator('#btnFollowCamera').boundingBox();
+    check(
+      'mobile 360px: cassette player and the Follow Camera toggle do not overlap',
+      mpBox360 && followBox360 && (mpBox360.x + mpBox360.width < followBox360.x)
     );
 
     // Verify bottom action bar fits at 360px and 390px without horizontal overflow

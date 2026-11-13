@@ -65,6 +65,7 @@ export function createDefaultState() {
       helpShown: false,
       playerMinimized: false,
       shuffle: false,
+      followCamera: false,
     },
   };
 }
@@ -571,6 +572,22 @@ const MIGRATIONS = {
       },
     };
   },
+  // v0.11.1: adds the "Follow camera" toggle, defaulting existing players to off
+  // (their camera already behaved like the new off-mode, so this is a no-op for them).
+  12: (old) => {
+    const def = createDefaultState();
+    const oldSettings = (old.settings && typeof old.settings === 'object') ? old.settings : {};
+    return {
+      ...def,
+      ...old,
+      version: 13,
+      settings: {
+        ...def.settings,
+        ...oldSettings,
+        followCamera: false,
+      },
+    };
+  },
 };
 
 function migrate(data) {
@@ -665,6 +682,11 @@ export function loadState(storage) {
     mergedSettings.shuffle = rawSettings.shuffle;
   } else {
     mergedSettings.shuffle = false;
+  }
+  if (typeof rawSettings.followCamera === 'boolean') {
+    mergedSettings.followCamera = rawSettings.followCamera;
+  } else {
+    mergedSettings.followCamera = false;
   }
   mergedSettings.muted = !!(mergedSettings.musicMuted && mergedSettings.sfxMuted);
   return {
