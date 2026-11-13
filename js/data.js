@@ -8,7 +8,7 @@ export const TILE = {
   VOID: 4,
 };
 
-export const SAVE_VERSION = 13;
+export const SAVE_VERSION = 14;
 
 // Grid is row-major: grid[y][x]
 export function makeRoomGrid(w, h, { doors = [], windows = [], cutouts = [] } = {}) {

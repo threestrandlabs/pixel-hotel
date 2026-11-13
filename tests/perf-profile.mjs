@@ -52,10 +52,16 @@ function parseArgs() {
   let durationMs = 10000;
   let floorFilter = null;
   let mode = 'all'; // 'all' | 'desktop' | 'mobile'
+  let mobileDpr = 3;
+  let throttle = 4;
 
   for (const arg of args) {
     if (arg.startsWith('--duration=')) {
       durationMs = parseInt(arg.split('=')[1], 10) || 10000;
+    } else if (arg.startsWith('--throttle=')) {
+      throttle = parseInt(arg.split('=')[1], 10) || 1;
+    } else if (arg.startsWith('--mobile-dpr=')) {
+      mobileDpr = parseInt(arg.split('=')[1], 10) || 3;
     } else if (arg === '--desktop') {
       mode = 'desktop';
     } else if (arg === '--mobile') {
@@ -64,7 +70,7 @@ function parseArgs() {
       floorFilter = arg;
     }
   }
-  return { durationMs, floorFilter, mode };
+  return { durationMs, floorFilter, mode, mobileDpr, throttle };
 }
 
 async function profileFloor(page, floor, durationMs) {
@@ -140,9 +146,10 @@ function printTable(title, results) {
 }
 
 async function main() {
-  const { durationMs, floorFilter, mode } = parseArgs();
-  const floorsToTest = floorFilter
-    ? FLOORS.filter((f) => f.id === floorFilter || f.name.toLowerCase().includes(floorFilter.toLowerCase()))
+  const { durationMs, floorFilter, mode, mobileDpr, throttle } = parseArgs();
+  const filters = floorFilter ? floorFilter.split(',').map((s) => s.trim().toLowerCase()) : null;
+  const floorsToTest = filters
+    ? FLOORS.filter((f) => filters.some((fl) => f.id === fl || f.name.toLowerCase().includes(fl)))
     : FLOORS;
 
   console.log(`Profiling ${floorsToTest.length} floors (${durationMs}ms duration per floor, mode=${mode})...`);
@@ -180,14 +187,18 @@ async function main() {
     }
 
     if (mode === 'all' || mode === 'mobile') {
-      console.log('\n--- Profiling Mobile Viewport (390x844, DPR 2) ---');
+      console.log(`\n--- Profiling Mobile Viewport (390x844, DPR ${mobileDpr}${throttle > 1 ? `, CPU ${throttle}x` : ''}) ---`);
       const context = await browser.newContext({
         viewport: { width: 390, height: 844 },
-        deviceScaleFactor: 2,
+        deviceScaleFactor: mobileDpr,
         hasTouch: true,
         isMobile: true,
       });
       const page = await context.newPage();
+      if (throttle > 1) {
+        const client = await context.newCDPSession(page);
+        await client.send('Emulation.setCPUThrottlingRate', { rate: throttle });
+      }
       await page.goto(baseUrl, { waitUntil: 'load' });
       await page.waitForFunction(() => window.__pixelHotel, null, { timeout: 8000 });
       await page.keyboard.press('Escape');
@@ -200,7 +211,7 @@ async function main() {
         console.log(`${res.avgFps.toFixed(1)} fps, p95=${res.p95.toFixed(1)}ms, >33ms=${res.over33}`);
       }
       await context.close();
-      printTable('Mobile Profile (390x844, DPR 2)', mobileResults);
+      printTable(`Mobile Profile (390x844, DPR ${mobileDpr}${throttle > 1 ? `, CPU ${throttle}x` : ''})`, mobileResults);
     }
 
   } finally {

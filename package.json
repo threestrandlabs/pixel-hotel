@@ -1,12 +1,12 @@
 {
   "name": "pixel-hotel",
-  "version": "0.11.2",
+  "version": "0.12.1",
   "private": true,
   "description": "A cosy, original pixel-art isometric virtual hotel built with plain HTML/CSS/JS.",
   "type": "module",
   "scripts": {
     "start": "python3 -m http.server 8080",
-    "test": "node --test tests/logic.test.mjs tests/multiplayer.unit.test.mjs tests/arcade.unit.test.mjs tests/pool.unit.test.mjs tests/gumballs.unit.test.mjs tests/trader.unit.test.mjs tests/avatar.unit.test.mjs tests/minigames.unit.test.mjs",
+    "test": "node --test tests/logic.test.mjs tests/multiplayer.unit.test.mjs tests/arcade.unit.test.mjs tests/pool.unit.test.mjs tests/gumballs.unit.test.mjs tests/trader.unit.test.mjs tests/avatar.unit.test.mjs tests/minigames.unit.test.mjs tests/adaptive-quality.unit.test.mjs",
     "test:smoke": "node tests/smoke.spec.mjs"
   },
   "devDependencies": {

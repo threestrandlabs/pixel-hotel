@@ -34,6 +34,10 @@
   </header>
 
   <main id="gameArea">
+    <div id="bgLayer">
+      <canvas id="bgCanvas"></canvas>
+      <canvas id="vehicleCanvas"></canvas>
+    </div>
     <canvas id="gameCanvas" width="960" height="600"></canvas>
     <div id="toast" class="hidden"></div>
     <div id="minigameHud" class="hidden minigame-hud">
@@ -269,6 +273,12 @@
           <button id="btnPanelAmbienceMute" class="pixel-btn">On</button>
         </div>
         <input id="ambienceVolume" type="range" min="0" max="100" step="5" value="65" />
+      </div>
+      <div class="audio-channel">
+        <div class="audio-channel-header">
+          <label for="btnBgDetail">🏙️ Background Detail</label>
+          <button id="btnBgDetail" class="pixel-btn" title="Toggle Background Detail: Auto / High / Low">Auto</button>
+        </div>
       </div>
     </div>
   </aside>

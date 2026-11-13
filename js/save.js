@@ -66,6 +66,7 @@ export function createDefaultState() {
       playerMinimized: false,
       shuffle: false,
       followCamera: false,
+      backgroundDetail: 'auto',
     },
   };
 }
@@ -588,6 +589,21 @@ const MIGRATIONS = {
       },
     };
   },
+  // v0.12.1: adds the "Background detail: Auto / High / Low" toggle, defaulting to 'auto'
+  13: (old) => {
+    const def = createDefaultState();
+    const oldSettings = (old.settings && typeof old.settings === 'object') ? old.settings : {};
+    return {
+      ...def,
+      ...old,
+      version: 14,
+      settings: {
+        ...def.settings,
+        ...oldSettings,
+        backgroundDetail: 'auto',
+      },
+    };
+  },
 };
 
 function migrate(data) {
@@ -687,6 +703,11 @@ export function loadState(storage) {
     mergedSettings.followCamera = rawSettings.followCamera;
   } else {
     mergedSettings.followCamera = false;
+  }
+  if (['auto', 'high', 'low'].includes(String(rawSettings.backgroundDetail).toLowerCase())) {
+    mergedSettings.backgroundDetail = String(rawSettings.backgroundDetail).toLowerCase();
+  } else {
+    mergedSettings.backgroundDetail = 'auto';
   }
   mergedSettings.muted = !!(mergedSettings.musicMuted && mergedSettings.sfxMuted);
   return {

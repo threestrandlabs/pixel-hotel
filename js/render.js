@@ -671,7 +671,7 @@ let lightMapCache = { key: '', canvas: null, minX: 0, minY: 0 };
 let floorLayerCache = { key: '', canvas: null, minX: 0, minY: 0 };
 let wallLayerCache = { key: '', canvas: null, minX: 0, minY: 0 };
 
-function getCachedIsoCityLayout(roomSpec, width, height, phase, padX, padBottom) {
+export function getCachedIsoCityLayout(roomSpec, width, height, phase, padX, padBottom) {
   const key = `${roomSpec?.id || 'lobby'}:${roomSpec?.floor || 1}:${roomSpec?.width || 12}x${roomSpec?.height || 9}:${width}x${height}:${padX}x${padBottom}`;
   if (cityLayoutCache.key === key && cityLayoutCache.layout) return cityLayoutCache.layout;
   const layout = buildIsoCityLayout(roomSpec, width, height, phase, padX, padBottom, true);
@@ -1004,7 +1004,7 @@ function drawIsoPrism(g, P, u0, v0, u1, v1, z0, z1, leftCol, rightCol, topCol) {
 // or the 3D buildings and sidewalk props layer (layer === 'buildings') or both (layer === 'all').
 // By separating the street and building layers, vehicles are drawn on the asphalt before
 // buildings in front of them are drawn, guaranteeing 100% correct isometric depth sorting.
-function renderSkylineToCanvas(g, width, height, phase, floor, room = null, ox = 0, oy = 0, layer = 'all') {
+export function renderSkylineToCanvas(g, width, height, phase, floor, room = null, ox = 0, oy = 0, layer = 'all') {
   const isBackdrop = (layer === 'backdrop' || layer === 'all' || layer === false);
   const isBuildings = (layer === 'buildings' || layer === 'all' || layer === true);
   const { skyTop, skyMid, skyBottom, day } = dayNightColors(phase);
@@ -2196,28 +2196,24 @@ export function renderRoom(ctx, opts) {
   const panX = camera?.panX ?? 0;
   const panY = camera?.panY ?? 0;
   // Everything drawn inside the camera transform is baked at dpr*zoom device pixels
-  // so nothing is an upscaled (blurry) bitmap when zoomed in.
-  const ds = deviceScale(dpr, zoom);
+  // so nothing is an upscaled (blurry) bitmap when zoomed in. Main canvas DPR is capped at 2.
+  const cappedDpr = Math.max(1, Math.min(2, dpr || 1));
+  const ds = deviceScale(cappedDpr, zoom);
 
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.setTransform(cappedDpr, 0, 0, cappedDpr, 0, 0);
   ctx.imageSmoothingEnabled = false;
 
-  // 1. Draw sky gradient across entire viewport so no seams show during pan/zoom
-  const { skyTop, skyMid, skyBottom, day, tintAlpha } = dayNightColors(phase);
-  const skyGrad = ctx.createLinearGradient(0, 0, 0, height);
-  skyGrad.addColorStop(0, skyTop);
-  skyGrad.addColorStop(0.58, skyMid);
-  skyGrad.addColorStop(1, skyBottom);
-  ctx.fillStyle = skyGrad;
-  ctx.fillRect(0, 0, width, height);
+  // Clear main canvas so the separate background layer behind it is visible
+  ctx.clearRect(0, 0, width, height);
 
-  // 2. Camera-transformed World Context (city backdrop, vehicles, cutaway, room, furniture, characters)
+  const { day, tintAlpha } = dayNightColors(phase);
+
+  // 2. Camera-transformed World Context (cutaway, room, furniture, characters)
   ctx.save();
   ctx.translate(width / 2 + panX, height / 2 + panY);
   ctx.scale(zoom, zoom);
   ctx.translate(-width / 2, -height / 2);
 
-  drawBackground(ctx, width, height, phase, room.floor || 1, ds, now, room, zoom, camera);
   const { originX, originY } = computeOrigin(room, width, height);
   const lightsTag = lightsOn ? 'L' : 'D';
   const floorColor = lightsOn ? floorBaseColor(room) : shadeColor(floorBaseColor(room), -0.55);
@@ -2352,7 +2348,7 @@ export function renderRoom(ctx, opts) {
     ctx.globalAlpha = effectiveTintAlpha;
     ctx.fillStyle = effectiveTintColor;
     ctx.globalCompositeOperation = 'multiply';
-    ctx.fillRect(-1000, -1000, width + 2000, height + 2000);
+    ctx.fillRect(viewMinX, viewMinY, viewMaxX - viewMinX, viewMaxY - viewMinY);
     ctx.restore();
 
     const lightStrength = Math.max(

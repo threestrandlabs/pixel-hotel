@@ -12,7 +12,9 @@ import {
 import {
   renderRoom, computeOrigin, screenToTile, tileToScreen, worldToScreen, hitTestNpc, getItemIconDataUrl,
   DEFAULT_ZOOM, MIN_ZOOM, MAX_ZOOM, clampZoom, zoomAtPoint, centerCameraOnTile, deadzoneCameraTarget,
+  renderSkylineToCanvas, getCachedIsoCityLayout, computeCityVehicles, drawCityVehicles,
 } from './render.js';
+import { FpsMonitor, resolveBackgroundDetail } from './adaptiveQuality.js';
 import { audio, formatTime, trackForRoom } from './audio.js';
 import {
   initMultiplayerUI, getRemoteMultiplayerEntities, tickMultiplayer, notifyLocalChat, publishOwnRoomSnapshot,
@@ -40,6 +42,175 @@ const HELP_SEEN_KEY = 'pixelHotel.helpSeen.v1';
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 ctx.imageSmoothingEnabled = false;
+
+const BG_SCALE = 0.25;
+const fpsMonitor = new FpsMonitor(2000, 45);
+
+const bgLayer = document.getElementById('bgLayer');
+const bgCanvas = document.getElementById('bgCanvas');
+const vehicleCanvas = document.getElementById('vehicleCanvas');
+
+const bgState = {
+  floor: null,
+  width: 0,
+  height: 0,
+  phase: -1,
+  beacons: [],
+  ox: 380,
+  oy: 260,
+  rebakeScheduled: false,
+  lastVehicleUpdateAt: 0,
+  lastTransform: '',
+};
+
+let rebakeHandle = null;
+
+function cancelPendingRebake() {
+  if (rebakeHandle !== null) {
+    if (typeof cancelIdleCallback !== 'undefined') {
+      cancelIdleCallback(rebakeHandle);
+    } else {
+      clearTimeout(rebakeHandle);
+    }
+    rebakeHandle = null;
+  }
+  bgState.rebakeScheduled = false;
+}
+
+function performBackgroundBake(room, width, height, phase, ox, oy) {
+  cancelPendingRebake();
+  if (!bgCanvas) return;
+  const floor = room?.floor || 1;
+  const bgW = Math.max(1, Math.round((width + 2 * ox) * BG_SCALE));
+  const bgH = Math.max(1, Math.round((height + 2 * oy) * BG_SCALE));
+
+  if (bgCanvas.width !== bgW || bgCanvas.height !== bgH) {
+    bgCanvas.width = bgW;
+    bgCanvas.height = bgH;
+  }
+  bgCanvas.style.left = `${-ox}px`;
+  bgCanvas.style.top = `${-oy}px`;
+  bgCanvas.style.width = `${width + 2 * ox}px`;
+  bgCanvas.style.height = `${height + 2 * oy}px`;
+
+  if (vehicleCanvas) {
+    if (vehicleCanvas.width !== bgW || vehicleCanvas.height !== bgH) {
+      vehicleCanvas.width = bgW;
+      vehicleCanvas.height = bgH;
+    }
+    vehicleCanvas.style.left = `${-ox}px`;
+    vehicleCanvas.style.top = `${-oy}px`;
+    vehicleCanvas.style.width = `${width + 2 * ox}px`;
+    vehicleCanvas.style.height = `${height + 2 * oy}px`;
+  }
+
+  const g = bgCanvas.getContext('2d');
+  g.setTransform(BG_SCALE, 0, 0, BG_SCALE, ox * BG_SCALE, oy * BG_SCALE);
+  g.imageSmoothingEnabled = true;
+  const beacons = renderSkylineToCanvas(g, width, height, phase, floor, room, ox, oy, 'all');
+
+  bgState.floor = floor;
+  bgState.width = width;
+  bgState.height = height;
+  bgState.phase = phase;
+  bgState.beacons = beacons || [];
+  bgState.ox = ox;
+  bgState.oy = oy;
+}
+
+function scheduleBackgroundRebake(room, width, height, phase, ox, oy) {
+  cancelPendingRebake();
+  bgState.rebakeScheduled = true;
+  const runner = typeof requestIdleCallback !== 'undefined'
+    ? (cb) => requestIdleCallback(cb, { timeout: 120 })
+    : (cb) => setTimeout(cb, 16);
+  rebakeHandle = runner(() => {
+    rebakeHandle = null;
+    bgState.rebakeScheduled = false;
+    performBackgroundBake(room, width, height, ui.phase, ox, oy);
+  });
+}
+
+function updateBackgroundTransform(panX, panY, zoom) {
+  if (!bgLayer) return;
+  const parallax = 0.35;
+  const bgPanX = Math.round(panX * parallax);
+  const bgPanY = Math.round(panY * parallax);
+  const bgZoom = (1 + (zoom - 1) * 0.3).toFixed(4);
+  const transform = `translate3d(${bgPanX}px, ${bgPanY}px, 0) scale(${bgZoom})`;
+  if (bgState.lastTransform !== transform) {
+    bgState.lastTransform = transform;
+    bgLayer.style.transform = transform;
+  }
+}
+
+const VEHICLE_UPDATE_INTERVAL = 1000 / 12; // ~83.3ms for 12 Hz
+
+function updateVehiclesAndBeacons(now, room, width, height, phase, ox, oy, qualityMode) {
+  if (!vehicleCanvas) return;
+  if (qualityMode === 'low') {
+    if (vehicleCanvas.style.display !== 'none') {
+      vehicleCanvas.style.display = 'none';
+      const vCtx = vehicleCanvas.getContext('2d');
+      vCtx.clearRect(0, 0, vehicleCanvas.width, vehicleCanvas.height);
+    }
+    return;
+  }
+  if (vehicleCanvas.style.display === 'none') {
+    vehicleCanvas.style.display = 'block';
+  }
+  if (now - bgState.lastVehicleUpdateAt < VEHICLE_UPDATE_INTERVAL) {
+    return;
+  }
+  bgState.lastVehicleUpdateAt = now;
+  const vCtx = vehicleCanvas.getContext('2d');
+  vCtx.clearRect(0, 0, vehicleCanvas.width, vehicleCanvas.height);
+  vCtx.setTransform(BG_SCALE, 0, 0, BG_SCALE, ox * BG_SCALE, oy * BG_SCALE);
+
+  const roomSpec = room || { id: 'lobby', width: 12, height: 9, floor: 1 };
+  const layout = getCachedIsoCityLayout(roomSpec, width, height, phase, 400 + ox, 320 + oy);
+  const vehicles = computeCityVehicles(layout, now, phase);
+  vCtx.save();
+  vCtx.beginPath();
+  vCtx.rect(-ox, layout.horizonY, width + 2 * ox, height + oy - layout.horizonY);
+  vCtx.clip();
+  drawCityVehicles(vCtx, layout, vehicles, phase, 1);
+  vCtx.restore();
+
+  const blinkOn = Math.floor(now / 650) % 2 === 0;
+  for (const b of (bgState.beacons || [])) {
+    vCtx.fillStyle = blinkOn ? '#ff3b4e' : '#6e1c28';
+    vCtx.beginPath();
+    vCtx.arc(b.x, b.y, blinkOn ? 2.2 : 1.5, 0, Math.PI * 2);
+    vCtx.fill();
+    if (blinkOn) {
+      vCtx.fillStyle = 'rgba(255, 70, 90, 0.28)';
+      vCtx.beginPath();
+      vCtx.arc(b.x, b.y, 5.5, 0, Math.PI * 2);
+      vCtx.fill();
+    }
+  }
+}
+
+function updateBackground(now, room, width, height, phase, camera, qualityMode) {
+  const ox = Math.max(380, Math.round(width * 0.45));
+  const oy = Math.max(260, Math.round(height * 0.45));
+  const floor = room?.floor || 1;
+
+  if (bgState.floor === null) {
+    performBackgroundBake(room, width, height, phase, ox, oy);
+  } else if (
+    bgState.floor !== floor ||
+    Math.abs(bgState.width - width) > 60 ||
+    Math.abs(bgState.height - height) > 60 ||
+    Math.abs(bgState.phase - phase) >= 0.15
+  ) {
+    scheduleBackgroundRebake(room, width, height, phase, ox, oy);
+  }
+
+  updateBackgroundTransform(camera.panX, camera.panY, camera.zoom);
+  updateVehiclesAndBeacons(now, room, width, height, phase, ox, oy, qualityMode);
+}
 
 let state = loadState(window.localStorage);
 applyRoomTier(state.player.roomTier || 1);
@@ -1388,7 +1559,7 @@ function frame(now) {
 
   const room = currentRoomDef();
   const roomRuntime = currentRoomRuntime();
-  ui.phase = (0.5 + (now - ui.startTime) / DAY_CYCLE_MS) % 1;
+  ui.phase = ((0.5 + (now - ui.startTime) / DAY_CYCLE_MS) % 1 + 1) % 1;
   audio.setRoomMood(state.player.room, ui.phase, room.floor || 1);
   refreshMusicPlayerThrottled(now);
 
@@ -1400,6 +1571,16 @@ function frame(now) {
     const cells = footprintCells(ui.hoverTile.x, ui.hoverTile.y, item.footprint, ui.placing.rot);
     ghost = { cells, valid: check.ok };
   }
+
+  const isMobile = (typeof window !== 'undefined') && (
+    ('ontouchstart' in window) ||
+    (navigator.maxTouchPoints > 0) ||
+    (ui.cssW <= 600 && (window.devicePixelRatio || 1) > 1)
+  );
+  const lowQualityTriggered = fpsMonitor.recordFrame(now);
+  const qualityMode = resolveBackgroundDetail(state.settings.backgroundDetail, lowQualityTriggered, isMobile);
+
+  updateBackground(now, room, ui.cssW, ui.cssH, ui.phase, ui.camera, qualityMode);
 
   renderRoom(ctx, {
     room,
@@ -2053,6 +2234,9 @@ function syncSettingsState() {
   if (typeof state.settings.autoFollowRoom !== 'boolean') state.settings.autoFollowRoom = true;
   if (typeof state.settings.playerMinimized !== 'boolean') state.settings.playerMinimized = false;
   if (typeof state.settings.followCamera !== 'boolean') state.settings.followCamera = false;
+  if (!['auto', 'high', 'low'].includes(String(state.settings.backgroundDetail).toLowerCase())) {
+    state.settings.backgroundDetail = 'auto';
+  }
   state.settings.muted = !!(state.settings.musicMuted && state.settings.sfxMuted);
 }
 
@@ -2260,6 +2444,13 @@ function refreshAudioUi() {
 
   const moodEl = document.getElementById('audioMoodLabel');
   if (moodEl) moodEl.textContent = audio.getMoodInfo().label;
+
+  const btnBg = document.getElementById('btnBgDetail');
+  if (btnBg) {
+    const mode = state.settings.backgroundDetail || 'auto';
+    btnBg.textContent = mode.charAt(0).toUpperCase() + mode.slice(1);
+  }
+
   refreshMusicPlayer();
 }
 
@@ -2348,6 +2539,13 @@ document.getElementById('btnPanelAmbienceMute')?.addEventListener('click', () =>
   audio.setAmbienceMuted(state.settings.ambienceMuted);
   refreshAudioUi();
   saveState(window.localStorage, state);
+});
+document.getElementById('btnBgDetail')?.addEventListener('click', () => {
+  const current = state.settings.backgroundDetail || 'auto';
+  const cycle = { auto: 'high', high: 'low', low: 'auto' };
+  state.settings.backgroundDetail = cycle[current] || 'auto';
+  saveState(window.localStorage, state);
+  refreshAudioUi();
 });
 
 function manualSave() {
@@ -2575,9 +2773,18 @@ window.__pixelHotel = Object.assign(window.__pixelHotel || {}, {
     ui.phase = ((p % 1) + 1) % 1;
     audio.setRoomMood(state.player.room, ui.phase);
     refreshAudioUi();
+    const ox = Math.max(380, Math.round(ui.cssW * 0.45));
+    const oy = Math.max(260, Math.round(ui.cssH * 0.45));
+    performBackgroundBake(currentRoomDef(), ui.cssW, ui.cssH, ui.phase, ox, oy);
   }, // 0.5 noon, 0 midnight
   getSaveVersion: () => SAVE_VERSION,
-  getVersion: () => '0.11.2',
+  getVersion: () => '0.12.1',
+  getBackgroundDetail: () => state.settings.backgroundDetail || 'auto',
+  setBackgroundDetail: (mode) => {
+    state.settings.backgroundDetail = mode;
+    saveState(window.localStorage, state);
+    refreshAudioUi();
+  },
   getRemoteMultiplayer: () => getRemoteMultiplayerEntities(performance.now()),
   walkTo: (x, y) => tryWalkPlayer(x, y),
   openAvatarCreator: () => openAvatarModal(),

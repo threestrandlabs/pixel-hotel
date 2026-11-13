@@ -463,7 +463,7 @@ async function main() {
 
     // ---- v0.7.0: vehicles on the isometric city roads ----
     const roadColors = await page.evaluate(() => {
-      const c = document.getElementById('gameCanvas');
+      const c = document.getElementById('bgCanvas') || document.getElementById('gameCanvas');
       const ctx = c.getContext('2d');
       const data = ctx.getImageData(0, Math.floor(c.height * 0.72), c.width, Math.floor(c.height * 0.22)).data;
       const colors = new Set();
@@ -845,9 +845,9 @@ async function main() {
     await page.evaluate(() => window.__pixelHotel.setDayPhase(0)); // midnight
     await page.waitForTimeout(350);
     const nightPixels = await page.evaluate(() => {
-      const c = document.getElementById('gameCanvas');
+      const c = document.getElementById('bgCanvas') || document.getElementById('gameCanvas');
       const ctx = c.getContext('2d');
-      const p = ctx.getImageData(10, 10, 1, 1).data;
+      const p = ctx.getImageData(100, 10, 1, 1).data;
       return { r: p[0], g: p[1], b: p[2] };
     });
     check('night view renders dark sky at midnight', nightPixels.r < 60 && nightPixels.b > nightPixels.r);

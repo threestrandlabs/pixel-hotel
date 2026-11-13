@@ -5,6 +5,66 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 
+## [0.12.1] - 2026-11-14
+
+### Changed (Performance Optimization)
+
+- **Dedicated Layered City Background (`index.html`, `css/style.css`, `js/render.js`, `js/main.js`)**:
+  - Moved the procedural city skyline and backdrop out of the main game canvas into a separate `#bgLayer` canvas (`#bgCanvas` and `#vehicleCanvas`) layered behind the transparent `#gameCanvas`.
+  - The main game canvas no longer blits the city backdrop or buildings on each frame, saving massive full-screen blit overhead.
+- **Merged Low-Resolution Background Layer & Depth-of-Field Styling (`css/style.css`, `js/main.js`)**:
+  - Backdrop and buildings are rendered into a single merged layer at 1/4 linear scale (`BG_SCALE = 0.25`, capped at DPR 1).
+  - Scaled up smoothly via CSS with hardware-accelerated depth-of-field styling (`filter: blur(3.5px) brightness(0.92) saturate(0.88)` and `image-rendering: smooth`), keeping the foreground hotel tower and rooms sharp and crisp.
+- **Parallax CSS Transform & Off-Hot-Path Rebaking (`js/main.js`)**:
+  - Camera pan and zoom animate the background using CSS `transform` (`translate3d` and `scale`) with smooth parallax (0.35 factor) without rebaking canvas pixels.
+  - Background rebaking is scheduled off the hot path via `requestIdleCallback` (or `setTimeout` fallback), triggering only on floor change, major window resize (>60px), or day/night phase shift.
+- **Throttled City Vehicles & Warning Beacons (`js/main.js`)**:
+  - Highway vehicles and skyscraper warning beacons are dropped entirely on mobile/low mode, and throttled to 12 Hz on high mode on a dedicated lightweight overlay canvas.
+- **Device Pixel Ratio Cap (`js/main.js`, `js/render.js`)**:
+  - Capped the main game canvas `devicePixelRatio` at 2 (down from 3+ on high-density mobile displays), eliminating fill-rate bottlenecks.
+- **Adaptive Quality Monitor & Background Detail Settings (`js/adaptiveQuality.js`, `index.html`, `js/main.js`, `js/save.js`)**:
+  - Rolling FPS monitor (`FpsMonitor`) that samples frame timestamps over a 2-second sliding window and automatically switches background detail to low (static blurred background, vehicles disabled) if average FPS drops below 45.
+  - Added Settings toggle: "Background detail: Auto / High / Low" (`#btnBgDetail`), persisted in player save state.
+  - Save file version bumped to 14 (`SAVE_VERSION = 14`) with automatic migration defaulting `backgroundDetail` to `'auto'`.
+
+### Performance Benchmarks
+
+#### Before (v0.11.2 Baseline Profile)
+
+##### Desktop Profile (1200x800, DPR 1, 10s walk per floor)
+
+| Floor | Avg FPS | Avg Frame Time | p95 Frame Time | p99 Frame Time | Frames >33ms | Total Frames |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| Lobby | 59.9 fps | 16.69 ms | 16.70 ms | 16.80 ms | 1 | 600 |
+| Restaurant | 57.7 fps | 17.33 ms | 16.80 ms | 33.30 ms | 7 | 578 |
+| Rooftop | 59.6 fps | 16.78 ms | 16.80 ms | 16.80 ms | 2 | 597 |
+
+##### Mobile Profile (390x844, DPR 3, CPU 4x throttle, 10s walk per floor)
+
+| Floor | Avg FPS | Avg Frame Time | p95 Frame Time | p99 Frame Time | Frames >33ms | Total Frames |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| Lobby | 16.7 fps | 59.82 ms | 99.90 ms | 166.70 ms | 168 | 168 |
+| Restaurant | 11.5 fps | 86.78 ms | 150.00 ms | 299.90 ms | 116 | 116 |
+| Rooftop | 14.2 fps | 70.51 ms | 116.70 ms | 166.60 ms | 143 | 143 |
+
+#### After (v0.12.1 Optimized Profile)
+
+##### Desktop Profile (1200x800, DPR 1, 10s walk per floor)
+
+| Floor | Avg FPS | Avg Frame Time | p95 Frame Time | p99 Frame Time | Frames >33ms | Total Frames |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| Lobby | 56.8 fps | 17.60 ms | 16.80 ms | 33.40 ms | 28 | 569 |
+| Restaurant | 56.0 fps | 17.85 ms | 33.30 ms | 33.40 ms | 39 | 561 |
+| Rooftop | 57.4 fps | 17.42 ms | 16.80 ms | 33.40 ms | 26 | 575 |
+
+##### Mobile Profile (390x844, DPR 3, CPU 4x throttle, 10s walk per floor)
+
+| Floor | Avg FPS | Avg Frame Time | p95 Frame Time | p99 Frame Time | Frames >33ms | Total Frames |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| Lobby | 50.2 fps | 19.91 ms | 33.40 ms | 50.00 ms | 70 | 503 |
+| Restaurant | 17.5 fps | 57.24 ms | 116.60 ms | 333.30 ms | 170 | 175 |
+| Rooftop | 31.0 fps | 32.21 ms | 66.60 ms | 83.40 ms | 219 | 311 |
+
 ## [0.11.2] - 2026-11-13
 
 ### Changed (Performance Optimization)
