@@ -67,6 +67,7 @@ export function createDefaultState() {
       shuffle: false,
       followCamera: false,
       backgroundDetail: 'auto',
+      weatherEffects: true,
     },
   };
 }

@@ -7,7 +7,7 @@ import { TILE, getCatalogueItem } from './data.js';
 import {
   ISO, ART, WALL_ANCHOR_Y, buildFloorTile, buildWallSegment, buildWindowSegment,
   buildDoorSegment, buildElevatorDoorSegment, buildDoorTile, buildElevatorTile,
-  buildGlassBalustradeSegment, buildStairwellDoorSegment,
+  buildGlassBalustradeSegment, buildStairwellDoorSegment, buildEdgeRailSegment,
   FURNITURE_BUILDERS, shadeColor,
 } from './sprites.js';
 import { LOOKS, getCharacterCanvas } from './voxel.js';
@@ -581,7 +581,8 @@ export function buildIsoCityLayout(room = { id: 'lobby', width: 12, height: 9, f
         const stories = Math.max(4, Math.min(34, rawStories));
         const heightZ = stories * storyPx;
         const pal = palettes[Math.floor(rand() * palettes.length)];
-        const roofStyle = Math.floor(rand() * 3); // 0: penthouse+spire, 1: HVAC+skylight, 2: sky-garden
+        const roofStyle = Math.floor(rand() * 4); // 0: penthouse+spire, 1: HVAC+skylight, 2: sky-garden, 3: art-deco setback
+        const waterTower = stories >= 8 && stories <= 22 && rand() < 0.35;
 
         const windowsLeft = [];
         const windowsRight = [];
@@ -625,6 +626,7 @@ export function buildIsoCityLayout(room = { id: 'lobby', width: 12, height: 9, f
           rightCol: pal[1],
           roofCol: pal[2],
           roofStyle,
+          waterTower,
           windowsLeft,
           windowsRight,
         });
@@ -1308,9 +1310,44 @@ export function renderSkylineToCanvas(g, width, height, phase, floor, room = nul
         drawIsoPrism(g, P, mu - 0.7, mv - 0.6, mu - 0.1, mv + 0.1, zTop, zTop + 8, leftCol, rightCol, shadeColor(roofCol, 0.1));
         const skyGlass = day > 0.6 ? '#88c6ee' : '#ffd884';
         fillPoly(g, [P(mu + 0.1, mv - 0.5, zTop + 1), P(mu + 0.75, mv - 0.5, zTop + 1), P(mu + 0.75, mv + 0.4, zTop + 1), P(mu + 0.1, mv + 0.4, zTop + 1)], lerpColor(skyGlass, hazeColor, haze * 0.5));
-      } else {
+      } else if (b.roofStyle === 2) {
         const hedgeTop = lerpColor(lerpColor('#1e4430', '#489858', day), hazeColor, haze);
         drawIsoPrism(g, P, b.u0 + 0.45, b.v0 + 0.45, b.u1 - 0.45, b.v1 - 0.45, zTop, zTop + 5, shadeColor(hedgeTop, -0.15), shadeColor(hedgeTop, -0.28), hedgeTop);
+      } else {
+        // Art-deco setback: two diminishing ziggurat tiers topped with a thin spire,
+        // giving the default skyline the NYC Manhattan silhouette asked for.
+        drawIsoPrism(g, P, b.u0 + 0.35, b.v0 + 0.35, b.u1 - 0.35, b.v1 - 0.35, zTop, zTop + 10, shadeColor(leftCol, 0.05), shadeColor(rightCol, 0.05), shadeColor(roofCol, 0.06));
+        drawIsoPrism(g, P, mu - (b.u1 - b.u0) * 0.22, mv - (b.v1 - b.v0) * 0.22, mu + (b.u1 - b.u0) * 0.22, mv + (b.v1 - b.v0) * 0.22, zTop + 10, zTop + 20, shadeColor(leftCol, 0.1), shadeColor(rightCol, 0.1), shadeColor(roofCol, 0.12));
+        if (b.stories >= 6) {
+          const spBase = P(mu, mv, zTop + 20);
+          const spTop = P(mu, mv, zTop + 34);
+          g.strokeStyle = rightCol;
+          g.lineWidth = 1.8;
+          g.beginPath();
+          g.moveTo(spBase[0], spBase[1]);
+          g.lineTo(spTop[0], spTop[1]);
+          g.stroke();
+        }
+      }
+
+      if (b.waterTower) {
+        // Small wooden rooftop water tower — a classic NYC skyline touch.
+        const wtu = b.u0 + (b.u1 - b.u0) * 0.78;
+        const wtv = b.v0 + (b.v1 - b.v0) * 0.24;
+        const legCol = lerpColor('#5a4430', hazeColor, haze);
+        const tankCol = lerpColor('#8a6a44', hazeColor, haze);
+        const roofColWt = lerpColor('#6e5636', hazeColor, haze);
+        drawIsoPrism(g, P, wtu - 0.18, wtv - 0.18, wtu + 0.18, wtv + 0.18, zTop, zTop + 7, shadeColor(legCol, -0.1), shadeColor(legCol, -0.22), legCol);
+        drawIsoPrism(g, P, wtu - 0.26, wtv - 0.26, wtu + 0.26, wtv + 0.26, zTop + 7, zTop + 16, shadeColor(tankCol, -0.08), shadeColor(tankCol, -0.2), tankCol);
+        const roofTop = P(wtu, wtv, zTop + 21);
+        const r0 = P(wtu - 0.3, wtv - 0.3, zTop + 16);
+        const r1 = P(wtu + 0.3, wtv - 0.3, zTop + 16);
+        const r2 = P(wtu + 0.3, wtv + 0.3, zTop + 16);
+        const r3 = P(wtu - 0.3, wtv + 0.3, zTop + 16);
+        fillPoly(g, [r0, r1, roofTop], shadeColor(roofColWt, 0.05));
+        fillPoly(g, [r1, r2, roofTop], shadeColor(roofColWt, -0.1));
+        fillPoly(g, [r2, r3, roofTop], shadeColor(roofColWt, -0.2));
+        fillPoly(g, [r3, r0, roofTop], shadeColor(roofColWt, -0.05));
       }
     }
 
@@ -1859,6 +1896,15 @@ function drawFurniture(ctx, f, originX, originY, dpr = 1, off = false) {
   blitDeviceAligned(ctx, canvas, sx - canvas.ax, sy - canvas.ay, dpr);
 }
 
+// Continuous low glass railing along the south/east floor edges of outdoor
+// decks (Rooftop, Sky Garden) — the north/west edges already get the taller
+// buildGlassBalustradeSegment wall treatment in drawWallsLayerCached.
+function drawEdgeRail(ctx, edge, x, y, originX, originY, dpr) {
+  const { sx, sy } = tileToScreen(x, y, originX, originY);
+  const canvas = bakeSprite(`edgerail:${edge}`, () => buildEdgeRailSegment(edge), dpr);
+  blitDeviceAligned(ctx, canvas, sx - canvas.ax, sy - canvas.ay, dpr);
+}
+
 export function drawDiamondOverlay(ctx, sx, sy, color, alpha) {
   ctx.save();
   ctx.globalAlpha = alpha;
@@ -2296,6 +2342,20 @@ export function renderRoom(ctx, opts) {
   for (const e of entities) {
     drawables.push({ depth: e.depth ?? e.x + e.y + 0.5, type: 'entity', data: e });
   }
+  if (room.openEdges) {
+    const southY = room.height - 1;
+    const eastX = room.width - 1;
+    for (let x = 0; x < room.width; x++) {
+      if (room.grid[southY][x] === TILE.VOID) continue;
+      if (room.doors.some((d) => d.x === x && d.y === southY)) continue;
+      drawables.push({ depth: x + southY - 0.1, type: 'edgerail', data: { edge: 'south', x, y: southY } });
+    }
+    for (let y = 0; y < room.height; y++) {
+      if (room.grid[y][eastX] === TILE.VOID) continue;
+      if (room.doors.some((d) => d.x === eastX && d.y === y)) continue;
+      drawables.push({ depth: eastX + y - 0.1, type: 'edgerail', data: { edge: 'east', x: eastX, y } });
+    }
+  }
   drawables.sort((a, b) => a.depth - b.depth);
 
   const nameTargets = nameTargetsBuf;
@@ -2306,6 +2366,8 @@ export function renderRoom(ctx, opts) {
     if (d.type === 'furniture') {
       const fItem = getCatalogueItem(d.data.itemId);
       drawFurniture(ctx, d.data, originX, originY, ds, Boolean(fItem?.lightSource) && !lightsOn);
+    } else if (d.type === 'edgerail') {
+      drawEdgeRail(ctx, d.data.edge, d.data.x, d.data.y, originX, originY, ds);
     } else {
       const e = d.data;
       const { sx, sy } = tileToScreen(e.x, e.y, originX, originY);

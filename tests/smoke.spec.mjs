@@ -915,6 +915,21 @@ async function main() {
     await page2x.screenshot({ path: path.join(SCREENSHOT_DIR, '08-rooftop-night-2x.png') });
     await page2x.screenshot({ path: '/workspace/pixel-hotel-v060-night.png' });
 
+    // ---- v0.12.0: desktop sky viewer — walk up, use the viewer, and close it ----
+    await page2x.evaluate(() => { window.__pixelHotel.setDayPhase(0.5); });
+    const viewerOpenedDesktop = await page2x.evaluate(() => {
+      window.__pixelHotel.interactWith('sky_viewer_nyc', true);
+      return !document.getElementById('skyViewerModal').classList.contains('hidden');
+    });
+    await page2x.waitForTimeout(150);
+    check('desktop: using a sky viewer opens the full-screen skyline modal', viewerOpenedDesktop);
+    const viewerTitleDesktop = await page2x.textContent('#skyViewerTitle');
+    check('desktop: the skyline modal shows the New York Skyline title', viewerTitleDesktop.includes('New York Skyline'));
+    await page2x.screenshot({ path: path.join(SCREENSHOT_DIR, '10-sky-viewer-desktop.png') });
+    await page2x.click('#btnSkyViewerClose');
+    await page2x.waitForTimeout(100);
+    check('desktop: closing the sky viewer hides the modal', (await page2x.locator('#skyViewerModal.hidden').count()) === 1);
+
     // Street-at-night screenshot: zoomed out to show the isometric city, roads, vehicle
     // headlights/taillights and streetlamps around the Grand Lobby after dark.
     await page2x.evaluate(() => {
@@ -1352,6 +1367,23 @@ async function runMobilePortraitSmokeTest(browser) {
       return { emote: p.emote, bubbleText: p.bubbleText };
     });
     check('mobile: player wave emote and speech bubble icon active', emoteStatus.emote === 'wave' && emoteStatus.bubbleText === '👋');
+
+    // ---- v0.12.0: touch sky viewer — tap to open the full-screen skyline modal, then close it ----
+    await page.evaluate(() => { window.__pixelHotel.takeElevator('rooftop'); });
+    await page.waitForTimeout(300);
+    const viewerOpenedMobile = await page.evaluate(() => {
+      window.__pixelHotel.interactWith('sky_viewer_nyc', true);
+      return !document.getElementById('skyViewerModal').classList.contains('hidden');
+    });
+    await page.waitForTimeout(150);
+    check('mobile: tapping a sky viewer opens the full-screen skyline modal', viewerOpenedMobile);
+    await checkOverflow('mobile: sky viewer modal open');
+    await page.screenshot({ path: path.join(SCREENSHOT_DIR, '12-sky-viewer-mobile-390x844.png') });
+    const closeBtn = page.locator('#btnSkyViewerClose');
+    const closeBox = await closeBtn.boundingBox();
+    await page.touchscreen.tap(closeBox.x + closeBox.width / 2, closeBox.y + closeBox.height / 2);
+    await page.waitForTimeout(100);
+    check('mobile: tapping close hides the sky viewer modal', (await page.locator('#skyViewerModal.hidden').count()) === 1);
 
     await page.screenshot({ path: path.join(SCREENSHOT_DIR, '11-mobile-portrait-390x844.png') });
 

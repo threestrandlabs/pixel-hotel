@@ -34,6 +34,8 @@ import { initLibraryUI, openLibraryModal } from './gumballs/library-ui.js';
 import { initAvatarModal, openAvatarModal, closeAvatarModal, isAvatarModalOpen } from './avatarModal.js';
 import { DEFAULT_PLAYER_LOOK, validateAvatarLook } from './avatar.js';
 import { EMOTES, EMOTE_IDS, EMOTE_ICONS, EMOTE_DURATION_MS, isEmoteAllowed } from './emotes.js';
+import { initViewerUI, openViewerModal, closeViewerModal, isViewerModalOpen, drawWeatherOverlay } from './viewer.js';
+import { getWeatherState, WEATHER_ICONS, WEATHER_LABELS } from './weather.js';
 
 const STEP_MS = 240;
 const DAY_CYCLE_MS = 120000;
@@ -690,6 +692,8 @@ function applyInteractionArrival(mover, pending, isPlayer = false, immediate = f
       openPoolGame();
     } else if (placed.itemId === 'capsule_dispenser') {
       openGumballModal();
+    } else if (item?.interaction === 'city_view') {
+      openViewerModal(item.city);
     }
     if (placed.itemId === 'massage_bed') {
       showToast('Relaxing massage... feeling energized! ✨ (+Mood buff: Relaxed & Energized)');
@@ -1527,6 +1531,15 @@ function placedFurnitureWithFootprint(roomRuntime) {
 // while natural 60Hz timer jitter (14-18ms) never accidentally drops a frame.
 const MIN_FRAME_INTERVAL_MS = 12;
 let lastFrameAt = 0;
+let cachedWeatherState = null;
+let cachedWeatherAt = 0;
+function weatherStateThrottled(now) {
+  if (!cachedWeatherState || now - cachedWeatherAt > 1000) {
+    cachedWeatherState = getWeatherState(new Date());
+    cachedWeatherAt = now;
+  }
+  return cachedWeatherState;
+}
 
 function frame(now) {
   if (lastFrameAt && (now - lastFrameAt < MIN_FRAME_INTERVAL_MS)) {
@@ -1597,6 +1610,10 @@ function frame(now) {
     camera: ui.camera,
     lightsOn: roomRuntime.lightsOn !== false,
   });
+
+  if (room.openEdges && state.settings.weatherEffects !== false) {
+    drawWeatherOverlay(ctx, ui.cssW, ui.cssH, weatherStateThrottled(now), now, 0.55);
+  }
 
   requestAnimationFrame(frame);
 }
@@ -1862,6 +1879,7 @@ document.getElementById('btnNpcDlgClose').addEventListener('click', closeNpcDial
 window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     if (!document.getElementById('helpOverlay').classList.contains('hidden')) hideHelp();
+    else if (isViewerModalOpen()) closeViewerModal();
     else if (isAvatarModalOpen()) closeAvatarModal();
     else if (!document.getElementById('emoteBar')?.classList.contains('hidden')) toggleEmoteBar(false);
     else if (!document.getElementById('arcadeGameModal').classList.contains('hidden')) closeArcadeGame();
@@ -1949,6 +1967,10 @@ document.getElementById('btnSalonClose')?.addEventListener('click', () => {
 });
 document.getElementById('salonModal')?.addEventListener('click', (e) => {
   if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden');
+});
+document.getElementById('btnSkyViewerClose')?.addEventListener('click', closeViewerModal);
+document.getElementById('skyViewerModal')?.addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) closeViewerModal();
 });
 
 document.getElementById('btnInventory').addEventListener('click', () => togglePanel('inventoryPanel'));
@@ -2442,6 +2464,9 @@ function refreshAudioUi() {
   const ambienceBtn = document.getElementById('btnPanelAmbienceMute');
   if (ambienceBtn) ambienceBtn.textContent = amMuted ? 'Muted' : 'On';
 
+  const weatherFxBtn = document.getElementById('btnWeatherEffectsToggle');
+  if (weatherFxBtn) weatherFxBtn.textContent = state.settings.weatherEffects !== false ? 'On' : 'Off';
+
   const moodEl = document.getElementById('audioMoodLabel');
   if (moodEl) moodEl.textContent = audio.getMoodInfo().label;
 
@@ -2547,6 +2572,11 @@ document.getElementById('btnBgDetail')?.addEventListener('click', () => {
   saveState(window.localStorage, state);
   refreshAudioUi();
 });
+document.getElementById('btnWeatherEffectsToggle')?.addEventListener('click', () => {
+  state.settings.weatherEffects = !(state.settings.weatherEffects !== false);
+  refreshAudioUi();
+  saveState(window.localStorage, state);
+});
 
 function manualSave() {
   persistPlayerPos();
@@ -2568,6 +2598,16 @@ function autoSave() {
   autoSaveTimer = setTimeout(() => saveState(window.localStorage, state), 800);
 }
 setInterval(autoSave, 15000);
+
+function refreshWeatherBadge() {
+  const el = document.getElementById('weatherBadge');
+  if (!el) return;
+  const w = getWeatherState(new Date());
+  el.textContent = WEATHER_ICONS[w.weather] || '☀️';
+  el.title = `${WEATHER_LABELS[w.weather] || ''} · ${w.timeOfDay}`;
+}
+refreshWeatherBadge();
+setInterval(refreshWeatherBadge, 60000);
 
 let lastEmoteTime = 0;
 function toggleEmoteBar(force) {
@@ -2684,6 +2724,7 @@ function init() {
     onTradeAccepted: () => onGumballCollectionChanged(),
   });
   initLibraryUI({ getState: () => state });
+  initViewerUI({ isEffectsEnabled: () => state.settings.weatherEffects !== false });
   initAvatarModal({
     getState: () => state,
     getCoins: () => state.coins,
@@ -2778,7 +2819,7 @@ window.__pixelHotel = Object.assign(window.__pixelHotel || {}, {
     performBackgroundBake(currentRoomDef(), ui.cssW, ui.cssH, ui.phase, ox, oy);
   }, // 0.5 noon, 0 midnight
   getSaveVersion: () => SAVE_VERSION,
-  getVersion: () => '0.12.1',
+  getVersion: () => '0.12.2',
   getBackgroundDetail: () => state.settings.backgroundDetail || 'auto',
   setBackgroundDetail: (mode) => {
     state.settings.backgroundDetail = mode;

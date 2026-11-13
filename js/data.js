@@ -245,6 +245,7 @@ export const ROOMS = {
     icon: '🌿',
     wing: 'Suite & Sky Decks',
     shape: 'conservatory-terrace',
+    openEdges: true,
     floorMaterial: 'grass',
     floorColor: '#9cc48c',
     wallColor: '#74a48c',
@@ -279,6 +280,7 @@ export const ROOMS = {
     wing: 'Suite & Sky Decks',
     shape: 'open-air-rooftop',
     isRooftop: true,
+    openEdges: true,
     floorColor: '#d8b98c',
     wallColor: '#6f9ec4',
     width: 20,
@@ -502,6 +504,11 @@ export const CATALOGUE = [
   { id: 'noodle_cart', name: 'Midnight Noodle Cart', price: 90, category: 'kitchen_food', footprint: { w: 2, h: 1 }, seat: false, interaction: 'eat', emissive: { color: '#ff784e', radius: 58, intensity: 0.38 }, spriteKey: 'noodleCart', unlockRequires: null, description: 'Traditional street vendor cart with steaming broth vat, ladles and red lantern.' },
   { id: 'karaoke_machine', name: 'Star Stage Karaoke', price: 75, category: 'entertainment', footprint: { w: 1, h: 1 }, seat: false, interaction: 'use', emissive: { color: '#50e4ff', radius: 56, intensity: 0.38 }, spriteKey: 'karaokeMachine', unlockRequires: null, description: 'Digital karaoke kiosk with twin microphones, equalizer display and disco floor.' },
   { id: 'telescope', name: 'Stargazer Telescope', price: 50, category: 'outdoor_pool', footprint: { w: 1, h: 1 }, seat: false, interaction: 'use', spriteKey: 'telescope', unlockRequires: null, description: 'Heavy brass astronomical refractor on an equatorial wooden tripod mount.' },
+  // v0.12.0 Sky viewing platforms — coin-op binocular viewers on a small raised dais
+  { id: 'sky_viewer_nyc', name: 'Skyline Viewer: New York Skyline', price: 60, category: 'entertainment', footprint: { w: 1, h: 1 }, seat: false, interaction: 'city_view', city: 'nyc', spriteKey: 'skyViewer', unlockRequires: null, description: 'Coin-operated binocular viewer on a raised dais, aimed out over the New York Skyline view.' },
+  { id: 'sky_viewer_singapore', name: 'Skyline Viewer: Singapore Marina', price: 60, category: 'entertainment', footprint: { w: 1, h: 1 }, seat: false, interaction: 'city_view', city: 'singapore', spriteKey: 'skyViewer', unlockRequires: null, description: 'Coin-operated binocular viewer on a raised dais, aimed out over the Singapore Marina view.' },
+  { id: 'sky_viewer_tokyo', name: 'Skyline Viewer: Tokyo Lights', price: 60, category: 'entertainment', footprint: { w: 1, h: 1 }, seat: false, interaction: 'city_view', city: 'tokyo', spriteKey: 'skyViewer', unlockRequires: null, description: 'Coin-operated binocular viewer on a raised dais, aimed out over the Tokyo Lights view.' },
+  { id: 'sky_viewer_paris', name: 'Skyline Viewer: Paris Rooftops', price: 60, category: 'entertainment', footprint: { w: 1, h: 1 }, seat: false, interaction: 'city_view', city: 'paris', spriteKey: 'skyViewer', unlockRequires: null, description: 'Coin-operated binocular viewer on a raised dais, aimed out over the Paris Rooftops view.' },
   { id: 'koi_pond', name: 'Zen Koi Stone Pond', price: 80, category: 'outdoor_pool', footprint: { w: 2, h: 2 }, seat: false, interaction: 'use', spriteKey: 'koiPond', unlockRequires: null, description: 'Carved slate floor water garden with floating lily pads and swimming calico koi.' },
   { id: 'capsule_dispenser', name: 'Gachapon Capsule Toy', price: 40, category: 'entertainment', footprint: { w: 1, h: 1 }, seat: false, interaction: 'gumball_machine', spriteKey: 'capsuleDispenser', unlockRequires: null, description: 'Retro twin-globe gumball machine. Pay 5 coins, turn the crank, and see what drops.' },
   { id: 'gumball_trophy', name: 'Gumball Collector Trophy', price: 0, category: 'entertainment', footprint: { w: 1, h: 1 }, seat: false, interaction: 'use', spriteKey: 'gumballTrophy', unlockRequires: 'quest_gumball_full_set', description: 'A gleaming gold trophy awarded for completing the full 20-gumball collection.' },
@@ -1001,6 +1008,7 @@ export const SEED_FURNITURE = {
     { itemId: 'garden_bench', x: 11, y: 7, rot: 0 },
     { itemId: 'telescope', x: 16, y: 14, rot: 0 },
     { itemId: 'flower_planter', x: 12, y: 14, rot: 0 },
+    { itemId: 'sky_viewer_singapore', x: 18, y: 16, rot: 0 },
   ],
   rooftop: [
     { itemId: 'pool_water', x: 16, y: 3, rot: 0 },
@@ -1022,6 +1030,10 @@ export const SEED_FURNITURE = {
     { itemId: 'string_lights', x: 10, y: 13, rot: 0 },
     { itemId: 'plant', x: 1, y: 5, rot: 0 },
     { itemId: 'lamp', x: 8, y: 5, rot: 0 },
+    { itemId: 'sky_viewer_nyc', x: 2, y: 1, rot: 2 },
+    { itemId: 'sky_viewer_singapore', x: 1, y: 9, rot: 3 },
+    { itemId: 'sky_viewer_tokyo', x: 6, y: 14, rot: 0 },
+    { itemId: 'sky_viewer_paris', x: 18, y: 9, rot: 1 },
   ],
 };
 
