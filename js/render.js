@@ -363,7 +363,7 @@ function seededRand(seed) {
   };
 }
 
-export function buildIsoCityLayout(room = { id: 'lobby', width: 12, height: 9, floor: 1 }, width = 960, height = 600, phase = 0.5, padX = 480, padBottom = 320) {
+export function buildIsoCityLayout(room = { id: 'lobby', width: 12, height: 9, floor: 1 }, width = 960, height = 600, phase = 0.5, padX = 480, padBottom = 320, skipBuildings = false) {
   const W = room?.width || 12;
   const H = room?.height || 9;
   const effW = Math.max(W, 64);
@@ -477,7 +477,10 @@ export function buildIsoCityLayout(room = { id: 'lobby', width: 12, height: 9, f
   const blocks = [];
   const beacons = [];
 
-  for (let sum = -maxB * 2; sum <= maxB * 2; sum++) {
+  // Vehicle-only callers (every frame) just need roads/crossings above; the
+  // per-building/per-window generation below is only needed for the baked
+  // backdrop/foreground canvases, which are cache-miss-only.
+  for (let sum = -maxB * 2; !skipBuildings && sum <= maxB * 2; sum++) {
     for (let bi = -maxB; bi <= maxB; bi++) {
       const bj = sum - bi;
       if (bj < -maxB || bj > maxB) continue;
@@ -662,6 +665,19 @@ let skylineCache = { key: '', canvas: null, beacons: [], ox: 0, oy: 0 };
 let foregroundCache = { key: '', canvas: null, ox: 0, oy: 0 };
 let cutawayCache = { key: '', canvas: null };
 let cutawayOverCache = { key: '', canvas: null };
+let cityLayoutCache = { key: '', layout: null };
+let poolWaterLayerCache = { key: '', canvas: null, minX: 0, minY: 0, maxX: 0, maxY: 0 };
+let lightMapCache = { key: '', canvas: null, minX: 0, minY: 0 };
+let floorLayerCache = { key: '', canvas: null, minX: 0, minY: 0 };
+let wallLayerCache = { key: '', canvas: null, minX: 0, minY: 0 };
+
+function getCachedIsoCityLayout(roomSpec, width, height, phase, padX, padBottom) {
+  const key = `${roomSpec?.id || 'lobby'}:${roomSpec?.floor || 1}:${roomSpec?.width || 12}x${roomSpec?.height || 9}:${width}x${height}:${padX}x${padBottom}`;
+  if (cityLayoutCache.key === key && cityLayoutCache.layout) return cityLayoutCache.layout;
+  const layout = buildIsoCityLayout(roomSpec, width, height, phase, padX, padBottom, true);
+  cityLayoutCache = { key, layout };
+  return layout;
+}
 
 // ---------- Animated City Vehicles (Cars, Taxis, Buses, Scooters) ----------
 
@@ -674,6 +690,26 @@ const VEHICLE_TYPES = {
 
 const CAR_COLORS = ['#3f72af', '#c0392b', '#27ae60', '#e0e0e0', '#2c3e50', '#8e44ad', '#d35400'];
 
+const VEHICLE_CONFIGS = [
+  { id: 'v0', axis: 'v', rIdx: -2, lane: 1, type: 'car', color: CAR_COLORS[0], offset: 0 },
+  { id: 'v1', axis: 'v', rIdx: -2, lane: -1, type: 'bus', color: '#c0392b', offset: 25 },
+  { id: 'v2', axis: 'v', rIdx: -1, lane: 1, type: 'taxi', color: '#f1c40f', offset: 12 },
+  { id: 'v3', axis: 'v', rIdx: -1, lane: -1, type: 'scooter', color: '#e74c3c', offset: 35 },
+  { id: 'v4', axis: 'v', rIdx: 0, lane: 1, type: 'car', color: CAR_COLORS[1], offset: 48 },
+  { id: 'v5', axis: 'v', rIdx: 0, lane: -1, type: 'taxi', color: '#f1c40f', offset: 6 },
+  { id: 'v6', axis: 'v', rIdx: 1, lane: 1, type: 'bus', color: '#2980b9', offset: 18 },
+  { id: 'v7', axis: 'v', rIdx: 1, lane: -1, type: 'car', color: CAR_COLORS[2], offset: 42 },
+
+  { id: 'u0', axis: 'u', rIdx: -2, lane: 1, type: 'car', color: CAR_COLORS[3], offset: 5 },
+  { id: 'u1', axis: 'u', rIdx: -2, lane: -1, type: 'taxi', color: '#f1c40f', offset: 28 },
+  { id: 'u2', axis: 'u', rIdx: -1, lane: 1, type: 'bus', color: '#27ae60', offset: 16 },
+  { id: 'u3', axis: 'u', rIdx: -1, lane: -1, type: 'car', color: CAR_COLORS[4], offset: 45 },
+  { id: 'u4', axis: 'u', rIdx: 0, lane: 1, type: 'scooter', color: '#34495e', offset: 8 },
+  { id: 'u5', axis: 'u', rIdx: 0, lane: -1, type: 'car', color: CAR_COLORS[5], offset: 33 },
+  { id: 'u6', axis: 'u', rIdx: 1, lane: 1, type: 'taxi', color: '#f1c40f', offset: 22 },
+  { id: 'u7', axis: 'u', rIdx: 1, lane: -1, type: 'bus', color: '#d35400', offset: 52 },
+];
+
 export function computeCityVehicles(layout, now = 0, phase = 0.5) {
   if (!layout?.roads) return [];
   const { day } = dayNightColors(phase);
@@ -684,30 +720,10 @@ export function computeCityVehicles(layout, now = 0, phase = 0.5) {
   const vGreen = cycle < 5.5;
   const uGreen = cycle >= 6.0 && cycle < 11.5;
 
-  const configs = [
-    { id: 'v0', axis: 'v', rIdx: -2, lane: 1, type: 'car', color: CAR_COLORS[0], offset: 0 },
-    { id: 'v1', axis: 'v', rIdx: -2, lane: -1, type: 'bus', color: '#c0392b', offset: 25 },
-    { id: 'v2', axis: 'v', rIdx: -1, lane: 1, type: 'taxi', color: '#f1c40f', offset: 12 },
-    { id: 'v3', axis: 'v', rIdx: -1, lane: -1, type: 'scooter', color: '#e74c3c', offset: 35 },
-    { id: 'v4', axis: 'v', rIdx: 0, lane: 1, type: 'car', color: CAR_COLORS[1], offset: 48 },
-    { id: 'v5', axis: 'v', rIdx: 0, lane: -1, type: 'taxi', color: '#f1c40f', offset: 6 },
-    { id: 'v6', axis: 'v', rIdx: 1, lane: 1, type: 'bus', color: '#2980b9', offset: 18 },
-    { id: 'v7', axis: 'v', rIdx: 1, lane: -1, type: 'car', color: CAR_COLORS[2], offset: 42 },
-
-    { id: 'u0', axis: 'u', rIdx: -2, lane: 1, type: 'car', color: CAR_COLORS[3], offset: 5 },
-    { id: 'u1', axis: 'u', rIdx: -2, lane: -1, type: 'taxi', color: '#f1c40f', offset: 28 },
-    { id: 'u2', axis: 'u', rIdx: -1, lane: 1, type: 'bus', color: '#27ae60', offset: 16 },
-    { id: 'u3', axis: 'u', rIdx: -1, lane: -1, type: 'car', color: CAR_COLORS[4], offset: 45 },
-    { id: 'u4', axis: 'u', rIdx: 0, lane: 1, type: 'scooter', color: '#34495e', offset: 8 },
-    { id: 'u5', axis: 'u', rIdx: 0, lane: -1, type: 'car', color: CAR_COLORS[5], offset: 33 },
-    { id: 'u6', axis: 'u', rIdx: 1, lane: 1, type: 'taxi', color: '#f1c40f', offset: 22 },
-    { id: 'u7', axis: 'u', rIdx: 1, lane: -1, type: 'bus', color: '#d35400', offset: 52 },
-  ];
-
   const roadLength = 76;
   const roadStart = -36;
 
-  for (const cfg of configs) {
+  for (const cfg of VEHICLE_CONFIGS) {
     const road = layout.roads.find((r) => r.axis === cfg.axis && r.idx === cfg.rIdx);
     if (!road) continue;
 
@@ -907,38 +923,37 @@ export function drawCityVehicles(ctx, layout, vehicles, phase = 0.5, dpr = 1) {
 }
 
 export function drawBackground(ctx, width, height, phase, floor = 1, dpr = 1, now = 0, room = null, zoom = 1, camera = null) {
-  const phaseBucket = Math.round(phase * 48) % 48;
   const rW = room?.width || 12;
   const rH = room?.height || 9;
-  // When zoomed out the whole bitmap shrinks toward the viewport centre, so over-scan
-  // the baked city by enough world pixels to still cover the exposed margins under zoom & pan.
-  // Bucketed to 96px steps so a continuous zoom doesn't rebake every frame.
   const z = Math.max(0.1, zoom || 1);
-  const px = Math.abs(camera?.panX ?? 0);
-  const py = Math.abs(camera?.panY ?? 0);
-  const spanX = (width / z - width) / 2 + px / z;
-  const spanY = (height / z - height) / 2 + py / z;
-  const ox = Math.ceil((Math.max(0, spanX) + 160) / 96) * 96;
-  const oy = Math.ceil((Math.max(0, spanY) + 160) / 96) * 96;
-  const key = `${width}x${height}+${ox}x${oy}@${dpr}:p${phaseBucket}:f${floor}:${rW}x${rH}`;
+  const zoomMarginX = Math.max(0, (width / z - width) / 2);
+  const zoomMarginY = Math.max(0, (height / z - height) / 2);
+  const ox = Math.max(180, Math.ceil((zoomMarginX + 40) / 60) * 60);
+  const oy = Math.max(120, Math.ceil((zoomMarginY + 40) / 60) * 60);
+  const baseKey = `${width}x${height}+${ox}x${oy}@${dpr}:f${floor}:${rW}x${rH}`;
+  const needsBake = skylineCache.baseKey !== baseKey ||
+    skylineCache.phase === undefined ||
+    Math.abs(phase - skylineCache.phase) >= 0.25;
 
   // 1. Street layer & sky backdrop (sky, distant skyline, ground, roads, zebra crossings)
-  if (skylineCache.key !== key) {
+  if (needsBake) {
     const off = skylineCache.canvas || document.createElement('canvas');
     off.width = Math.max(1, Math.round((width + 2 * ox) * dpr));
     off.height = Math.max(1, Math.round((height + 2 * oy) * dpr));
     const g = off.getContext('2d');
     g.setTransform(dpr, 0, 0, dpr, ox * dpr, oy * dpr);
-    renderSkylineToCanvas(g, width, height, phaseBucket / 48, floor, room, ox, oy, 'backdrop');
-    skylineCache = { key, canvas: off, ox, oy };
+    renderSkylineToCanvas(g, width, height, phase, floor, room, ox, oy, 'backdrop');
+    skylineCache = { key: baseKey, baseKey, canvas: off, ox, oy, phase };
   }
   blitDeviceAligned(ctx, skylineCache.canvas, -skylineCache.ox, -skylineCache.oy, dpr);
 
   // 2. Animated city vehicles on open isometric road corridors. Clipped to the ground-plane
   // band below horizonY so a vehicle far down a road stays on the asphalt. Drawn on top
   // of the street layer and underneath the buildings layer so buildings in front occlude cars.
+  // Vehicles only read layout.roads/crossings, never the per-building/window data, so this
+  // per-frame call skips generating the (expensive) building geometry entirely.
   const roomSpec = room || { id: 'lobby', width: 12, height: 9, floor };
-  const layout = buildIsoCityLayout(roomSpec, width, height, phase, 400 + ox, 320 + oy);
+  const layout = getCachedIsoCityLayout(roomSpec, width, height, phase, 400 + ox, 320 + oy);
   const vehicles = computeCityVehicles(layout, now, phase);
   ctx.save();
   ctx.beginPath();
@@ -950,8 +965,7 @@ export function drawBackground(ctx, width, height, phase, floor = 1, dpr = 1, no
   // 3. 3D City buildings, sidewalks, trees & lamps. Rendered over the vehicles on a
   // transparent canvas so vehicles passing behind buildings are correctly occluded while
   // vehicles on open streets remain fully visible.
-  const bldgKey = `${key}:bldg`;
-  if (foregroundCache.key !== bldgKey) {
+  if (needsBake) {
     const off = foregroundCache.canvas || document.createElement('canvas');
     off.width = Math.max(1, Math.round((width + 2 * ox) * dpr));
     off.height = Math.max(1, Math.round((height + 2 * oy) * dpr));
@@ -959,8 +973,8 @@ export function drawBackground(ctx, width, height, phase, floor = 1, dpr = 1, no
     g.setTransform(1, 0, 0, 1, 0, 0);
     g.clearRect(0, 0, off.width, off.height);
     g.setTransform(dpr, 0, 0, dpr, ox * dpr, oy * dpr);
-    const beacons = renderSkylineToCanvas(g, width, height, phaseBucket / 48, floor, room, ox, oy, 'buildings');
-    foregroundCache = { key: bldgKey, canvas: off, beacons, ox, oy };
+    const beacons = renderSkylineToCanvas(g, width, height, phase, floor, room, ox, oy, 'buildings');
+    foregroundCache = { key: baseKey, baseKey, canvas: off, beacons, ox, oy, phase };
   }
   blitDeviceAligned(ctx, foregroundCache.canvas, -foregroundCache.ox, -foregroundCache.oy, dpr);
 
@@ -995,7 +1009,8 @@ function renderSkylineToCanvas(g, width, height, phase, floor, room = null, ox =
   const isBuildings = (layer === 'buildings' || layer === 'all' || layer === true);
   const { skyTop, skyMid, skyBottom, day } = dayNightColors(phase);
   const roomSpec = room || { id: 'lobby', width: 12, height: 9, floor };
-  const layout = buildIsoCityLayout(roomSpec, width, height, phase, 400 + ox, 320 + oy);
+  // The backdrop-only bake never reads layout.blocks, so it skips generating them.
+  const layout = buildIsoCityLayout(roomSpec, width, height, phase, 400 + ox, 320 + oy, !isBuildings);
   const { originX, groundOriginY, horizonY } = layout;
   const P = (u, v, z = 0) => projectIsoCityPoint(u, v, z, originX, groundOriginY);
   // Logical fill bounds, widened by the over-scan so the city/ground/sky still cover
@@ -1927,12 +1942,254 @@ export function getItemIconDataUrl(itemId, size = 52, dpr = 1) {
   return canvas?.toDataURL ? canvas.toDataURL() : '';
 }
 
+function drawPoolWaterLayer(ctx, poolItems, originX, originY, ds, now) {
+  const key = `${poolItems.length}:${originX},${originY}:${ds}`;
+  if (poolWaterLayerCache.key !== key) {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    const sprites = [];
+    for (const f of poolItems) {
+      const anchorX = f.x + f.footprint.w / 2 - 0.5;
+      const anchorY = f.y + f.footprint.h / 2 - 0.5;
+      const { sx, sy } = tileToScreen(anchorX, anchorY, originX, originY);
+      const canvas = furnitureCanvas(f.itemId, f.rot, ds, false);
+      const x0 = sx - canvas.ax;
+      const y0 = sy - canvas.ay;
+      const x1 = x0 + canvas.width / ds;
+      const y1 = y0 + canvas.height / ds;
+      minX = Math.min(minX, x0);
+      minY = Math.min(minY, y0);
+      maxX = Math.max(maxX, x1);
+      maxY = Math.max(maxY, y1);
+      sprites.push({ canvas, x0, y0 });
+    }
+    const w = Math.ceil(maxX - minX);
+    const h = Math.ceil(maxY - minY);
+    const off = poolWaterLayerCache.canvas || document.createElement('canvas');
+    off.width = Math.max(1, Math.round(w * ds));
+    off.height = Math.max(1, Math.round(h * ds));
+    const g = off.getContext('2d');
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.clearRect(0, 0, off.width, off.height);
+    g.imageSmoothingEnabled = false;
+    for (const s of sprites) {
+      const dx = Math.round((s.x0 - minX) * ds);
+      const dy = Math.round((s.y0 - minY) * ds);
+      g.drawImage(s.canvas, dx, dy);
+    }
+    poolWaterLayerCache = { key, canvas: off, minX, minY, maxX, maxY };
+  }
+  blitDeviceAligned(ctx, poolWaterLayerCache.canvas, poolWaterLayerCache.minX, poolWaterLayerCache.minY, ds);
+
+  // Cheap animated caustics shimmer overlay across the cached pool surface
+  const phase = (now % 3000) / 3000;
+  const cx = (poolWaterLayerCache.minX + poolWaterLayerCache.maxX) / 2;
+  const cy = poolWaterLayerCache.minY + phase * (poolWaterLayerCache.maxY - poolWaterLayerCache.minY);
+  ctx.save();
+  ctx.fillStyle = 'rgba(215, 250, 255, 0.07)';
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, (poolWaterLayerCache.maxX - poolWaterLayerCache.minX) * 0.35, 12, -0.46, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function getRoomLightMap(room, placedFurniture, originX, originY, lightsOn, ds) {
+  const placedKey = placedFurniture.map((f) => `${f.itemId}@${f.x},${f.y}`).join(';');
+  const key = `${room.id}:${originX},${originY}:${lightsOn}:${ds}:${placedKey}`;
+  if (lightMapCache.key === key) return lightMapCache;
+
+  const emissives = [];
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+
+  for (const f of placedFurniture) {
+    const item = getCatalogueItem(f.itemId);
+    if (!item?.emissive) continue;
+    if (item.lightSource && !lightsOn) continue;
+    const ax = f.x + f.footprint.w / 2 - 0.5;
+    const ay = f.y + f.footprint.h / 2 - 0.5;
+    const { sx, sy } = tileToScreen(ax, ay, originX, originY);
+    const rad = item.emissive.radius || 56;
+    const rgb = hexToRgb(item.emissive.color || '#ffd27a');
+    const intensity = item.emissive.intensity || 0.36;
+    minX = Math.min(minX, sx - rad);
+    minY = Math.min(minY, sy - 10 - rad);
+    maxX = Math.max(maxX, sx + rad);
+    maxY = Math.max(maxY, sy + 4 + rad);
+    emissives.push({ sx, sy, rad, rgb, intensity });
+  }
+
+  if (emissives.length === 0) {
+    lightMapCache = { key, canvas: null, minX: 0, minY: 0 };
+    return lightMapCache;
+  }
+
+  const pad = 8;
+  minX = Math.floor(minX - pad);
+  minY = Math.floor(minY - pad);
+  maxX = Math.ceil(maxX + pad);
+  maxY = Math.ceil(maxY + pad);
+  const w = maxX - minX;
+  const h = maxY - minY;
+
+  const off = lightMapCache.canvas && lightMapCache.canvas.width === Math.round(w * ds) && lightMapCache.canvas.height === Math.round(h * ds)
+    ? lightMapCache.canvas
+    : document.createElement('canvas');
+  off.width = Math.max(1, Math.round(w * ds));
+  off.height = Math.max(1, Math.round(h * ds));
+  const g = off.getContext('2d');
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.clearRect(0, 0, off.width, off.height);
+  g.setTransform(ds, 0, 0, ds, -minX * ds, -minY * ds);
+  g.globalCompositeOperation = 'screen';
+
+  for (const e of emissives) {
+    const glow = g.createRadialGradient(e.sx, e.sy - 10, 4, e.sx, e.sy - 4, e.rad);
+    glow.addColorStop(0, `rgba(${e.rgb.r}, ${e.rgb.g}, ${e.rgb.b}, ${e.intensity})`);
+    glow.addColorStop(0.55, `rgba(${e.rgb.r}, ${e.rgb.g}, ${e.rgb.b}, ${(e.intensity * 0.38).toFixed(3)})`);
+    glow.addColorStop(1, `rgba(${e.rgb.r}, ${e.rgb.g}, ${e.rgb.b}, 0)`);
+    g.fillStyle = glow;
+    g.beginPath();
+    g.arc(e.sx, e.sy - 6, e.rad, 0, Math.PI * 2);
+    g.fill();
+  }
+
+  lightMapCache = { key, canvas: off, minX, minY };
+  return lightMapCache;
+}
+
+function drawFloorLayerCached(ctx, room, originX, originY, floorColor, lightsTag, ds, doorMap) {
+  const zt = room.zoneTiles;
+  const key = `${room.id}:${originX},${originY}:${floorColor}:${lightsTag}:${ds}`;
+  if (floorLayerCache.key !== key) {
+    const minX = Math.floor(originX - (room.height - 1) * (TILE_W / 2) - TILE_W / 2 - 4);
+    const maxX = Math.ceil(originX + (room.width - 1) * (TILE_W / 2) + TILE_W / 2 + 4);
+    const minY = Math.floor(originY - TILE_H / 2 - 4);
+    const maxY = Math.ceil(originY + (room.width + room.height - 2) * (TILE_H / 2) + TILE_H / 2 + 8);
+    const w = maxX - minX;
+    const h = maxY - minY;
+
+    const off = (floorLayerCache.canvas && floorLayerCache.canvas.width === Math.round(w * ds) && floorLayerCache.canvas.height === Math.round(h * ds))
+      ? floorLayerCache.canvas
+      : document.createElement('canvas');
+    off.width = Math.max(1, Math.round(w * ds));
+    off.height = Math.max(1, Math.round(h * ds));
+    const g = off.getContext('2d');
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.clearRect(0, 0, off.width, off.height);
+    g.imageSmoothingEnabled = false;
+
+    for (let y = 0; y < room.height; y++) {
+      for (let x = 0; x < room.width; x++) {
+        const cell = room.grid[y][x];
+        if (cell === TILE.WALL || cell === TILE.WINDOW || cell === TILE.DOOR || cell === TILE.VOID) continue;
+        const { sx, sy } = tileToScreen(x, y, originX, originY);
+        const variant = (x + y) % 2;
+        const doorDef = doorMap.get(`${x},${y}`);
+        const inZone = zt && x >= zt.x0 && x <= zt.x1 && y >= zt.y0 && y <= zt.y1;
+        const tileCol = inZone ? (zt.color || floorColor) : floorColor;
+        let canvas;
+        if (doorDef?.elevator) {
+          canvas = bakeSprite(`elevtile:${room.id}:${lightsTag}`, () => buildElevatorTile(floorColor), ds);
+        } else if (doorDef) {
+          canvas = bakeSprite(`doortile:${room.id}:${lightsTag}`, () => buildDoorTile(floorColor), ds);
+        } else {
+          let mat = room.floorMaterial || 'default';
+          if (inZone && zt?.material) mat = zt.material;
+          if (room.zones) {
+            const matchZone = room.zones.find((z) => x >= z.x0 && x <= z.x1 && y >= z.y0 && y <= z.y1);
+            if (matchZone?.material) mat = matchZone.material;
+          }
+          canvas = bakeSprite(`floor:${room.id}:${inZone ? 'z' : 'b'}:${mat}:${variant}:${tileCol}:${lightsTag}`, () => buildFloorTile(tileCol, variant, mat), ds);
+        }
+        const dx = Math.round((sx - minX - TILE_W / 2) * ds);
+        const dy = Math.round((sy - minY - TILE_H / 2) * ds);
+        g.drawImage(canvas, dx, dy);
+        if (inZone && zt.riser && (x === zt.x0 || y === zt.y0)) {
+          g.save();
+          g.setTransform(ds, 0, 0, ds, -minX * ds, -minY * ds);
+          g.strokeStyle = 'rgba(255, 248, 224, 0.35)';
+          g.lineWidth = 1.2;
+          g.beginPath();
+          g.moveTo(sx - TILE_W / 2, sy);
+          g.lineTo(sx, sy - TILE_H / 2);
+          g.lineTo(sx + TILE_W / 2, sy);
+          g.stroke();
+          g.restore();
+        }
+      }
+    }
+    floorLayerCache = { key, canvas: off, minX, minY };
+  }
+  blitDeviceAligned(ctx, floorLayerCache.canvas, floorLayerCache.minX, floorLayerCache.minY, ds);
+}
+
+function drawWallsLayerCached(ctx, room, originX, originY, wallColor, sky, wb, lightsTag, ds) {
+  const key = `${room.id}:${originX},${originY}:${wallColor}:${lightsTag}:${wb}:${ds}`;
+  if (wallLayerCache.key !== key) {
+    const minX = Math.floor(originX - (room.height - 1) * (TILE_W / 2) - TILE_W / 2 - 32);
+    const maxX = Math.ceil(originX + (room.width - 1) * (TILE_W / 2) + TILE_W / 2 + 32);
+    const minY = Math.floor(originY - WALL_ANCHOR_Y - 32);
+    const maxY = Math.ceil(originY + (room.width + room.height) * (TILE_H / 2) + 64);
+    const w = maxX - minX;
+    const h = maxY - minY;
+
+    const off = (wallLayerCache.canvas && wallLayerCache.canvas.width === Math.round(w * ds) && wallLayerCache.canvas.height === Math.round(h * ds))
+      ? wallLayerCache.canvas
+      : document.createElement('canvas');
+    off.width = Math.max(1, Math.round(w * ds));
+    off.height = Math.max(1, Math.round(h * ds));
+    const g = off.getContext('2d');
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.clearRect(0, 0, off.width, off.height);
+    g.imageSmoothingEnabled = false;
+
+    for (let y = 0; y < room.height; y++) {
+      for (let x = 0; x < room.width; x++) {
+        const cell = room.grid[y][x];
+        if (cell !== TILE.WALL && cell !== TILE.WINDOW && cell !== TILE.DOOR) continue;
+        if (x === 0 && y === 0) continue;
+        const kind = y === 0 ? 'north' : 'west';
+        const { sx, sy } = tileToScreen(kind === 'north' ? x : 1, kind === 'north' ? 1 : y, originX, originY);
+        let sprite;
+        let spriteKey;
+        const isRooftopHousing = room.isRooftop && y === 0 && x >= 4 && x <= 14;
+        if (room.isRooftop && !isRooftopHousing) {
+          spriteKey = `rooftop_rail:${kind}:${ds}`;
+          sprite = () => buildGlassBalustradeSegment(kind);
+        } else if (cell === TILE.WINDOW) {
+          spriteKey = `window:${room.id}:${kind}:${wb}:${lightsTag}`;
+          sprite = () => buildWindowSegment(wallColor, sky, kind);
+        } else if (cell === TILE.DOOR) {
+          const doorDef = room.doors.find((d) => d.x === x && d.y === y);
+          if (doorDef?.elevator) {
+            spriteKey = `elevdoor:${room.id}:${kind}:${lightsTag}`;
+            sprite = () => buildElevatorDoorSegment(wallColor, kind);
+          } else if (doorDef?.to === 'rooftop' || room.isRooftop) {
+            spriteKey = `stairdoor:${room.id}:${kind}:${lightsTag}`;
+            sprite = () => buildStairwellDoorSegment(wallColor, kind);
+          } else {
+            spriteKey = `door:${room.id}:${kind}:${lightsTag}`;
+            sprite = () => buildDoorSegment(wallColor, kind);
+          }
+        } else {
+          spriteKey = `wall:${room.id}:${kind}:${lightsTag}`;
+          sprite = () => buildWallSegment(wallColor, kind);
+        }
+        const wallCanvas = bakeSprite(spriteKey, sprite, ds);
+        const dx = Math.round((sx - minX - TILE_W / 2) * ds);
+        const dy = Math.round((sy - minY - WALL_ANCHOR_Y) * ds);
+        g.drawImage(wallCanvas, dx, dy);
+      }
+    }
+    wallLayerCache = { key, canvas: off, minX, minY };
+  }
+  blitDeviceAligned(ctx, wallLayerCache.canvas, wallLayerCache.minX, wallLayerCache.minY, ds);
+}
+
 export function renderRoom(ctx, opts) {
   const {
     room, placedFurniture, entities, hoverTile, ghost, phase,
     width, height, dpr = 1, now = 0, elevatorAnim = null, camera = null, lightsOn = true,
   } = opts;
-
   entityScreenBounds.clear();
 
   const zoom = camera?.zoom ?? 1;
@@ -1962,8 +2219,6 @@ export function renderRoom(ctx, opts) {
 
   drawBackground(ctx, width, height, phase, room.floor || 1, ds, now, room, zoom, camera);
   const { originX, originY } = computeOrigin(room, width, height);
-  // A player-toggled lamp/light item off in their own room dims the floor & walls with
-  // a pleasant night-like tint, independent of the actual time of day.
   const lightsTag = lightsOn ? 'L' : 'D';
   const floorColor = lightsOn ? floorBaseColor(room) : shadeColor(floorBaseColor(room), -0.55);
   const wallColor = lightsOn ? wallBaseColor(room) : shadeColor(wallBaseColor(room), -0.55);
@@ -1982,51 +2237,25 @@ export function renderRoom(ctx, opts) {
   const viewMaxY = Math.max(tl.wy, br.wy) + 80;
 
   // Pass 1: floor tiles (skipping walls, windows, doors, and irregular VOID cutouts)
-  const doorMap = new Map();
-  for (const d of room.doors) {
-    const matKey = d.y === 0 ? `${d.x},1` : `1,${d.y}`;
-    doorMap.set(matKey, d);
-  }
-  const zt = room.zoneTiles;
-  for (let y = 0; y < room.height; y++) {
-    for (let x = 0; x < room.width; x++) {
-      const cell = room.grid[y][x];
-      if (cell === TILE.WALL || cell === TILE.WINDOW || cell === TILE.DOOR || cell === TILE.VOID) continue;
-      const { sx, sy } = tileToScreen(x, y, originX, originY);
-      if (camera && (sx < viewMinX || sx > viewMaxX || sy < viewMinY || sy > viewMaxY)) continue;
-      const variant = (x + y) % 2;
-      const doorDef = doorMap.get(`${x},${y}`);
-      const inZone = zt && x >= zt.x0 && x <= zt.x1 && y >= zt.y0 && y <= zt.y1;
-      const tileCol = inZone ? (zt.color || floorColor) : floorColor;
-      let canvas;
-      if (doorDef?.elevator) {
-        canvas = bakeSprite(`elevtile:${room.id}:${lightsTag}`, () => buildElevatorTile(floorColor), ds);
-      } else if (doorDef) {
-        canvas = bakeSprite(`doortile:${room.id}:${lightsTag}`, () => buildDoorTile(floorColor), ds);
-      } else {
-        let mat = room.floorMaterial || 'default';
-        if (inZone && zt?.material) mat = zt.material;
-        if (room.zones) {
-          const matchZone = room.zones.find((z) => x >= z.x0 && x <= z.x1 && y >= z.y0 && y <= z.y1);
-          if (matchZone?.material) mat = matchZone.material;
-        }
-        canvas = bakeSprite(`floor:${room.id}:${inZone ? 'z' : 'b'}:${mat}:${variant}:${tileCol}:${lightsTag}`, () => buildFloorTile(tileCol, variant, mat), ds);
-      }
-      blitDeviceAligned(ctx, canvas, sx - TILE_W / 2, sy - TILE_H / 2, ds);
-      if (inZone && zt.riser && (x === zt.x0 || y === zt.y0)) {
-        ctx.strokeStyle = 'rgba(255, 248, 224, 0.35)';
-        ctx.lineWidth = 1.2;
-        ctx.beginPath();
-        ctx.moveTo(sx - TILE_W / 2, sy);
-        ctx.lineTo(sx, sy - TILE_H / 2);
-        ctx.lineTo(sx + TILE_W / 2, sy);
-        ctx.stroke();
-      }
+  let doorMap = room._doorMap;
+  if (!doorMap) {
+    doorMap = new Map();
+    for (const d of room.doors) {
+      const matKey = d.y === 0 ? `${d.x},1` : `1,${d.y}`;
+      doorMap.set(matKey, d);
     }
+    room._doorMap = doorMap;
   }
+  // Pass 1: static floor layer (cached offscreen per room/lighting/scale)
+  drawFloorLayerCached(ctx, room, originX, originY, floorColor, lightsTag, ds, doorMap);
 
   // Flat decor (rugs, yoga mats, lap pool tiles) lies on the floor
+  const poolItems = placedFurniture.filter((f) => f.itemId === 'pool_water');
+  if (poolItems.length > 0) {
+    drawPoolWaterLayer(ctx, poolItems, originX, originY, ds, now);
+  }
   for (const f of placedFurniture) {
+    if (f.itemId === 'pool_water') continue;
     const flatItem = getCatalogueItem(f.itemId);
     if (!flatItem?.flat) continue;
     const flatPt = tileToScreen(f.x, f.y, originX, originY);
@@ -2046,44 +2275,8 @@ export function renderRoom(ctx, opts) {
     }
   }
 
-  // Pass 2: walls, windows, doorways & elevator doors
-  for (let y = 0; y < room.height; y++) {
-    for (let x = 0; x < room.width; x++) {
-      const cell = room.grid[y][x];
-      if (cell !== TILE.WALL && cell !== TILE.WINDOW && cell !== TILE.DOOR) continue;
-      if (x === 0 && y === 0) continue;
-      const kind = y === 0 ? 'north' : 'west';
-      const { sx, sy } = tileToScreen(kind === 'north' ? x : 1, kind === 'north' ? 1 : y, originX, originY);
-      if (camera && (sx < viewMinX || sx > viewMaxX || sy < viewMinY || sy > viewMaxY)) continue;
-      let sprite;
-      let key;
-      const isRooftopHousing = room.isRooftop && y === 0 && x >= 4 && x <= 14;
-      if (room.isRooftop && !isRooftopHousing) {
-        key = `rooftop_rail:${kind}:${ds}`;
-        sprite = () => buildGlassBalustradeSegment(kind);
-      } else if (cell === TILE.WINDOW) {
-        key = `window:${room.id}:${kind}:${wb}:${lightsTag}`;
-        sprite = () => buildWindowSegment(wallColor, sky, kind);
-      } else if (cell === TILE.DOOR) {
-        const doorDef = room.doors.find((d) => d.x === x && d.y === y);
-        if (doorDef?.elevator) {
-          key = `elevdoor:${room.id}:${kind}:${lightsTag}`;
-          sprite = () => buildElevatorDoorSegment(wallColor, kind);
-        } else if (doorDef?.to === 'rooftop' || room.isRooftop) {
-          key = `stairdoor:${room.id}:${kind}:${lightsTag}`;
-          sprite = () => buildStairwellDoorSegment(wallColor, kind);
-        } else {
-          key = `door:${room.id}:${kind}:${lightsTag}`;
-          sprite = () => buildDoorSegment(wallColor, kind);
-        }
-      } else {
-        key = `wall:${room.id}:${kind}:${lightsTag}`;
-        sprite = () => buildWallSegment(wallColor, kind);
-      }
-      const wallCanvas = bakeSprite(key, sprite, ds);
-      blitDeviceAligned(ctx, wallCanvas, sx - TILE_W / 2, sy - WALL_ANCHOR_Y, ds);
-    }
-  }
+  // Pass 2: static walls, windows, doorways & elevator doors (cached offscreen per room/lighting/scale)
+  drawWallsLayerCached(ctx, room, originX, originY, wallColor, sky, wb, lightsTag, ds);
 
   // Upper concrete ceiling slab / parapet over the top of the walls
   drawTowerCutawayOverCached(ctx, room, originX, originY, width, height, ds);
@@ -2167,28 +2360,14 @@ export function renderRoom(ctx, opts) {
       roomAmbient?.warmGlow ? (roomAmbient.darkness || 0.35) * 2.2 : 0,
     );
     if (lightStrength > 0.01) {
-      ctx.save();
-      ctx.globalCompositeOperation = 'screen';
-      for (const f of placedFurniture) {
-        const item = getCatalogueItem(f.itemId);
-        if (!item?.emissive) continue;
-        if (item.lightSource && !lightsOn) continue;
-        const ax = f.x + f.footprint.w / 2 - 0.5;
-        const ay = f.y + f.footprint.h / 2 - 0.5;
-        const { sx, sy } = tileToScreen(ax, ay, originX, originY);
-        const rad = item.emissive.radius || 56;
-        const rgb = hexToRgb(item.emissive.color || '#ffd27a');
-        const alpha = Math.min(1, (item.emissive.intensity || 0.36) * lightStrength).toFixed(3);
-        const glow = ctx.createRadialGradient(sx, sy - 10, 4, sx, sy - 4, rad);
-        glow.addColorStop(0, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`);
-        glow.addColorStop(0.55, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${(Number(alpha) * 0.38).toFixed(3)})`);
-        glow.addColorStop(1, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0)`);
-        ctx.fillStyle = glow;
-        ctx.beginPath();
-        ctx.arc(sx, sy - 6, rad, 0, Math.PI * 2);
-        ctx.fill();
+      const lm = getRoomLightMap(room, placedFurniture, originX, originY, lightsOn, ds);
+      if (lm && lm.canvas) {
+        ctx.save();
+        ctx.globalCompositeOperation = 'screen';
+        ctx.globalAlpha = lightStrength;
+        blitDeviceAligned(ctx, lm.canvas, lm.minX, lm.minY, ds);
+        ctx.restore();
       }
-      ctx.restore();
     }
   }
 

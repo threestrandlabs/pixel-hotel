@@ -5,6 +5,97 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 
+## [0.11.2] - 2026-11-13
+
+### Changed (Performance Optimization)
+
+- **Static Geometry Layer Caching (`js/render.js`)**:
+  - Static floor tiles and static walls/windows/doors are now cached into offscreen layer canvases per room, lighting state, and scale (`drawFloorLayerCached` and `drawWallsLayerCached`).
+  - Eliminates over 1,800 individual tile/wall blit calls per frame in large rooms like Restaurant and Pool, reducing floor and wall rendering to 2 single-blit operations.
+- **Pool Water Single-Layer Batching (`js/render.js`)**:
+  - Replaced the costly per-frame redraw and sprite-baking of dozens of individual animated `pool_water` tiles with a cached single-layer offscreen canvas.
+  - The static pool water base is baked once into an offscreen canvas and blitted directly, with a lightweight caustics/shimmer overlay drawn dynamically across the pool boundary, completely eliminating per-tile bake overhead on F5 Pool & Spa.
+- **Precomputed Emissive Light Maps (`js/render.js`)**:
+  - Replaced per-frame dynamic creation and blitting of 70+ radial light gradients across furniture items with cached offscreen room light maps (`getRoomLightMap`).
+  - Precomputes lamp and fixture glows into a cached light layer and applies them in a single screen-blend pass.
+- **Background City Skyline Caching (`js/render.js`)**:
+  - Decoupled background procedural road, vehicle, and building rendering from camera pan/walk movement.
+  - Replaced rapid phase bucket invalidation with a stable day/night phase threshold, eliminating frame spikes during floor walks.
+- **Pathfinding & Allocation Optimization (`js/main.js`, `js/pathfinding.js`)**:
+  - Added precomputed static blocked (`Uint8Array`) and water grids per room, eliminating hundreds of thousands of dynamic `footprintCells` object allocations per second during A* pathfinding.
+  - Throttled NPC pathfinding calculations across frames (at most 1 NPC re-path per 80ms budget window).
+  - Bounded candidate search in `findNearestReachableTile` to 16 reachable candidates.
+- **Frame Pacing & Device Scale (`js/main.js`)**:
+  - Enforced stable 60 fps pacing via `requestAnimationFrame` with a minimum frame interval threshold to eliminate timer jitter.
+  - Capped backing store scale factor on mobile viewports to prevent massive fill-rate overhead while preserving visual crispness.
+  - Preserved 100% visual fidelity verified via automated screenshot comparison (`tests/shot.mjs`).
+
+### Performance Benchmarks
+
+#### Before (v0.11.1 Baseline Profile)
+
+##### Desktop Profile (1200x800, DPR 1, 10s walk per floor)
+
+| Floor | Avg FPS | Avg Frame Time | p95 Frame Time | p99 Frame Time | Frames >33ms | Total Frames |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| Lobby | 57.4 fps | 17.42 ms | 16.80 ms | 33.30 ms | 7 | 574 |
+| Cafe | 57.6 fps | 17.36 ms | 16.80 ms | 16.80 ms | 4 | 576 |
+| Restaurant | 54.9 fps | 18.22 ms | 16.80 ms | 33.40 ms | 8 | 549 |
+| Gym | 57.4 fps | 17.42 ms | 16.80 ms | 16.80 ms | 4 | 574 |
+| F5 Pool & Spa | 55.8 fps | 17.91 ms | 16.80 ms | 33.30 ms | 9 | 559 |
+| Arcade | 57.3 fps | 17.46 ms | 16.80 ms | 16.80 ms | 4 | 573 |
+| Library | 57.3 fps | 17.45 ms | 16.80 ms | 16.80 ms | 4 | 574 |
+| Sky Garden | 57.1 fps | 17.53 ms | 16.70 ms | 16.80 ms | 4 | 571 |
+| My Room | 57.3 fps | 17.45 ms | 16.70 ms | 16.80 ms | 4 | 574 |
+| Rooftop | 54.2 fps | 18.45 ms | 16.80 ms | 16.80 ms | 5 | 542 |
+
+##### Mobile Profile (390x844, DPR 2, 10s walk per floor)
+
+| Floor | Avg FPS | Avg Frame Time | p95 Frame Time | p99 Frame Time | Frames >33ms | Total Frames |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| Lobby | 55.3 fps | 18.09 ms | 16.80 ms | 16.80 ms | 4 | 553 |
+| Cafe | 55.4 fps | 18.05 ms | 16.80 ms | 33.40 ms | 6 | 554 |
+| Restaurant | 44.7 fps | 22.39 ms | 16.80 ms | 366.60 ms | 15 | 447 |
+| Gym | 52.5 fps | 19.04 ms | 16.80 ms | 150.00 ms | 8 | 526 |
+| F5 Pool & Spa | 48.9 fps | 20.46 ms | 16.80 ms | 33.30 ms | 10 | 504 |
+| Arcade | 51.6 fps | 19.37 ms | 16.80 ms | 166.70 ms | 9 | 517 |
+| Library | 54.7 fps | 18.27 ms | 16.80 ms | 33.30 ms | 6 | 548 |
+| Sky Garden | 56.0 fps | 17.87 ms | 16.80 ms | 16.80 ms | 4 | 560 |
+| My Room | 55.8 fps | 17.93 ms | 16.80 ms | 16.80 ms | 4 | 558 |
+| Rooftop | 52.4 fps | 19.09 ms | 16.80 ms | 16.80 ms | 5 | 524 |
+
+#### After (v0.11.2 Optimized Profile)
+
+##### Desktop Profile (1200x800, DPR 1, 10s walk per floor)
+
+| Floor | Avg FPS | Avg Frame Time | p95 Frame Time | p99 Frame Time | Frames >33ms | Total Frames |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| Lobby | 60.0 fps | 16.67 ms | 16.70 ms | 16.80 ms | 0 | 601 |
+| Cafe | 58.8 fps | 17.01 ms | 16.80 ms | 16.80 ms | 2 | 589 |
+| Restaurant | 59.2 fps | 16.89 ms | 16.80 ms | 16.80 ms | 4 | 593 |
+| Gym | 60.0 fps | 16.67 ms | 16.80 ms | 16.80 ms | 0 | 601 |
+| F5 Pool & Spa | 59.2 fps | 16.89 ms | 16.70 ms | 16.80 ms | 2 | 593 |
+| Arcade | 59.4 fps | 16.83 ms | 16.70 ms | 16.80 ms | 1 | 595 |
+| Library | 58.8 fps | 17.01 ms | 16.70 ms | 16.80 ms | 5 | 589 |
+| Sky Garden | 60.0 fps | 16.67 ms | 16.70 ms | 16.80 ms | 0 | 601 |
+| My Room | 59.4 fps | 16.83 ms | 16.70 ms | 16.80 ms | 1 | 595 |
+| Rooftop | 58.2 fps | 17.18 ms | 16.80 ms | 16.80 ms | 4 | 583 |
+
+##### Mobile Profile (390x844, DPR 2, 10s walk per floor)
+
+| Floor | Avg FPS | Avg Frame Time | p95 Frame Time | p99 Frame Time | Frames >33ms | Total Frames |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| Lobby | 60.0 fps | 16.67 ms | 16.80 ms | 16.80 ms | 0 | 601 |
+| Cafe | 60.0 fps | 16.67 ms | 16.70 ms | 16.80 ms | 0 | 601 |
+| Restaurant | 57.9 fps | 17.27 ms | 16.80 ms | 33.40 ms | 11 | 580 |
+| Gym | 59.5 fps | 16.81 ms | 16.70 ms | 16.80 ms | 3 | 596 |
+| F5 Pool & Spa | 59.4 fps | 16.83 ms | 16.80 ms | 16.80 ms | 3 | 595 |
+| Arcade | 58.7 fps | 17.03 ms | 16.70 ms | 16.80 ms | 3 | 588 |
+| Library | 59.4 fps | 16.83 ms | 16.70 ms | 16.80 ms | 3 | 595 |
+| Sky Garden | 59.9 fps | 16.69 ms | 16.80 ms | 16.80 ms | 1 | 600 |
+| My Room | 60.0 fps | 16.67 ms | 16.70 ms | 16.80 ms | 0 | 601 |
+| Rooftop | 58.9 fps | 16.98 ms | 16.80 ms | 16.80 ms | 4 | 590 |
+
 ## [0.11.1] - 2026-11-13
 
 #### Added

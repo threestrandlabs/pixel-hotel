@@ -149,7 +149,9 @@ function updateZoomLabel() {
 
 function syncCanvasSize() {
   const rect = canvas.getBoundingClientRect();
-  const dpr = Math.max(1, window.devicePixelRatio || 1);
+  // Capped so 3x phones don't pay for a backing buffer with 2.25x the pixels
+  // of a 2x phone — indistinguishable on a small screen, but much cheaper to fill.
+  const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
   const cssW = Math.max(1, Math.round(rect.width || 960));
   const cssH = Math.max(1, Math.round(rect.height || 600));
   const targetW = Math.max(1, Math.round((rect.width || 960) * dpr));
@@ -278,16 +280,95 @@ function furnitureAt(room, roomRuntime, x, y) {
   return null;
 }
 
-function isWaterTile(room, roomRuntime, x, y) {
-  if (!roomRuntime || !Array.isArray(roomRuntime.placed)) return false;
-  for (const p of roomRuntime.placed) {
+function getWaterGrid(room, roomRuntime) {
+  const version = roomRuntime.placed?.length || 0;
+  if (roomRuntime._waterGrid && roomRuntime._waterGridVersion === version) {
+    return roomRuntime._waterGrid;
+  }
+  const W = room.width;
+  const H = room.height;
+  const grid = new Uint8Array(W * H);
+  for (const p of (roomRuntime.placed || [])) {
     if (p.itemId === 'pool_water') {
       const item = getCatalogueItem(p.itemId);
-      const cells = footprintCells(p.x, p.y, item.footprint, p.rot || 0);
-      if (cells.some((c) => c.x === x && c.y === y)) return true;
+      const fp = rotatedFootprint(item.footprint, p.rot || 0);
+      for (let dy = 0; dy < fp.h; dy++) {
+        for (let dx = 0; dx < fp.w; dx++) {
+          const gx = p.x + dx;
+          const gy = p.y + dy;
+          if (gx >= 0 && gx < W && gy >= 0 && gy < H) grid[gy * W + gx] = 1;
+        }
+      }
     }
   }
-  return false;
+  roomRuntime._waterGridVersion = version;
+  roomRuntime._waterGrid = grid;
+  return grid;
+}
+
+function isWaterTile(room, roomRuntime, x, y) {
+  if (!roomRuntime || !roomRuntime.placed) return false;
+  if (x < 0 || y < 0 || x >= room.width || y >= room.height) return false;
+  return getWaterGrid(room, roomRuntime)[y * room.width + x] === 1;
+}
+
+function getStaticBlockedGrid(room, roomRuntime, isPlayerWithSwimsuit = true) {
+  const version = (roomRuntime.placed?.length || 0) + (isPlayerWithSwimsuit ? 1000 : 0);
+  if (roomRuntime._staticBlocked && roomRuntime._staticBlockedVersion === version) {
+    return roomRuntime._staticBlocked;
+  }
+  const W = room.width;
+  const H = room.height;
+  const grid = new Uint8Array(W * H);
+
+  // 1. Room grid walls/windows/void
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const cell = room.grid[y][x];
+      if (cell === TILE.WALL || cell === TILE.WINDOW || cell === TILE.VOID) {
+        grid[y * W + x] = 1;
+      }
+    }
+  }
+
+  // 2. Elevator doors
+  for (const d of room.doors) {
+    if (d.elevator) {
+      grid[d.y * W + d.x] = 1;
+    }
+  }
+
+  // 3. Placed furniture
+  for (const p of (roomRuntime.placed || [])) {
+    const item = getCatalogueItem(p.itemId);
+    if (!item) continue;
+    if (p.itemId === 'pool_water') {
+      if (!isPlayerWithSwimsuit) {
+        const fp = rotatedFootprint(item.footprint, p.rot || 0);
+        for (let dy = 0; dy < fp.h; dy++) {
+          for (let dx = 0; dx < fp.w; dx++) {
+            const gx = p.x + dx;
+            const gy = p.y + dy;
+            if (gx >= 0 && gx < W && gy >= 0 && gy < H) grid[gy * W + gx] = 1;
+          }
+        }
+      }
+      continue;
+    }
+    if (item.flat || item.seat || item.interaction === 'treadmill') continue;
+    const fp = rotatedFootprint(item.footprint, p.rot || 0);
+    for (let dy = 0; dy < fp.h; dy++) {
+      for (let dx = 0; dx < fp.w; dx++) {
+        const gx = p.x + dx;
+        const gy = p.y + dy;
+        if (gx >= 0 && gx < W && gy >= 0 && gy < H) grid[gy * W + gx] = 1;
+      }
+    }
+  }
+
+  roomRuntime._staticBlockedVersion = version;
+  roomRuntime._staticBlocked = grid;
+  return grid;
 }
 
 function interactiveFurnitureAt(room, roomRuntime, x, y) {
@@ -331,19 +412,20 @@ function reservedTilesExcluding(excludeKind, excludeId) {
 }
 
 function isBlockedFactory(room, roomRuntime, occupantTiles, isPlayer = false) {
+  const isPlayerWithSwimsuit = isPlayer ? (state.player.outfit === 'swimsuit') : true;
+  const staticGrid = getStaticBlockedGrid(room, roomRuntime, isPlayerWithSwimsuit);
+  const W = room.width;
+  const H = room.height;
+  const occ = (occupantTiles && occupantTiles.length > 0) ? occupantTiles : null;
+
   return (x, y) => {
-    const cell = room.grid[y][x];
-    if (cell === TILE.WALL || cell === TILE.WINDOW || cell === TILE.VOID) return true;
-    // Elevator doors open the floor-directory modal from the doormat tile in front of them
-    // (see onPlayerArrive) — the avatar never walks into the elevator car itself.
-    if (cell === TILE.DOOR && room.doors.find((d) => d.x === x && d.y === y)?.elevator) return true;
-    if (isPlayer && state.player.outfit !== 'swimsuit' && isWaterTile(room, roomRuntime, x, y)) return true;
-    const furn = furnitureAt(room, roomRuntime, x, y);
-    if (furn) {
-      const item = getCatalogueItem(furn.itemId);
-      if (!item.seat && item.interaction !== 'treadmill') return true;
+    if (x < 0 || y < 0 || x >= W || y >= H) return true;
+    if (staticGrid[y * W + x]) return true;
+    if (occ) {
+      for (let i = 0; i < occ.length; i++) {
+        if (occ[i].x === x && occ[i].y === y) return true;
+      }
     }
-    if (occupantTiles.some((o) => o.x === x && o.y === y)) return true;
     return false;
   };
 }
@@ -1127,12 +1209,17 @@ function routineStepFor(npc, room, roomRuntime, now) {
   return findWanderTarget(npc, room.width, room.height, blocked);
 }
 
+let lastNpcPathTime = 0;
+
 function tickNpcs(now) {
   for (const n of npcRuntimes) {
     if (n.room !== state.player.room) continue;
     const room = ROOMS[n.room];
     const roomRuntime = state.rooms[n.room];
-    const liveBlocked = isBlockedFactory(room, roomRuntime, occupantTilesExcluding('npc', n.id));
+    const isStepping = n.walking && (now - (n.stepStart || 0) >= (n.stepDuration || STEP_MS));
+    const liveBlocked = isStepping
+      ? isBlockedFactory(room, roomRuntime, occupantTilesExcluding('npc', n.id))
+      : null;
     advanceMover(n, now, {
       width: room.width, height: room.height, isBlocked: liveBlocked, stepMs: STEP_MS,
       onArrive: () => {
@@ -1144,7 +1231,14 @@ function tickNpcs(now) {
       },
     });
     tickNpc(n, now, {
-      tryWander: (npc) => routineStepFor(npc, room, roomRuntime, now),
+      tryWander: (npc) => {
+        if (now - lastNpcPathTime < 80) {
+          npc.nextWanderAt = now + 120 + Math.random() * 100;
+          return null;
+        }
+        lastNpcPathTime = now;
+        return routineStepFor(npc, room, roomRuntime, now);
+      },
       pickAmbientLine: (npc) => pickRandom(npc.def.ambientLines),
     });
   }
@@ -1244,10 +1338,31 @@ function buildEntities(now = performance.now()) {
 }
 
 function placedFurnitureWithFootprint(roomRuntime) {
-  return roomRuntime.placed.map((p) => ({ ...p, footprint: rotatedFootprint(getCatalogueItem(p.itemId).footprint, p.rot) }));
+  if (roomRuntime._placedWithFp && roomRuntime._placedVersion === roomRuntime.placed.length) {
+    return roomRuntime._placedWithFp;
+  }
+  roomRuntime._placedVersion = roomRuntime.placed.length;
+  roomRuntime._placedWithFp = roomRuntime.placed.map((p) => ({
+    ...p,
+    footprint: rotatedFootprint(getCatalogueItem(p.itemId).footprint, p.rot),
+  }));
+  return roomRuntime._placedWithFp;
 }
 
+// Caps the render loop to ~60fps regardless of display refresh rate (some
+// mobile/desktop displays run rAF at 90-144Hz), so frame pacing stays steady
+// and we don't burn battery/CPU re-rendering faster than the game needs.
+// Set to 12ms (~75-80Hz threshold) so 90/120/144Hz displays cap to 60fps,
+// while natural 60Hz timer jitter (14-18ms) never accidentally drops a frame.
+const MIN_FRAME_INTERVAL_MS = 12;
+let lastFrameAt = 0;
+
 function frame(now) {
+  if (lastFrameAt && (now - lastFrameAt < MIN_FRAME_INTERVAL_MS)) {
+    requestAnimationFrame(frame);
+    return;
+  }
+  lastFrameAt = now;
   if (ui.startTime === null) ui.startTime = now;
   syncCanvasSize();
   tickNpcs(now);
@@ -1260,11 +1375,6 @@ function frame(now) {
     const target = state.settings.followCamera
       ? centerCameraOnTile(player.renderX, player.renderY, room0, ui.cssW, ui.cssH, ui.camera.zoom)
       : deadzoneCameraTarget(player.renderX, player.renderY, room0, ui.cssW, ui.cssH, ui.camera);
-    // Snapping the shared camera pan to whole device pixels (rather than letting
-    // it drift sub-pixel) keeps every sprite's `blitDeviceAligned` rounding
-    // consistent relative to each other frame-to-frame, which is what actually
-    // stops the 1px shimmer/wobble between furniture, floor and characters
-    // while the camera eases toward the walking player.
     const dpr = ui.dpr || 1;
     ui.camera.panX = Math.round((ui.camera.panX + (target.panX - ui.camera.panX) * 0.18) * dpr) / dpr;
     ui.camera.panY = Math.round((ui.camera.panY + (target.panY - ui.camera.panY) * 0.18) * dpr) / dpr;
@@ -2467,7 +2577,7 @@ window.__pixelHotel = Object.assign(window.__pixelHotel || {}, {
     refreshAudioUi();
   }, // 0.5 noon, 0 midnight
   getSaveVersion: () => SAVE_VERSION,
-  getVersion: () => '0.11.1',
+  getVersion: () => '0.11.2',
   getRemoteMultiplayer: () => getRemoteMultiplayerEntities(performance.now()),
   walkTo: (x, y) => tryWalkPlayer(x, y),
   openAvatarCreator: () => openAvatarModal(),
@@ -2483,6 +2593,7 @@ window.__pixelHotel = Object.assign(window.__pixelHotel || {}, {
     const matches = roomRuntime.placed.filter(
       (p) => p.instanceId === itemIdOrInstanceId || p.itemId === itemIdOrInstanceId,
     );
+    matches.sort((a, b) => Math.hypot(a.x - player.x, a.y - player.y) - Math.hypot(b.x - player.x, b.y - player.y));
     for (const placed of matches) {
       if (tryInteractPlayer(placed, immediate)) return true;
     }

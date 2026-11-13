@@ -330,7 +330,9 @@ export function findNearestReachableTile(width, height, isBlocked, start, target
   }
   candidates.sort((a, b) => a.score - b.score);
 
-  for (const c of candidates) {
+  const limit = Math.min(candidates.length, 16);
+  for (let i = 0; i < limit; i++) {
+    const c = candidates[i];
     const path = findPath(width, height, isBlocked, start, { x: c.x, y: c.y }, options);
     if (path) return { tile: { x: c.x, y: c.y }, path };
   }
@@ -438,9 +440,11 @@ export function retargetMover(mover, tx, ty, now, { width, height, isBlocked, st
  * at tile boundaries if the next step becomes blocked by a moving NPC or placed item.
  */
 export function advanceMover(mover, now, { width, height, isBlocked, stepMs = 240, onStep, onArrive, onReplan } = {}) {
-  if (!mover.walking || !mover.path) {
-    mover.renderX = mover.x;
-    mover.renderY = mover.y;
+  if (!mover || !mover.walking || !mover.path) {
+    if (mover) {
+      mover.renderX = mover.x;
+      mover.renderY = mover.y;
+    }
     return;
   }
 
