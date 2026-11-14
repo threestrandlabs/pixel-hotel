@@ -13,6 +13,7 @@
     <div id="brand">🏨 Pixel Hotel</div>
     <div id="roomName">Floor 1 — Grand Lobby</div>
     <div id="coinsDisplay">💰 <span id="coinsValue">0</span></div>
+    <div id="weatherBadge" class="weather-badge" title="Current weather">☀️</div>
     <div id="topQuickButtons">
       <button id="btnMute" class="pixel-btn" title="Audio Mixer &amp; Settings">🎚️</button>
       <button id="btnHelp" class="pixel-btn" title="Help (H)">❓</button>
@@ -281,6 +282,12 @@
         <div class="audio-channel-header">
           <label for="btnBgDetail">🏙️ Background Detail</label>
           <button id="btnBgDetail" class="pixel-btn" title="Toggle Background Detail: Auto / High / Low">Auto</button>
+        </div>
+      </div>
+      <div class="audio-channel">
+        <div class="audio-channel-header">
+          <label for="btnWeatherEffectsToggle">🌦️ Weather Effects</label>
+          <button id="btnWeatherEffectsToggle" class="pixel-btn">On</button>
         </div>
       </div>
     </div>
@@ -582,6 +589,21 @@
           <button id="btnSaveAvatar" class="pixel-btn pixel-btn-primary" style="background: #38b068; color: #fff; font-weight: bold;">💾 Save &amp; Wear</button>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- v0.12.0 Sky Viewing Platform modal: full-screen procedural city skyline -->
+  <div id="skyViewerModal" class="overlay sky-viewer-overlay hidden">
+    <div class="sky-viewer-box">
+      <div class="sky-viewer-header">
+        <h2 id="skyViewerTitle">🔭 Skyline Viewer</h2>
+        <span id="skyViewerWeatherLabel" class="sky-viewer-weather"></span>
+        <button class="panel-close" id="btnSkyViewerClose" data-close="skyViewerModal">✕</button>
+      </div>
+      <div class="sky-viewer-canvas-wrap">
+        <canvas id="skyViewerCanvas"></canvas>
+      </div>
+      <p class="sky-viewer-hint">Drag or use ◄ ► arrow keys to pan the view. Esc to close.</p>
     </div>
   </div>
 

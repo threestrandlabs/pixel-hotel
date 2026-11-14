@@ -46,6 +46,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | F5 Pool & Spa | 34.9 fps | 28.64 ms | 33.40 ms | 99.90 ms |
 | Rooftop | 35.0 fps | 28.57 ms | 33.40 ms | 50.10 ms |
 
+## [0.12.2] - 2026-11-14
+
+### Added
+
+- **Sky Viewing Platforms (`js/viewer.js`, `js/data.js`, `js/sprites.js`, `js/render.js`, `index.html`, `css/style.css`)**:
+  - 4 coin-operated binocular/telescope viewers (`sky_viewer_nyc`, `sky_viewer_singapore`, `sky_viewer_tokyo`, `sky_viewer_paris`), each on its own small raised dais, aimed outward in a different direction, placed around the Rooftop (F42) railings plus one in the Sky Garden.
+  - Walking up and using (tapping on touch) a viewer opens a full-screen "Skyline Viewer" modal (`#skyViewerModal`) with a procedurally drawn, original isometric/pixel-art city skyline rendered on canvas (no external images): New York Skyline (dense art-deco/glass tower grid, a tall spire landmark, rooftop water towers, yellow cabs, a river bridge, a park), Singapore Marina (waterfront shophouses, three-tower hotel with a sky deck, supertree garden, boats), Tokyo Lights (neon signage, dense towers, a red-and-white lattice tower), Paris Rooftops (low cream mansard-roof buildings, a lattice iron tower).
+  - Drag or arrow-key panning with gentle parallax, ambient animation (traffic, blinking lights/neon, birds, boats), Esc to close.
+  - Default procedural city background behind the hotel tower (`js/render.js`) also gets NYC touches: an art-deco setback/ziggurat rooftop style and rooftop water towers mixed into the existing building generation (yellow taxis already existed in the vehicle layer).
+- **Deterministic Weather & Time of Day (`js/weather.js`)**:
+  - Weather (clear, cloudy, rain, thunderstorm with occasional lightning flash, fog, rare snow) is seeded by the real Asia/Singapore date and 3-hour block (`getWeatherState`), so it's randomised but consistent for every player/render within the same block.
+  - Time-of-day sky palette (dawn/day/sunset/night, with lit windows and stars at night) follows real local time (`timeOfDayForHour`, `skyPaletteForTimeOfDay`).
+  - Applied to the city viewer skylines, and as a light, capped-particle overlay on outdoor floors (Rooftop, Sky Garden terrace, and the city visible behind the tower from those floors).
+  - HUD weather icon badge (`#weatherBadge`) and a Settings toggle to turn weather effects off (`#btnWeatherEffectsToggle`, persisted in `state.settings.weatherEffects`).
+
+### Fixed
+
+- Resolved the merge between the paused v0.12.0 sky-viewer/weather work and the v0.12.1 performance rework (layered background, CSS camera transform, DPR cap, adaptive quality) — all v0.12.1 perf architecture is retained.
+
+### Tests
+
+- `tests/weather.unit.test.mjs`: deterministic weather picker (same input → same weather, all 6 types reachable, snow rare), time-of-day sky mapping, sky-viewer catalogue/seed-furniture wiring, and skyline/weather-overlay rendering smoke coverage for every city and weather type.
+- `tests/smoke.spec.mjs`: opens a sky viewer modal on desktop (click) and on a 390x844 touch viewport (tap), and closes it on both.
 
 ## [0.12.1] - 2026-11-14
 

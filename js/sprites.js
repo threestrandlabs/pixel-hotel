@@ -2793,6 +2793,83 @@ export function buildGumballTrophySprite(rot = 0) {
   });
 }
 
+// ---------- v0.12.0 Sky viewing platforms & open-edge railings ----------
+
+// Coin-operated binocular/telescope sky viewer on its own small raised dais.
+// `rot` picks which way the barrels point (0 down/south, 1 right/east,
+// 2 up/north, 3 left/west) so it can be aimed outward on any railing edge.
+export function buildSkyViewerSprite(rot = 0) {
+  const r = ((rot % 4) + 4) % 4;
+  const STONE = ['#9199a6', '#727886', '#525864'];
+  const STONE_LT = ['#b2b8c4', '#9199a6', '#727886'];
+  const RED = ['#d94a56', '#ad3440', '#7c222a'];
+  const RED_DK = ['#ad3440', '#7c222a', '#551017'];
+  const CHROME = ['#e4eaf2', '#b4c0cc', '#7e8a98'];
+  const LENS = ['#303b46', '#1c232c', '#0e1216'];
+  const BRASS = ['#f6c667', '#d8a442', '#a07424'];
+
+  return isoSprite(1, 1, 54, (box) => {
+    // Small 2-step raised platform/dais
+    box(0.02, 0.02, 0.98, 0.98, 0, 3, ...STONE);
+    box(0.13, 0.13, 0.87, 0.87, 3, 6, ...STONE_LT);
+
+    // Coin-op cabinet column
+    box(0.34, 0.34, 0.66, 0.66, 6, 10, ...RED_DK);
+    box(0.34, 0.34, 0.66, 0.66, 10, 30, ...RED);
+    // Brass coin-slot plaque
+    box(0.40, 0.33, 0.60, 0.40, 16, 22, ...BRASS);
+    box(0.47, 0.345, 0.53, 0.355, 17, 20, '#2a1d14', '#2a1d14', '#2a1d14');
+
+    // Swivel mount
+    box(0.30, 0.30, 0.70, 0.70, 30, 36, ...CHROME);
+
+    const barrel = (u0, v0, u1, v1) => box(u0, v0, u1, v1, 36, 48, ...CHROME);
+    const lens = (u0, v0, u1, v1) => box(u0, v0, u1, v1, 40, 48, ...LENS);
+    const eyepiece = (u0, v0, u1, v1) => box(u0, v0, u1, v1, 38, 44, ...BRASS);
+
+    if (r === 0) { // facing south (+v): objective south, eyepiece north
+      barrel(0.32, 0.36, 0.46, 0.90); barrel(0.54, 0.36, 0.68, 0.90);
+      lens(0.32, 0.84, 0.46, 0.98); lens(0.54, 0.84, 0.68, 0.98);
+      eyepiece(0.32, 0.02, 0.46, 0.14); eyepiece(0.54, 0.02, 0.68, 0.14);
+    } else if (r === 2) { // facing north (-v)
+      barrel(0.32, 0.10, 0.46, 0.64); barrel(0.54, 0.10, 0.68, 0.64);
+      lens(0.32, 0.02, 0.46, 0.16); lens(0.54, 0.02, 0.68, 0.16);
+      eyepiece(0.32, 0.86, 0.46, 0.98); eyepiece(0.54, 0.86, 0.68, 0.98);
+    } else if (r === 1) { // facing east (+u)
+      barrel(0.36, 0.32, 0.90, 0.46); barrel(0.36, 0.54, 0.90, 0.68);
+      lens(0.84, 0.32, 0.98, 0.46); lens(0.84, 0.54, 0.98, 0.68);
+      eyepiece(0.02, 0.32, 0.14, 0.46); eyepiece(0.02, 0.54, 0.14, 0.68);
+    } else { // facing west (-u)
+      barrel(0.10, 0.32, 0.64, 0.46); barrel(0.10, 0.54, 0.64, 0.68);
+      lens(0.02, 0.32, 0.16, 0.46); lens(0.02, 0.54, 0.16, 0.68);
+      eyepiece(0.86, 0.32, 0.98, 0.46); eyepiece(0.86, 0.54, 0.98, 0.68);
+    }
+  });
+}
+
+// Low glass-and-chrome safety railing that tiles seamlessly along an open
+// floor edge; `edge` picks which far side of the tile it hugs.
+export function buildEdgeRailSegment(edge = 'south') {
+  const METAL = ['#c2ccd6', '#8fa0b0', '#55626f'];
+  const GLASS = ['#a0d8f2', '#6fb6dd', '#3f7f9f'];
+  const t = 0.09;
+  return isoSprite(1, 1, 30, (box) => {
+    if (edge === 'east') {
+      box(1 - t, 0, 1, 1, 0, 3, ...METAL);
+      box(1 - t * 0.7, 0.04, 1 - t * 0.25, 0.22, 3, 24, ...METAL);
+      box(1 - t * 0.7, 0.78, 1 - t * 0.25, 0.96, 3, 24, ...METAL);
+      box(1 - t, 0.06, 1 - t * 0.3, 0.94, 3, 22, ...GLASS);
+      box(1 - t, 0, 1, 1, 24, 27, ...METAL);
+    } else {
+      box(0, 1 - t, 1, 1, 0, 3, ...METAL);
+      box(0.04, 1 - t * 0.7, 0.22, 1 - t * 0.25, 3, 24, ...METAL);
+      box(0.78, 1 - t * 0.7, 0.96, 1 - t * 0.25, 3, 24, ...METAL);
+      box(0.06, 1 - t, 0.94, 1 - t * 0.3, 3, 22, ...GLASS);
+      box(0, 1 - t, 1, 1, 24, 27, ...METAL);
+    }
+  });
+}
+
 export const FURNITURE_BUILDERS = {
   stool: (rot, layer) => buildStoolSprite(rot),
   sofa: (rot, layer) => buildSofaSprite('#e2607a', rot, layer),
@@ -2887,6 +2964,8 @@ export const FURNITURE_BUILDERS = {
   // v0.9.1 Gumball collection trophy
   gumballTrophy: (rot) => buildGumballTrophySprite(rot),
   wardrobe: (rot) => buildWardrobeSprite(rot),
+  // v0.12.0 Sky viewing platforms
+  skyViewer: (rot) => buildSkyViewerSprite(rot),
 };
 
 export function buildWardrobeSprite(rot = 0) {
