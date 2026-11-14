@@ -704,6 +704,236 @@ export function isoSprite(tw, th, height, draw) {
   return out;
 }
 
+// ---------- Reusable Texture & Material Helpers (2x Detail Pass) ----------
+
+export function planks(box, u0, v0, u1, v1, z0, z1, opts = {}) {
+  const dir = opts.dir || ((u1 - u0 >= v1 - v0) ? 'v' : 'u');
+  const count = opts.count || 3;
+  const gap = opts.gap !== undefined ? opts.gap : 0.025;
+  const wood = opts.wood || WOOD;
+  const top = Array.isArray(wood) ? wood[0] : wood;
+  const left = Array.isArray(wood) ? wood[1] : shade(top, -0.15);
+  const right = Array.isArray(wood) ? wood[2] : shade(top, -0.28);
+  const boltColor = opts.boltColor || ['#d8dbe2', '#9ea4b0', '#6b7280'];
+
+  if (dir === 'u') {
+    const span = u1 - u0;
+    const plankW = (span - gap * (count - 1)) / count;
+    for (let i = 0; i < count; i++) {
+      const pu0 = u0 + i * (plankW + gap);
+      const pu1 = pu0 + plankW;
+      const t = i % 2 === 0 ? top : shade(top, -0.06);
+      const l = i % 2 === 0 ? left : shade(left, -0.06);
+      const r = i % 2 === 0 ? right : shade(right, -0.06);
+      box(pu0, v0, pu1, v1, z0, z1, t, l, r);
+      if (opts.grainDetail) {
+        grain(box, pu0, v0, pu1, v1, z1, { dir: 'v', wood: t });
+      }
+      if (opts.bolts) {
+        const bz = z1;
+        const bRad = Math.min(plankW * 0.25, 0.03);
+        const bx = (pu0 + pu1) / 2;
+        box(bx - bRad, v0 + 0.04, bx + bRad, v0 + 0.04 + bRad * 2, bz, bz + 0.8, ...boltColor);
+        box(bx - bRad, v1 - 0.04 - bRad * 2, bx + bRad, v1 - 0.04, bz, bz + 0.8, ...boltColor);
+      }
+    }
+  } else {
+    const span = v1 - v0;
+    const plankH = (span - gap * (count - 1)) / count;
+    for (let i = 0; i < count; i++) {
+      const pv0 = v0 + i * (plankH + gap);
+      const pv1 = pv0 + plankH;
+      const t = i % 2 === 0 ? top : shade(top, -0.06);
+      const l = i % 2 === 0 ? left : shade(left, -0.06);
+      const r = i % 2 === 0 ? right : shade(right, -0.06);
+      box(u0, pv0, u1, pv1, z0, z1, t, l, r);
+      if (opts.grainDetail) {
+        grain(box, u0, pv0, u1, pv1, z1, { dir: 'u', wood: t });
+      }
+      if (opts.bolts) {
+        const bz = z1;
+        const bRad = Math.min(plankH * 0.25, 0.03);
+        const by = (pv0 + pv1) / 2;
+        box(u0 + 0.04, by - bRad, u0 + 0.04 + bRad * 2, by + bRad, bz, bz + 0.8, ...boltColor);
+        box(u1 - 0.04 - bRad * 2, by - bRad, u1 - 0.04, by + bRad, bz, bz + 0.8, ...boltColor);
+      }
+    }
+  }
+}
+
+export function grain(box, u0, v0, u1, v1, z, opts = {}) {
+  const dir = opts.dir || ((u1 - u0 >= v1 - v0) ? 'u' : 'v');
+  const base = opts.wood || '#c98f55';
+  const light = shade(base, 0.16);
+  const dark = shade(base, -0.16);
+  const z0 = z;
+  const z1 = z + 0.2;
+
+  if (dir === 'u') {
+    const spanV = v1 - v0;
+    for (const f of [0.22, 0.48, 0.76]) {
+      const gv0 = v0 + spanV * f;
+      const gv1 = gv0 + Math.max(0.015, spanV * 0.05);
+      const col = f === 0.48 ? dark : light;
+      box(u0 + 0.02, gv0, u1 - 0.02, gv1, z0, z1, col, col, shade(col, -0.1));
+    }
+  } else {
+    const spanU = u1 - u0;
+    for (const f of [0.22, 0.48, 0.76]) {
+      const gu0 = u0 + spanU * f;
+      const gu1 = gu0 + Math.max(0.015, spanU * 0.05);
+      const col = f === 0.48 ? dark : light;
+      box(gu0, v0 + 0.02, gu1, v1 - 0.02, z0, z1, col, col, shade(col, -0.1));
+    }
+  }
+}
+
+export function leafCluster(box, cx, cy, cz, rx, ry, rz, opts = {}) {
+  const SHADOW = opts.shadow || '#1a4e22';
+  const DARK = opts.dark || '#267332';
+  const MID = opts.mid || '#3aa84f';
+  const LIGHT = opts.light || '#5cd470';
+  const BRIGHT = opts.bright || '#88f09c';
+
+  // Base core shadow mass
+  box(cx - rx * 0.85, cy - ry * 0.85, cx + rx * 0.85, cy + ry * 0.85, cz - rz * 0.6, cz + rz * 0.6, MID, DARK, SHADOW);
+
+  // Sub-clumps with varied offsets creating bumpy, leafy silhouette
+  const clumps = [
+    [-0.35, -0.35, 0.25, 0.6, [BRIGHT, LIGHT, MID]],
+    [-0.2, 0.2, 0.1, 0.55, [LIGHT, MID, DARK]],
+    [0.2, -0.25, 0.15, 0.55, [LIGHT, MID, DARK]],
+    [0.3, 0.3, -0.1, 0.6, [MID, DARK, SHADOW]],
+    [0, 0, 0.45, 0.5, [BRIGHT, LIGHT, MID]],
+    [-0.45, 0.05, -0.15, 0.45, [MID, DARK, SHADOW]],
+    [0.1, 0.45, -0.15, 0.45, [DARK, SHADOW, SHADOW]],
+  ];
+
+  for (const [dx, dy, dz, sMul, cols] of clumps) {
+    const kx = cx + dx * rx;
+    const ky = cy + dy * ry;
+    const kz = cz + dz * rz;
+    const krx = rx * sMul;
+    const kry = ry * sMul;
+    const krz = rz * sMul;
+    box(kx - krx, ky - kry, kx + krx, ky + kry, Math.max(0, kz - krz), kz + krz, cols[0], cols[1], cols[2]);
+  }
+
+  // Small individual leaf tip jaggies protruding
+  const leafTips = [
+    [cx - rx * 0.95, cy - ry * 0.1, cz + rz * 0.1, LIGHT],
+    [cx - ry * 0.1, cy - ry * 0.95, cz + rz * 0.2, BRIGHT],
+    [cx + rx * 0.85, cy + ry * 0.2, cz - rz * 0.2, DARK],
+    [cx + rx * 0.2, cy + ry * 0.85, cz - rz * 0.1, DARK],
+  ];
+  for (const [lx, ly, lz, col] of leafTips) {
+    box(lx - 0.04, ly - 0.04, lx + 0.04, ly + 0.04, lz, lz + 2, col, shade(col, -0.15), shade(col, -0.3));
+  }
+
+  // Optional flower clusters (e.g. blue hydrangea or orange marigold or pink sakura)
+  if (opts.flowers) {
+    const flw = Array.isArray(opts.flowers) ? opts.flowers : [opts.flowers];
+    for (const f of flw) {
+      const fCol = f.color || '#ff8fb0';
+      const fMid = shade(fCol, -0.15);
+      const fDark = shade(fCol, -0.3);
+      const fx = cx + (f.x || 0) * rx;
+      const fy = cy + (f.y || 0) * ry;
+      const fz = cz + (f.z || 0.3) * rz;
+      box(fx - 0.04, fy - 0.04, fx + 0.04, fy + 0.04, fz, fz + 2.5, fCol, fMid, fDark);
+      box(fx - 0.07, fy - 0.02, fx - 0.03, fy + 0.02, fz - 0.5, fz + 1.5, fCol, fMid, fDark);
+      box(fx + 0.03, fy - 0.02, fx + 0.07, fy + 0.02, fz - 0.5, fz + 1.5, fCol, fMid, fDark);
+      box(fx - 0.02, fy + 0.03, fx + 0.02, fy + 0.07, fz - 0.5, fz + 1.5, fCol, fMid, fDark);
+      box(fx - 0.02, fy - 0.02, fx + 0.02, fy + 0.02, fz + 1.5, fz + 2.8, '#fff490', '#ffd240', '#c89e20');
+    }
+  }
+}
+
+export function stoneBlocks(box, u0, v0, u1, v1, z0, z1, opts = {}) {
+  const courses = opts.courses || 3;
+  const stone = opts.stone || ['#b8b2a6', '#969084', '#6e685e'];
+  const topS = stone[0];
+  const leftS = stone[1];
+  const rightS = stone[2];
+  const mortar = opts.mortar || ['#58544e', '#44403a', '#32302c'];
+  const coping = opts.coping !== false;
+  const copingH = opts.copingH || 3;
+
+  const wallZ1 = coping ? z1 - copingH : z1;
+  const courseH = (wallZ1 - z0) / courses;
+
+  box(u0, v0, u1, v1, z0, wallZ1, ...mortar);
+
+  const colsU = opts.colsU || 3;
+  const colsV = opts.colsV || 3;
+  const mortarThick = 0.015;
+
+  for (let c = 0; c < courses; c++) {
+    const cz0 = z0 + c * courseH + 0.5;
+    const cz1 = z0 + (c + 1) * courseH - 0.5;
+    const stagger = (c % 2) * 0.5;
+
+    const blockW = (u1 - u0) / colsU;
+    for (let i = 0; i < colsU; i++) {
+      const bu0 = Math.max(u0 + 0.01, u0 + (i + stagger * 0.5) * blockW + mortarThick);
+      const bu1 = Math.min(u1 - 0.01, bu0 + blockW - mortarThick * 2);
+      if (bu1 > bu0) {
+        const varAmt = ((i * 7 + c * 13) % 5 - 2) * 0.04;
+        box(bu0, v1 - 0.04, bu1, v1, cz0, cz1, shade(topS, varAmt), shade(leftS, varAmt), shade(rightS, varAmt));
+      }
+    }
+
+    const blockD = (v1 - v0) / colsV;
+    for (let j = 0; j < colsV; j++) {
+      const bv0 = Math.max(v0 + 0.01, v0 + (j + stagger * 0.5) * blockD + mortarThick);
+      const bv1 = Math.min(v1 - 0.01, bv0 + blockD - mortarThick * 2);
+      if (bv1 > bv0) {
+        const varAmt = ((j * 11 + c * 17) % 5 - 2) * 0.04;
+        box(u1 - 0.04, bv0, u1, bv1, cz0, cz1, shade(topS, varAmt), shade(leftS, varAmt), shade(rightS, varAmt));
+      }
+    }
+  }
+
+  if (coping) {
+    const copOver = opts.copingOver || 0.03;
+    const copStone = [shade(topS, 0.12), shade(leftS, 0.08), shade(rightS, 0.05)];
+    box(u0 - copOver, v0 - copOver, u1 + copOver, v1 + copOver, wallZ1, z1, ...copStone);
+    box(u0 - copOver, v1 + copOver - 0.02, u1 + copOver, v1 + copOver, z1 - 0.5, z1, shade(topS, 0.22), shade(leftS, 0.15), shade(rightS, 0.1));
+  }
+}
+
+export function stitching(box, u0, v0, u1, v1, z, opts = {}) {
+  const pipingCol = opts.piping || ['#f2c0cc', '#d88fa0', '#a85c70'];
+  const tufts = opts.tufts;
+
+  if (opts.piping !== false) {
+    const pw = opts.pipingWidth || 0.025;
+    const pz = z;
+    const ph = opts.pipingHeight || 1.2;
+    box(u0, v1 - pw, u1, v1, pz, pz + ph, ...pipingCol);
+    box(u1 - pw, v0, u1, v1, pz, pz + ph, ...pipingCol);
+    if (opts.allSides) {
+      box(u0, v0, u1, v0 + pw, pz, pz + ph, ...pipingCol);
+      box(u0, v0, u0 + pw, v1, pz, pz + ph, ...pipingCol);
+    }
+  }
+
+  if (tufts && tufts.length > 0) {
+    for (const [tu, tv] of tufts) {
+      const tx = u0 + (u1 - u0) * tu;
+      const ty = v0 + (v1 - v0) * tv;
+      const bDark = opts.tuftDark || '#4a1420';
+      const bLight = opts.tuftLight || '#ffb8c8';
+      box(tx - 0.025, ty - 0.025, tx + 0.025, ty + 0.025, z - 1.5, z + 0.5, bDark, bDark, bDark);
+      box(tx - 0.015, ty - 0.015, tx + 0.015, ty + 0.015, z + 0.2, z + 1.0, bLight, shade(bLight, -0.15), shade(bLight, -0.3));
+      box(tx - 0.08, ty - 0.015, tx - 0.03, ty + 0.015, z - 0.6, z, bDark, bDark, bDark);
+      box(tx + 0.03, ty - 0.015, tx + 0.08, ty + 0.015, z - 0.6, z, bDark, bDark, bDark);
+      box(tx - 0.015, ty - 0.08, tx + 0.015, ty - 0.03, z - 0.6, z, bDark, bDark, bDark);
+      box(tx - 0.015, ty + 0.03, tx + 0.015, ty + 0.08, z - 0.6, z, bDark, bDark, bDark);
+    }
+  }
+}
+
 const WOOD = ['#c98f55', '#a8703d', '#8a5a30']; // top, left, right
 
 export function buildStoolSprite() {
@@ -736,122 +966,160 @@ export function buildStoolSprite() {
   });
 }
 
-// Sofa: 4-way volumetric orientation, coherent contact plane
+// Sofa: 4-way volumetric orientation, coherent contact plane, plush cushions with piping
 export function buildSofaSprite(color = '#e2607a', rot = 0) {
   const r = ((rot % 4) + 4) % 4;
   const [tw, th] = r % 2 ? [1, 2] : [2, 1];
-  const topC = shade(color, 0.14), midC = color, darkC = shade(color, -0.22);
-  const col = [topC, midC, darkC];
-  const lt = [shade(color, 0.25), shade(color, 0.10), shade(color, -0.12)];
+  const col = [shade(color, 0.14), color, shade(color, -0.22)];
+  const lt = [shade(color, 0.28), shade(color, 0.12), shade(color, -0.10)];
   const dk = [shade(color, -0.10), shade(color, -0.22), shade(color, -0.35)];
+  const PIPING = [shade(color, 0.38), shade(color, 0.22), shade(color, 0.05)];
+  const BUN_FOOT = ['#7c4820', '#623414', '#48240c'];
+  const BRASS = ['#f4c862', '#d4a034', '#986c1c'];
 
-  return isoSprite(tw, th, 36, (box) => {
-    // 4 low wooden feet (z = 0 .. 3)
-    box(0.06, 0.06, 0.18, 0.18, 0, 3, ...WOOD);
-    box(tw - 0.18, 0.06, tw - 0.06, 0.18, 0, 3, ...WOOD);
-    box(0.06, th - 0.18, 0.18, th - 0.06, 0, 3, ...WOOD);
-    box(tw - 0.18, th - 0.18, tw - 0.06, th - 0.06, 0, 3, ...WOOD);
+  return isoSprite(tw, th, 38, (box) => {
+    // 4 turned wooden bun feet with brass accent collars (z = 0 .. 4)
+    const feet = [
+      [0.08, 0.08, 0.20, 0.20],
+      [tw - 0.20, 0.08, tw - 0.08, 0.20],
+      [0.08, th - 0.20, 0.20, th - 0.08],
+      [tw - 0.20, th - 0.20, tw - 0.08, th - 0.08]
+    ];
+    for (const [u0, v0, u1, v1] of feet) {
+      box(u0, v0, u1, v1, 0, 3, ...BUN_FOOT);
+      box(u0 - 0.01, v0 - 0.01, u1 + 0.01, v1 + 0.01, 3, 4, ...BRASS);
+    }
 
-    const gold = ['#f6c667', '#d8a442', '#a07424'];
-    const tuft = (x, y) => box(x - 0.04, y - 0.04, x + 0.04, y + 0.04, 13, 13.6, ...dk);
     if (r === 0) {
-      // 2x1 facing down (+v): backrest on north edge
-      box(0.04, 0.04, 1.96, 0.96, 3, 8, ...dk); // lower plinth
-      box(0.04, 0.06, 1.96, 0.32, 8, 34, ...col); // backrest
-      box(0.04, 0.32, 0.24, 0.96, 8, 22, ...col); // left armrest
-      box(1.76, 0.32, 1.96, 0.96, 8, 22, ...col); // right armrest
-      box(0.04, 0.06, 1.96, 0.1, 32, 34, ...gold); // piping trim along the backrest crown
-      // seat cushions (z = 8 .. 13)
-      box(0.26, 0.32, 0.98, 0.94, 8, 13, ...lt);
-      box(1.02, 0.32, 1.74, 0.94, 8, 13, ...lt);
-      tuft(0.62, 0.63); tuft(1.38, 0.63);
+      // 2x1 facing down (+v): backrest on north edge, arms on west/east
+      box(0.04, 0.04, 1.96, 0.96, 4, 9, ...dk); // lower plinth frame
+      // Button-tufted high backrest with vertical channel fluting
+      box(0.04, 0.06, 1.96, 0.34, 9, 36, ...col);
+      // Crown roll with piping
+      box(0.04, 0.04, 1.96, 0.12, 34, 37, ...PIPING);
+      // Padded roll armrests on left and right
+      box(0.04, 0.34, 0.26, 0.96, 9, 23, ...col);
+      box(1.74, 0.34, 1.96, 0.96, 9, 23, ...col);
+      stitching(box, 0.04, 0.34, 0.26, 0.96, 22.5, { piping: PIPING, pipingHeight: 0.8 });
+      stitching(box, 1.74, 0.34, 1.96, 0.96, 22.5, { piping: PIPING, pipingHeight: 0.8 });
+
+      // Two plush seat cushions with welted piping seams and button tufting
+      box(0.28, 0.34, 0.98, 0.94, 9, 14, ...lt);
+      stitching(box, 0.28, 0.34, 0.98, 0.94, 13.5, { piping: PIPING, tufts: [[0.5, 0.55]], tuftDark: dk[2], tuftLight: lt[0] });
+
+      box(1.02, 0.34, 1.72, 0.94, 9, 14, ...lt);
+      stitching(box, 1.02, 0.34, 1.72, 0.94, 13.5, { piping: PIPING, tufts: [[0.5, 0.55]], tuftDark: dk[2], tuftLight: lt[0] });
+
+      // Backrest button tufting rows
+      stitching(box, 0.28, 0.26, 1.72, 0.34, 25, { piping: false, tufts: [[0.25, 0.5], [0.75, 0.5]], tuftDark: dk[2], tuftLight: lt[0] });
     } else if (r === 1) {
       // 1x2 facing right (+u): backrest on west edge
-      box(0.04, 0.04, 0.96, 1.96, 3, 8, ...dk);
-      box(0.06, 0.04, 0.32, 1.96, 8, 34, ...col);
-      box(0.32, 0.04, 0.96, 0.24, 8, 22, ...col);
-      box(0.32, 1.76, 0.96, 1.96, 8, 22, ...col);
-      box(0.06, 0.04, 0.1, 1.96, 32, 34, ...gold);
-      box(0.32, 0.26, 0.94, 0.98, 8, 13, ...lt);
-      box(0.32, 1.02, 0.94, 1.74, 8, 13, ...lt);
-      tuft(0.63, 0.62); tuft(0.63, 1.38);
+      box(0.04, 0.04, 0.96, 1.96, 4, 9, ...dk);
+      box(0.06, 0.04, 0.34, 1.96, 9, 36, ...col);
+      box(0.04, 0.04, 0.12, 1.96, 34, 37, ...PIPING);
+      box(0.34, 0.04, 0.96, 0.26, 9, 23, ...col);
+      box(0.34, 1.74, 0.96, 1.96, 9, 23, ...col);
+      stitching(box, 0.34, 0.04, 0.96, 0.26, 22.5, { piping: PIPING, pipingHeight: 0.8 });
+      stitching(box, 0.34, 1.74, 0.96, 1.96, 22.5, { piping: PIPING, pipingHeight: 0.8 });
+
+      box(0.34, 0.28, 0.94, 0.98, 9, 14, ...lt);
+      stitching(box, 0.34, 0.28, 0.94, 0.98, 13.5, { piping: PIPING, tufts: [[0.55, 0.5]], tuftDark: dk[2], tuftLight: lt[0] });
+
+      box(0.34, 1.02, 0.94, 1.72, 9, 14, ...lt);
+      stitching(box, 0.34, 1.02, 0.94, 1.72, 13.5, { piping: PIPING, tufts: [[0.55, 0.5]], tuftDark: dk[2], tuftLight: lt[0] });
     } else if (r === 2) {
       // 2x1 facing up (-v): backrest on south edge
-      box(0.04, 0.04, 1.96, 0.96, 3, 8, ...dk);
-      box(0.26, 0.06, 0.98, 0.68, 8, 13, ...lt);
-      box(1.02, 0.06, 1.74, 0.68, 8, 13, ...lt);
-      box(0.04, 0.04, 0.24, 0.68, 8, 22, ...col);
-      box(1.76, 0.04, 1.96, 0.68, 8, 22, ...col);
-      box(0.04, 0.68, 1.96, 0.94, 8, 34, ...col);
-      box(0.04, 0.9, 1.96, 0.94, 32, 34, ...gold);
-      tuft(0.62, 0.37); tuft(1.38, 0.37);
+      box(0.04, 0.04, 1.96, 0.96, 4, 9, ...dk);
+      box(0.28, 0.06, 0.98, 0.66, 9, 14, ...lt);
+      stitching(box, 0.28, 0.06, 0.98, 0.66, 13.5, { piping: PIPING, tufts: [[0.5, 0.45]], tuftDark: dk[2], tuftLight: lt[0] });
+
+      box(1.02, 0.06, 1.72, 0.66, 9, 14, ...lt);
+      stitching(box, 1.02, 0.06, 1.72, 0.66, 13.5, { piping: PIPING, tufts: [[0.5, 0.45]], tuftDark: dk[2], tuftLight: lt[0] });
+
+      box(0.04, 0.04, 0.26, 0.66, 9, 23, ...col);
+      box(1.74, 0.04, 1.96, 0.66, 9, 23, ...col);
+      box(0.04, 0.66, 1.96, 0.94, 9, 36, ...col);
+      box(0.04, 0.88, 1.96, 0.96, 34, 37, ...PIPING);
     } else {
       // 1x2 facing left (-u): backrest on east edge
-      box(0.04, 0.04, 0.96, 1.96, 3, 8, ...dk);
-      box(0.06, 0.26, 0.68, 0.98, 8, 13, ...lt);
-      box(0.06, 1.02, 0.68, 1.74, 8, 13, ...lt);
-      box(0.04, 0.04, 0.68, 0.24, 8, 22, ...col);
-      box(0.04, 1.76, 0.68, 1.96, 8, 22, ...col);
-      box(0.68, 0.04, 0.94, 1.96, 8, 34, ...col);
-      box(0.9, 0.04, 0.94, 1.96, 32, 34, ...gold);
-      tuft(0.37, 0.62); tuft(0.37, 1.38);
+      box(0.04, 0.04, 0.96, 1.96, 4, 9, ...dk);
+      box(0.06, 0.28, 0.66, 0.98, 9, 14, ...lt);
+      stitching(box, 0.06, 0.28, 0.66, 0.98, 13.5, { piping: PIPING, tufts: [[0.45, 0.5]], tuftDark: dk[2], tuftLight: lt[0] });
+
+      box(0.06, 1.02, 0.66, 1.72, 9, 14, ...lt);
+      stitching(box, 0.06, 1.02, 0.66, 1.72, 13.5, { piping: PIPING, tufts: [[0.45, 0.5]], tuftDark: dk[2], tuftLight: lt[0] });
+
+      box(0.04, 0.04, 0.66, 0.26, 9, 23, ...col);
+      box(0.04, 1.74, 0.66, 1.96, 9, 23, ...col);
+      box(0.66, 0.04, 0.94, 1.96, 9, 36, ...col);
+      box(0.88, 0.04, 0.96, 1.96, 34, 37, ...PIPING);
     }
   });
 }
 
 export function buildLampSprite() {
   const CHROME = ['#9e9eac', '#7c7c8a', '#5c5c68'];
+  const CHROME_HI = ['#ffffff', '#e8e8f2', '#c0c0d0'];
+  const LIQUID = ['#ff8834', '#e05818', '#b0300c'];
+  const WAX1 = ['#ffea70', '#ffc040', '#d08020'];
+  const WAX2 = ['#fff298', '#ffd450', '#e49424'];
+
   return isoSprite(1, 1, 46, (box) => {
     // Brushed chrome tiered pedestal base (z = 0 .. 8)
     box(0.24, 0.24, 0.76, 0.76, 0, 4, ...CHROME);
     box(0.30, 0.30, 0.70, 0.70, 4, 8, ...CHROME);
     // Fine rib detailing on the base tier
     box(0.24, 0.24, 0.76, 0.76, 1.6, 2.0, '#6c6c78', '#585864', '#444450');
+
     // Glowing liquid cylinder chamber (z = 8 .. 32)
-    box(0.34, 0.34, 0.66, 0.66, 8, 32, '#ff9040', '#e06020', '#b03810');
+    box(0.34, 0.34, 0.66, 0.66, 8, 32, ...LIQUID);
+    // 2x specular vertical highlight streaks along cylindrical glass
+    box(0.35, 0.35, 0.39, 0.39, 9, 31, '#ffffff', '#fff4dc', '#ffc888');
+
     // Internal floating thermal lava blobs
-    box(0.38, 0.38, 0.62, 0.62, 11, 17, '#ffea70', '#ffc040', '#d08020');
-    box(0.40, 0.40, 0.60, 0.60, 23, 29, '#fff298', '#ffd450', '#e49424');
-    // Tiny rising bubble, only resolvable at the finer bake density
-    box(0.47, 0.47, 0.53, 0.53, 19, 21, '#fff8d0', '#ffe49a', '#e2b858');
-    // Brushed chrome top cone & finial cap (z = 32 .. 42)
+    box(0.38, 0.38, 0.62, 0.62, 11, 17, ...WAX1);
+    box(0.40, 0.40, 0.60, 0.60, 23, 29, ...WAX2);
+    // Rising tiny bubble with glow center
+    box(0.46, 0.46, 0.54, 0.54, 19, 21.5, '#ffffff', '#ffe49a', '#e2b858');
+
+    // Brushed chrome top cone & finial cap (z = 32 .. 44)
     box(0.30, 0.30, 0.70, 0.70, 32, 37, ...CHROME);
+    box(0.32, 0.32, 0.36, 0.36, 33, 36, ...CHROME_HI); // chrome highlight streak
     box(0.38, 0.38, 0.62, 0.62, 37, 40, ...CHROME);
-    box(0.44, 0.44, 0.56, 0.56, 40, 44, '#d8d8e4', '#b0b0c0', '#888898');
+    box(0.44, 0.44, 0.56, 0.56, 40, 44, ...CHROME_HI);
   });
 }
 
 export function buildPlantSprite() {
-  const POT = ['#cc7d47', '#b06532', '#8c4b22'];
-  const SOIL = ['#3d281a', '#2c1c12', '#20140c'];
-  const LEAF1 = ['#66dd77', '#44aa55', '#2e7c3b'];
-  const LEAF2 = ['#55cc66', '#3db04e', '#2a8037'];
-  const LEAF3 = ['#77ee88', '#55cc66', '#3db04e'];
+  const POT = ['#d47c44', '#b86230', '#8c421e'];
+  const POT_RIM = ['#e68c52', '#c66e38', '#9c4c22'];
+  const SOIL = ['#3a2418', '#2a1810', '#1c100a'];
 
-  return isoSprite(1, 1, 40, (box) => {
-    // Terracotta pot base and flared rim (z = 0 .. 14)
-    box(0.28, 0.28, 0.72, 0.72, 0, 10, ...POT);
-    box(0.24, 0.24, 0.76, 0.76, 10, 14, ...POT);
-    // Rim trim band, only resolvable at the finer bake density
-    box(0.24, 0.24, 0.76, 0.76, 13.4, 14, shade('#cc7d47', 0.22), shade('#b06532', 0.1), shade('#8c4b22', 0.1));
-    // Dark nutrient soil (z = 13 .. 14)
-    box(0.26, 0.26, 0.74, 0.74, 13, 14, ...SOIL);
-    // Main stem core
-    box(0.45, 0.45, 0.55, 0.55, 14, 26, '#3a8c44', '#286b32', '#1c4a22');
-    // Multi-faceted fern fronds layered in 3D
-    box(0.12, 0.30, 0.42, 0.58, 18, 24, ...LEAF2); // west frond
-    box(0.42, 0.12, 0.70, 0.40, 20, 26, ...LEAF1); // north frond
-    box(0.32, 0.60, 0.62, 0.88, 16, 22, ...LEAF2); // south frond
-    box(0.60, 0.34, 0.88, 0.64, 17, 23, ...LEAF1); // east frond
-    // small leaf-tip sprigs for a fuller canopy
-    box(0.08, 0.36, 0.2, 0.46, 20, 23, ...LEAF2);
-    box(0.5, 0.08, 0.6, 0.2, 23, 26, ...LEAF1);
-    box(0.78, 0.4, 0.9, 0.5, 19, 22, ...LEAF1);
-    // Mid & crown foliage tiers
-    box(0.30, 0.30, 0.70, 0.70, 24, 30, ...LEAF1);
-    box(0.40, 0.40, 0.60, 0.60, 30, 37, ...LEAF3);
-    // A single flower blossom accent
-    box(0.46, 0.46, 0.54, 0.54, 37, 39, '#ff8fb0', '#e56a90', '#c04870');
+  return isoSprite(1, 1, 42, (box) => {
+    // Terracotta pot base with stepped taper (z = 0 .. 10)
+    box(0.30, 0.30, 0.70, 0.70, 0, 3, shade(POT[0], -0.1), shade(POT[1], -0.1), shade(POT[2], -0.1));
+    box(0.26, 0.26, 0.74, 0.74, 3, 10, ...POT);
+    // Decorative incised groove on pot body
+    box(0.25, 0.25, 0.75, 0.75, 6, 7, shade(POT[0], 0.18), shade(POT[1], 0.1), shade(POT[2], 0.1));
+    // Flared upper coping rim (z = 10 .. 14)
+    box(0.22, 0.22, 0.78, 0.78, 10, 14, ...POT_RIM);
+    // Dark nutrient potting soil (z = 13 .. 14.5)
+    box(0.25, 0.25, 0.75, 0.75, 13, 14.5, ...SOIL);
+
+    // Main arching frond stems
+    box(0.46, 0.46, 0.54, 0.54, 14, 26, '#3a8c44', '#286b32', '#1c4a22');
+
+    // Volumetric foliage canopy using clustered leafy clumps with flower accents
+    leafCluster(box, 0.5, 0.5, 27, 0.38, 0.38, 11, {
+      flowers: [
+        { x: -0.2, y: -0.2, z: 0.5, color: '#ff8fb0' },
+        { x: 0.25, y: 0.1, z: 0.4, color: '#ffa8c4' }
+      ]
+    });
+
+    // Spilling leafy fronds cascading slightly over pot rim
+    box(0.18, 0.42, 0.26, 0.58, 11, 16, '#4ec464', '#369c4a', '#226c30');
+    box(0.42, 0.72, 0.58, 0.82, 10, 15, '#369c4a', '#267332', '#1a4e22');
   });
 }
 
@@ -863,14 +1131,16 @@ export function buildRugSprite() {
   const RUG_CREAM = ['#fff2a8', '#f6c667', '#c8922c'];
 
   return isoSprite(2, 2, 4, (box) => {
-    // Fringe tassels along the outer edge, only resolvable at the finer bake density
-    for (let i = 0; i < 8; i++) {
-      const t = 0.1 + i * 0.235;
-      box(t, -0.03, t + 0.07, 0.04, 0, 1, ...RUG_CREAM);
-      box(t, 1.96, t + 0.07, 2.03, 0, 1, ...RUG_CREAM);
+    // Fringe yarn tassels along both ends at 2x density
+    for (let i = 0; i < 10; i++) {
+      const t = 0.08 + i * 0.185;
+      box(t, -0.04, t + 0.06, 0.04, 0, 1, ...RUG_CREAM);
+      box(t, 1.96, t + 0.06, 2.04, 0, 1, ...RUG_CREAM);
     }
     // Outer border thin cuboid (z = 0 .. 2)
     box(0.06, 0.06, 1.94, 1.94, 0, 2, ...RUG_BERRY);
+    // Gold braided piping ring
+    box(0.12, 0.12, 1.88, 1.88, 1, 2.2, ...RUG_GOLD);
     // Rose field (z = 0 .. 2)
     box(0.24, 0.24, 1.76, 1.76, 0, 2, ...RUG_ROSE);
     // Fine woven lattice ring between the field and the inner panel
@@ -878,9 +1148,9 @@ export function buildRugSprite() {
     // Inner ruby panel (z = 0 .. 2)
     box(0.54, 0.54, 1.46, 1.46, 0, 2, ...RUG_BERRY);
     // Gold starburst medallion (z = 0 .. 2)
-    box(0.76, 0.76, 1.24, 1.24, 0, 2, ...RUG_GOLD);
+    box(0.76, 0.76, 1.24, 1.24, 0, 2.4, ...RUG_GOLD);
     // Center jewel (z = 0 .. 2)
-    box(0.90, 0.90, 1.10, 1.10, 0, 2, ...RUG_CREAM);
+    box(0.90, 0.90, 1.10, 1.10, 1, 2.6, ...RUG_CREAM);
   });
 }
 
@@ -897,8 +1167,9 @@ export function buildNeonSignSprite() {
     box(0.44, 0.20, 0.56, 0.80, 0, 3, ...IRON);
     // Vertical iron stanchion pole (z = 3 .. 26)
     box(0.45, 0.45, 0.55, 0.55, 3, 26, ...IRON);
-    // Sign chassis backing box (z = 24 .. 52)
+    // Sign chassis backing box & transformer unit (z = 24 .. 52)
     box(0.14, 0.40, 0.86, 0.60, 24, 52, ...CHASSIS);
+    box(0.40, 0.36, 0.60, 0.42, 26, 34, '#181824', '#101018', '#08080e'); // transformer box
     // Outer neon pink border tubing
     box(0.12, 0.38, 0.88, 0.62, 50, 52, ...NEON_PINK);
     box(0.12, 0.38, 0.88, 0.62, 24, 26, ...NEON_PINK);
@@ -913,81 +1184,148 @@ export function buildNeonSignSprite() {
 }
 
 export function buildJukeboxSprite() {
-  const CHROME = ['#9e9eac', '#7c7c8a', '#5c5c68'];
+  const CHROME = ['#b8c4d2', '#909ea8', '#62707e'];
+  const CHROME_HI = ['#ffffff', '#e8f0f8', '#b8c6d4'];
   const MAHOGANY = ['#7c2836', '#601e2a', '#44121c'];
-  const GRILLE = ['#ffd470', '#e0b048', '#a87e28'];
+  const MAHOGANY_DARK = ['#541822', '#3e1018', '#2a0a10'];
+  const ACOUSTIC_CLOTH = ['#ffcc66', '#d49a38', '#94661c'];
+  const NEON_MAGENTA = ['#ff40b0', '#d82088', '#980c58'];
+  const NEON_GOLD = ['#ffea60', '#ffcc28', '#b88a10'];
+  const NEON_CYAN = ['#50f0ff', '#20c8e8', '#1088a8'];
+  const BUBBLE_TUBE = ['#80ffb8', '#40d880', '#209850'];
+  const VINYL = ['#1a1c22', '#121418', '#080a0c'];
 
-  return isoSprite(1, 1, 50, (box) => {
-    // Chrome plinth kickplate (z = 0 .. 5)
-    box(0.14, 0.14, 0.86, 0.86, 0, 5, ...CHROME);
-    // Lower speaker cabinet (z = 5 .. 20)
-    box(0.16, 0.16, 0.84, 0.84, 5, 20, ...MAHOGANY);
-    box(0.22, 0.80, 0.78, 0.86, 7, 18, ...GRILLE); // front cloth
-    // Middle selection control shelf (z = 20 .. 25)
-    box(0.14, 0.14, 0.86, 0.86, 20, 25, '#9a3648', '#782636', '#541624');
-    // Push buttons
-    box(0.24, 0.78, 0.36, 0.86, 22, 24, '#5fe0ff', '#38b8d4', '#1e788c');
-    box(0.44, 0.78, 0.56, 0.86, 22, 24, '#ffe27a', '#d8be56', '#9c8428');
-    box(0.64, 0.78, 0.76, 0.86, 22, 24, '#ff5fd1', '#d43da8', '#941c70');
-    // Upper record player viewing chamber (z = 25 .. 42)
-    box(0.18, 0.18, 0.82, 0.82, 25, 42, '#202838', '#161c28', '#0c1018');
-    // Vinyl record & tonearm turntable inside
-    box(0.30, 0.30, 0.70, 0.70, 27, 30, '#101014', '#08080a', '#040406');
-    box(0.46, 0.46, 0.54, 0.54, 30, 31, '#ff3850', '#c81c30', '#880c1e'); // label
-    // Glowing neon arch trim (z = 40 .. 48)
-    box(0.16, 0.16, 0.84, 0.84, 42, 46, '#ff5fd1', '#d43da8', '#941c70');
-    box(0.26, 0.26, 0.74, 0.74, 46, 50, '#ffe27a', '#d8be56', '#9c8428');
+  return isoSprite(1, 1, 54, (box) => {
+    // 1. Chrome kickplate base (z = 0 .. 5)
+    box(0.12, 0.12, 0.88, 0.88, 0, 5, ...CHROME);
+    box(0.14, 0.86, 0.86, 0.88, 1, 4, ...CHROME_HI); // chrome specular streak
+
+    // 2. Solid mahogany lower cabinet body (z = 5 .. 22)
+    box(0.14, 0.14, 0.86, 0.86, 5, 22, ...MAHOGANY);
+
+    // Left and right vertical bubble tube pilasters (z = 6 .. 44)
+    // Left pilaster
+    box(0.10, 0.70, 0.20, 0.86, 5, 42, ...CHROME);
+    box(0.12, 0.72, 0.18, 0.84, 8, 39, ...BUBBLE_TUBE); // glowing bubbling liquid
+    box(0.13, 0.73, 0.17, 0.83, 14, 17, '#ffffff', '#c8ffe0', '#70e0a0'); // bubble
+    box(0.13, 0.73, 0.17, 0.83, 27, 30, '#ffffff', '#c8ffe0', '#70e0a0'); // bubble
+    // Right pilaster
+    box(0.80, 0.14, 0.90, 0.30, 5, 42, ...CHROME);
+    box(0.82, 0.16, 0.88, 0.28, 8, 39, ...BUBBLE_TUBE);
+    box(0.83, 0.17, 0.87, 0.27, 20, 23, '#ffffff', '#c8ffe0', '#70e0a0');
+
+    // Lower speaker grille: backlit acoustic amber cloth
+    box(0.22, 0.80, 0.78, 0.86, 6, 20, ...ACOUSTIC_CLOTH);
+    // Polished horizontal chrome grille louvers/bars
+    for (const bz of [8, 11, 14, 17]) {
+      box(0.20, 0.82, 0.80, 0.87, bz, bz + 1.2, ...CHROME_HI);
+    }
+    // Center decorative chrome V-crest on speaker
+    box(0.46, 0.84, 0.54, 0.88, 9, 17, ...CHROME_HI);
+
+    // 3. Middle slanted selector desk & title strip rack (z = 21 .. 28)
+    box(0.14, 0.20, 0.86, 0.86, 21, 28, ...MAHOGANY_DARK);
+    // White illuminated title strip cards with song names
+    box(0.22, 0.74, 0.78, 0.85, 23, 27.5, '#fffded', '#f0e6c4', '#c4b68e');
+    box(0.24, 0.75, 0.76, 0.84, 25, 25.8, '#e03040', '#b81c2c', '#800c18'); // red dividing line
+    // Selection push buttons on front desk
+    box(0.24, 0.85, 0.34, 0.88, 22, 24, ...NEON_CYAN);
+    box(0.38, 0.85, 0.48, 0.88, 22, 24, ...NEON_GOLD);
+    box(0.52, 0.85, 0.62, 0.88, 22, 24, ...NEON_MAGENTA);
+    box(0.66, 0.85, 0.76, 0.88, 22, 24, '#38e070', '#24b852', '#148034');
+    // Chrome coin acceptor entry
+    box(0.72, 0.80, 0.80, 0.86, 25, 28, ...CHROME_HI);
+
+    // 4. Upper record chamber with turntable and carousel (z = 28 .. 46)
+    box(0.16, 0.18, 0.84, 0.82, 28, 44, '#181e2a', '#10141c', '#0a0c12');
+    // Turntable plinth & 45 RPM vinyl record
+    box(0.28, 0.30, 0.72, 0.68, 29, 32, ...VINYL);
+    box(0.44, 0.44, 0.56, 0.54, 32, 33, '#e02838', '#b01826', '#780c16'); // red record label
+    box(0.48, 0.48, 0.52, 0.50, 33, 34.5, ...CHROME_HI); // center silver spindle
+    // Silver tonearm tracking the groove
+    box(0.60, 0.34, 0.68, 0.42, 32, 35, ...CHROME_HI);
+    box(0.52, 0.40, 0.64, 0.48, 33, 34, ...CHROME_HI);
+
+    // Record carousel selector rack in background
+    box(0.24, 0.22, 0.76, 0.32, 32, 42, '#2c3648', '#1e2634', '#141822');
+    for (let rk = 0.28; rk <= 0.72; rk += 0.08) {
+      box(rk, 0.21, rk + 0.03, 0.33, 34, 41, ...CHROME);
+    }
+
+    // 5. Arched luminous rainbow neon crown framing the top (z = 44 .. 54)
+    box(0.14, 0.16, 0.86, 0.84, 44, 48, ...NEON_MAGENTA);
+    box(0.18, 0.20, 0.82, 0.80, 48, 51, ...NEON_GOLD);
+    box(0.24, 0.26, 0.76, 0.74, 51, 54, ...NEON_CYAN);
+    // Outer arched mahogany moulding
+    box(0.12, 0.14, 0.88, 0.86, 43, 46, ...MAHOGANY);
+    box(0.16, 0.18, 0.84, 0.82, 46, 50, ...MAHOGANY);
   });
 }
 
 export function buildArmchairSprite(rot = 0) {
   const r = ((rot % 4) + 4) % 4;
-  const AMBER = ['#e8a452', '#d28a3c', '#9c6020'];
-  const AMBER_LT = ['#f4bc74', '#e8a452', '#b8762c'];
-  const AMBER_DK = ['#b87428', '#9c5e1c', '#6e3e0e'];
+  const AMBER = ['#e89e44', '#cf8432', '#9c5c1c'];
+  const AMBER_LT = ['#f8b65e', '#e89e44', '#b87224'];
+  const AMBER_DK = ['#a8601c', '#8a4c14', '#60320c'];
+  const PIPING = ['#ffd488', '#f0a84c', '#b87020'];
+  const BRASS = ['#f4c862', '#d4a034', '#986c1c'];
 
-  return isoSprite(1, 1, 36, (box) => {
-    // 4 sturdy turned wooden legs (z = 0 .. 6)
-    box(0.16, 0.16, 0.28, 0.28, 0, 6, ...WOOD);
-    box(0.72, 0.16, 0.84, 0.28, 0, 6, ...WOOD);
-    box(0.16, 0.72, 0.28, 0.84, 0, 6, ...WOOD);
-    box(0.72, 0.72, 0.84, 0.84, 0, 6, ...WOOD);
-    // Base apron frame (z = 6 .. 8)
-    box(0.12, 0.12, 0.88, 0.88, 6, 8, ...AMBER_DK);
+  return isoSprite(1, 1, 38, (box) => {
+    // 4 sturdy turned wooden legs with brass ferrules (z = 0 .. 6)
+    const legCoords = [
+      [0.16, 0.16, 0.28, 0.28],
+      [0.72, 0.16, 0.84, 0.28],
+      [0.16, 0.72, 0.28, 0.84],
+      [0.72, 0.72, 0.84, 0.84]
+    ];
+    for (const [u0, v0, u1, v1] of legCoords) {
+      box(u0, v0, u1, v1, 0, 5, ...WOOD);
+      box(u0 - 0.01, v0 - 0.01, u1 + 0.01, v1 + 0.01, 0, 1.6, ...BRASS);
+    }
 
-    const tuft = (x, y) => box(x - 0.04, y - 0.04, x + 0.04, y + 0.04, 12, 12.6, ...AMBER_DK);
+    // Base apron frame (z = 5 .. 8)
+    box(0.12, 0.12, 0.88, 0.88, 5, 8, ...AMBER_DK);
+
     if (r === 0) {
       // Facing down (+v): backrest on north edge, arms on west/east
-      box(0.10, 0.10, 0.90, 0.34, 8, 34, ...AMBER); // high backrest
-      box(0.10, 0.34, 0.28, 0.90, 8, 22, ...AMBER); // left armrest
-      box(0.72, 0.34, 0.90, 0.90, 8, 22, ...AMBER); // right armrest
-      box(0.10, 0.10, 0.90, 0.14, 30, 34, ...AMBER_DK); // piping trim at backrest crown
-      box(0.28, 0.34, 0.72, 0.86, 8, 12, ...AMBER_LT); // plush cushion
-      tuft(0.5, 0.6);
+      box(0.10, 0.10, 0.90, 0.34, 8, 36, ...AMBER);
+      box(0.10, 0.08, 0.90, 0.14, 34, 37, ...PIPING); // crown roll
+      // Button tufting on backrest
+      stitching(box, 0.16, 0.28, 0.84, 0.34, 25, { piping: false, tufts: [[0.28, 0.5], [0.72, 0.5]], tuftDark: AMBER_DK[2], tuftLight: AMBER_LT[0] });
+
+      // Roll armrests on left and right
+      box(0.08, 0.34, 0.28, 0.90, 8, 23, ...AMBER);
+      box(0.72, 0.34, 0.92, 0.90, 8, 23, ...AMBER);
+      stitching(box, 0.08, 0.34, 0.28, 0.90, 22.5, { piping: PIPING, pipingHeight: 0.8 });
+      stitching(box, 0.72, 0.34, 0.92, 0.90, 22.5, { piping: PIPING, pipingHeight: 0.8 });
+
+      // Plush seat cushion with welted piping
+      box(0.28, 0.34, 0.72, 0.88, 8, 14, ...AMBER_LT);
+      stitching(box, 0.28, 0.34, 0.72, 0.88, 13.5, { piping: PIPING, tufts: [[0.5, 0.55]], tuftDark: AMBER_DK[2], tuftLight: AMBER_LT[0] });
     } else if (r === 1) {
-      // Facing right (+u): backrest on west edge, arms on north/south
-      box(0.10, 0.10, 0.34, 0.90, 8, 34, ...AMBER);
-      box(0.34, 0.10, 0.90, 0.28, 8, 22, ...AMBER);
-      box(0.34, 0.72, 0.90, 0.90, 8, 22, ...AMBER);
-      box(0.10, 0.10, 0.14, 0.90, 30, 34, ...AMBER_DK);
-      box(0.34, 0.28, 0.86, 0.72, 8, 12, ...AMBER_LT);
-      tuft(0.6, 0.5);
+      box(0.10, 0.10, 0.34, 0.90, 8, 36, ...AMBER);
+      box(0.08, 0.10, 0.14, 0.90, 34, 37, ...PIPING);
+      box(0.34, 0.08, 0.90, 0.28, 8, 23, ...AMBER);
+      box(0.34, 0.72, 0.90, 0.92, 8, 23, ...AMBER);
+      stitching(box, 0.34, 0.08, 0.90, 0.28, 22.5, { piping: PIPING, pipingHeight: 0.8 });
+      stitching(box, 0.34, 0.72, 0.90, 0.92, 22.5, { piping: PIPING, pipingHeight: 0.8 });
+
+      box(0.34, 0.28, 0.88, 0.72, 8, 14, ...AMBER_LT);
+      stitching(box, 0.34, 0.28, 0.88, 0.72, 13.5, { piping: PIPING, tufts: [[0.55, 0.5]], tuftDark: AMBER_DK[2], tuftLight: AMBER_LT[0] });
     } else if (r === 2) {
-      // Facing up (-v): backrest on south edge
-      box(0.28, 0.14, 0.72, 0.66, 8, 12, ...AMBER_LT);
-      box(0.10, 0.10, 0.28, 0.66, 8, 22, ...AMBER);
-      box(0.72, 0.10, 0.90, 0.66, 8, 22, ...AMBER);
-      box(0.10, 0.66, 0.90, 0.90, 8, 34, ...AMBER);
-      box(0.10, 0.86, 0.90, 0.90, 30, 34, ...AMBER_DK);
-      tuft(0.5, 0.4);
+      box(0.28, 0.12, 0.72, 0.66, 8, 14, ...AMBER_LT);
+      stitching(box, 0.28, 0.12, 0.72, 0.66, 13.5, { piping: PIPING, tufts: [[0.5, 0.45]], tuftDark: AMBER_DK[2], tuftLight: AMBER_LT[0] });
+      box(0.08, 0.10, 0.28, 0.66, 8, 23, ...AMBER);
+      box(0.72, 0.10, 0.92, 0.66, 8, 23, ...AMBER);
+      box(0.10, 0.66, 0.90, 0.90, 8, 36, ...AMBER);
+      box(0.10, 0.86, 0.90, 0.92, 34, 37, ...PIPING);
     } else {
-      // Facing left (-u): backrest on east edge
-      box(0.14, 0.28, 0.66, 0.72, 8, 12, ...AMBER_LT);
-      box(0.10, 0.10, 0.66, 0.28, 8, 22, ...AMBER);
-      box(0.10, 0.72, 0.66, 0.90, 8, 22, ...AMBER);
-      box(0.66, 0.10, 0.90, 0.90, 8, 34, ...AMBER);
-      box(0.86, 0.10, 0.90, 0.90, 30, 34, ...AMBER_DK);
-      tuft(0.4, 0.5);
+      box(0.12, 0.28, 0.66, 0.72, 8, 14, ...AMBER_LT);
+      stitching(box, 0.12, 0.28, 0.66, 0.72, 13.5, { piping: PIPING, tufts: [[0.45, 0.5]], tuftDark: AMBER_DK[2], tuftLight: AMBER_LT[0] });
+      box(0.10, 0.08, 0.66, 0.28, 8, 23, ...AMBER);
+      box(0.10, 0.72, 0.66, 0.92, 8, 23, ...AMBER);
+      box(0.66, 0.10, 0.90, 0.90, 8, 36, ...AMBER);
+      box(0.86, 0.10, 0.92, 0.90, 34, 37, ...PIPING);
     }
   });
 }
@@ -995,26 +1333,40 @@ export function buildArmchairSprite(rot = 0) {
 export function buildDeckchairSprite(rot = 0) {
   const r = ((rot % 4) + 4) % 4;
   const BEECH = ['#dfb882', '#b88a52', '#865e28'];
-  const STRIPE_RED = ['#f0506e', '#d83856', '#a01c38'];
-  const STRIPE_BLUE = ['#66b0f4', '#4894dc', '#2a6cb0'];
+  const BRASS = ['#f4c862', '#d4a034', '#986c1c'];
+  const STRIPE_NAVY = ['#2c4875', '#1e3254', '#14223c'];
   const STRIPE_CREAM = ['#fdf6e6', '#ded4c0', '#b0a690'];
+  const STRIPE_RED = ['#e53935', '#c62828', '#8e0000'];
 
-  return isoSprite(1, 1, 34, (box) => {
+  return isoSprite(1, 1, 36, (box) => {
     if (r === 0 || r === 2) {
-      // Cross scissor beechwood legs
-      box(0.14, 0.14, 0.24, 0.86, 0, 16, ...BEECH);
-      box(0.76, 0.14, 0.86, 0.86, 0, 16, ...BEECH);
-      // Fabric sling (z = 8 .. 30)
-      box(0.24, 0.18, 0.76, 0.42, 14, 30, ...STRIPE_RED);
-      box(0.24, 0.42, 0.76, 0.66, 10, 14, ...STRIPE_CREAM);
-      box(0.24, 0.66, 0.76, 0.86, 8, 11, ...STRIPE_BLUE);
+      // Beechwood scissor legs with brass pivot bolts
+      box(0.12, 0.12, 0.22, 0.88, 0, 16, ...BEECH);
+      box(0.78, 0.12, 0.88, 0.88, 0, 16, ...BEECH);
+      // Pivot bolts at scissor intersection
+      box(0.10, 0.48, 0.24, 0.54, 7, 9, ...BRASS);
+      box(0.76, 0.48, 0.90, 0.54, 7, 9, ...BRASS);
+
+      // Top and bottom cross stretchers
+      box(0.14, 0.14, 0.86, 0.20, 15, 17, ...BEECH);
+      box(0.14, 0.80, 0.86, 0.86, 1, 3, ...BEECH);
+
+      // Striped canvas sling seat in 3 clean alternating nautical stripes
+      box(0.22, 0.16, 0.78, 0.40, 16, 32, ...STRIPE_NAVY);
+      box(0.22, 0.40, 0.78, 0.64, 11, 16, ...STRIPE_CREAM);
+      box(0.22, 0.64, 0.78, 0.88, 8, 11, ...STRIPE_RED);
     } else {
-      // rot 1 or 3
-      box(0.14, 0.14, 0.86, 0.24, 0, 16, ...BEECH);
-      box(0.14, 0.76, 0.86, 0.86, 0, 16, ...BEECH);
-      box(0.18, 0.24, 0.42, 0.76, 14, 30, ...STRIPE_RED);
-      box(0.42, 0.24, 0.66, 0.76, 10, 14, ...STRIPE_CREAM);
-      box(0.66, 0.24, 0.86, 0.76, 8, 11, ...STRIPE_BLUE);
+      box(0.12, 0.12, 0.88, 0.22, 0, 16, ...BEECH);
+      box(0.12, 0.78, 0.88, 0.88, 0, 16, ...BEECH);
+      box(0.48, 0.10, 0.54, 0.24, 7, 9, ...BRASS);
+      box(0.48, 0.76, 0.54, 0.90, 7, 9, ...BRASS);
+
+      box(0.14, 0.14, 0.20, 0.86, 15, 17, ...BEECH);
+      box(0.80, 0.14, 0.86, 0.86, 1, 3, ...BEECH);
+
+      box(0.16, 0.22, 0.40, 0.78, 16, 32, ...STRIPE_NAVY);
+      box(0.40, 0.22, 0.64, 0.78, 11, 16, ...STRIPE_CREAM);
+      box(0.64, 0.22, 0.88, 0.78, 8, 11, ...STRIPE_RED);
     }
   });
 }
@@ -1023,28 +1375,44 @@ export function buildReceptionDesk(rot = 0) {
   const [tw, th] = rot % 2 ? [1, 3] : [3, 1];
   const MARBLE = ['#f6eedc', '#dcceb4', '#b8a88c'];
   const BELL = ['#ffe27a', '#e0b23a', '#b88a2a'];
+  const PLINTH = ['#6e3e1c', '#542e12', '#3a1e08'];
 
-  return isoSprite(tw, th, 38, (box) => {
-    // Plinth base molding (z = 0 .. 4)
-    box(0.04, 0.08, tw - 0.04, th - 0.08, 0, 4, '#7c4c22', '#643a16', '#48260c');
-    // Paneled wooden counter body (z = 4 .. 24)
+  return isoSprite(tw, th, 40, (box) => {
+    // Plinth base molding with toe-kick (z = 0 .. 4)
+    box(0.04, 0.08, tw - 0.04, th - 0.08, 0, 4, ...PLINTH);
+
+    // Front curved wooden counter body with vertical panel slats (z = 4 .. 24)
     box(0.06, 0.10, tw - 0.06, th - 0.10, 4, 24, ...WOOD);
-    // Fine brass inlay strip along the counter's upper panel edge
-    box(0.06, 0.10, tw - 0.06, th - 0.10, 20.5, 21, ...BELL);
-    // Polished marble slab counter top with overhang (z = 24 .. 28)
+    planks(box, 0.06, 0.10, tw - 0.06, th - 0.10, 4, 24, {
+      dir: tw >= th ? 'u' : 'v',
+      count: tw >= th ? 7 : 7,
+      gap: 0.02,
+      wood: WOOD,
+      grainDetail: true,
+    });
+
+    // Brass accent trim banding along the upper counter rail
+    box(0.05, 0.09, tw - 0.05, th - 0.09, 21, 23, ...BELL);
+
+    // Polished marble slab counter top with overhang and bevel edge (z = 24 .. 28)
     box(0.02, 0.05, tw - 0.02, th - 0.05, 24, 28, ...MARBLE);
-    // Gold edge trim along the marble slab rim, only resolvable at the finer bake density
-    box(0.02, 0.05, tw - 0.02, th - 0.05, 27.6, 28, ...BELL);
-    // Brass counter service bell (z = 28 .. 33)
-    box(tw / 2 - 0.12, th / 2 - 0.12, tw / 2 + 0.12, th / 2 + 0.12, 28, 33, ...BELL);
-    // Guest register leather ledger book (z = 28 .. 30)
+    box(0.02, 0.05, tw - 0.02, th - 0.05, 27.2, 28, ...BELL); // gold edge rim
+
+    // Brass counter service bell
+    box(tw / 2 - 0.10, th / 2 - 0.10, tw / 2 + 0.10, th / 2 + 0.10, 28, 33, ...BELL);
+    box(tw / 2 - 0.03, th / 2 - 0.03, tw / 2 + 0.03, th / 2 + 0.03, 33, 35, '#ffffff', '#e8e8e8', '#cccccc'); // bell push button
+
+    // Guest register leather ledger book with white pages
     const bx = rot % 2 ? 0.35 : 0.65;
     const by = rot % 2 ? 0.65 : 0.35;
-    box(bx, by, bx + 0.25, by + 0.25, 28, 30, '#542018', '#3e140e', '#280a06');
-    // Desk lamp with brass arch (z = 28 .. 38)
+    box(bx, by, bx + 0.30, by + 0.26, 28, 30, '#542018', '#3e140e', '#280a06');
+    box(bx + 0.03, by + 0.03, bx + 0.27, by + 0.23, 29, 31, '#fcfaf2', '#dedad0', '#b8b2a4');
+
+    // Banker's brass desk lamp
     const lx = rot % 2 ? 0.35 : tw - 0.55;
     const ly = rot % 2 ? th - 0.55 : 0.35;
-    box(lx, ly, lx + 0.18, ly + 0.18, 28, 38, ...BELL);
+    box(lx, ly, lx + 0.18, ly + 0.18, 28, 34, ...BELL);
+    box(lx - 0.04, ly - 0.04, lx + 0.22, ly + 0.22, 34, 38, '#2e8b57', '#1e6840', '#12482c'); // green banker shade
   });
 }
 
@@ -1076,6 +1444,9 @@ export function buildBookshelf(rot = 0) {
       box(0.04, 0.06, 0.16, th - 0.06, 4, 70, ...FRAME);
       // Right side upright panel (fully encloses the side face from back to front)
       box(tw - 0.16, 0.06, tw - 0.04, th - 0.06, 4, 70, ...FRAME);
+      // Decorative recessed side panel moulding on exposed side
+      box(tw - 0.14, 0.12, tw - 0.06, th - 0.12, 8, 66, '#824e22', '#6c3e18', '#502a10');
+      box(tw - 0.13, 0.14, tw - 0.07, th - 0.14, 10, 64, '#ba7840', '#9c5e2a', '#744018');
 
       // 3 shelves with books
       for (let row = 0; row < 3; row++) {
@@ -1104,6 +1475,9 @@ export function buildBookshelf(rot = 0) {
       box(0.06, 0.04, tw - 0.06, 0.16, 4, 70, ...FRAME);
       // Front side upright panel (fully encloses the side face from back to front)
       box(0.06, th - 0.16, tw - 0.06, th - 0.04, 4, 70, ...FRAME);
+      // Decorative recessed side panel moulding on exposed side
+      box(0.12, th - 0.14, tw - 0.12, th - 0.06, 8, 66, '#824e22', '#6c3e18', '#502a10');
+      box(0.14, th - 0.13, tw - 0.14, th - 0.07, 10, 64, '#ba7840', '#9c5e2a', '#744018');
 
       // 3 shelves with books
       for (let row = 0; row < 3; row++) {
@@ -1133,30 +1507,97 @@ export function buildBookshelf(rot = 0) {
 
 export function buildBarCounter(rot = 0) {
   const [tw, th] = rot % 2 ? [1, 3] : [3, 1];
-  const BAR_BODY = ['#385482', '#283e62', '#1a2a44'];
-  const MAHOGANY = ['#9e5232', '#823e20', '#5c2810'];
+  const BAR_BASE = ['#1a2436', '#121a28', '#0a101a'];
+  const BAR_BODY = ['#283c5e', '#1c2c46', '#121e30'];
+  const PANEL = ['#344e78', '#263a5c', '#18263e'];
+  const MAHOGANY = ['#7c381c', '#602812', '#441808'];
+  const MAHOGANY_HI = ['#9e4a26', '#7c381c', '#5a2410'];
+  const BRASS = ['#f4c654', '#cb982c', '#926a14'];
+  const BRASS_HI = ['#ffe890', '#e2b038', '#a47814'];
+  const STEEL = ['#d8e0e8', '#b0bcc8', '#808c98'];
 
-  return isoSprite(tw, th, 42, (box) => {
-    // Brass footrail (z = 0 .. 4)
-    box(0.04, 0.08, tw - 0.04, th - 0.08, 0, 4, '#c89e44', '#a47e30', '#74541c');
-    // Front paneled bar body (z = 4 .. 28)
+  return isoSprite(tw, th, 44, (box) => {
+    // 1. Heavy dark plinth base (z = 0 .. 4)
+    box(0.04, 0.08, tw - 0.04, th - 0.08, 0, 4, ...BAR_BASE);
+
+    // Continuous polished brass footrail along guest side
+    if (tw > th) {
+      box(0.06, 0.04, tw - 0.06, 0.08, 3, 5, ...BRASS_HI);
+      box(0.20, 0.04, 0.24, 0.10, 2, 4, ...BRASS);
+      box(tw / 2 - 0.02, 0.04, tw / 2 + 0.02, 0.10, 2, 4, ...BRASS);
+      box(tw - 0.24, 0.04, tw - 0.20, 0.10, 2, 4, ...BRASS);
+    } else {
+      box(0.04, 0.06, 0.08, th - 0.06, 3, 5, ...BRASS_HI);
+      box(0.04, 0.20, 0.10, 0.24, 2, 4, ...BRASS);
+      box(0.04, th / 2 - 0.02, 0.10, th / 2 + 0.02, 2, 4, ...BRASS);
+      box(0.04, th - 0.24, 0.10, th - 0.20, 2, 4, ...BRASS);
+    }
+
+    // 2. Front bar carcass body with panelled wainscoting
     box(0.06, 0.10, tw - 0.06, th - 0.10, 4, 28, ...BAR_BODY);
-    // Heavy polished mahogany top (z = 28 .. 32)
-    box(0.02, 0.04, tw - 0.02, th - 0.04, 28, 32, ...MAHOGANY);
-    // Glassware & beverage bottles on counter (z = 32 .. 42)
-    const n = rot % 2 ? th * 3 : tw * 3;
-    const bCols = [
-      ['#5cc08a', '#3c9a68', '#2c7a50'],
-      ['#e0734a', '#b85a38', '#904630'],
-      ['#e8c85a', '#c2a23e', '#8c7224'],
-      ['#78a4e8', '#5482c4', '#345c92'],
-    ];
-    for (let i = 0; i < n; i++) {
-      const col = bCols[i % bCols.length];
-      const t = 0.20 + (i / n) * ((rot % 2 ? th : tw) - 0.40);
-      const bx = rot % 2 ? 0.35 : t;
-      const by = rot % 2 ? t : 0.35;
-      box(bx, by, bx + 0.10, by + 0.10, 32, 40, ...col);
+
+    // Raised decorative panels along the front
+    if (tw > th) {
+      for (let p = 0; p < 3; p++) {
+        const px0 = 0.12 + p * 0.94;
+        const px1 = px0 + 0.82;
+        box(px0, 0.09, px1, 0.11, 6, 26, ...PANEL);
+        box(px0 + 0.04, 0.08, px1 - 0.04, 0.10, 8, 24, ...BAR_BODY);
+      }
+    } else {
+      for (let p = 0; p < 3; p++) {
+        const py0 = 0.12 + p * 0.94;
+        const py1 = py0 + 0.82;
+        box(0.09, py0, 0.11, py1, 6, 26, ...PANEL);
+        box(0.08, py0 + 0.04, 0.10, py1 - 0.04, 8, 24, ...BAR_BODY);
+      }
+    }
+
+    // 3. Heavy polished mahogany bar counter top with overhang & bullnose edge
+    box(0.02, 0.04, tw - 0.02, th - 0.04, 28, 31, ...MAHOGANY);
+    box(0.01, 0.03, tw - 0.01, th - 0.03, 31, 33, ...MAHOGANY_HI);
+
+    // 4. Back-bar stainless speed rail & cocktail station
+    if (tw > th) {
+      box(0.08, th - 0.20, tw - 0.08, th - 0.06, 29, 32, ...STEEL);
+      // Liquor bottles array with glass sheen & metal pour spouts
+      const bCols = [
+        ['#22c55e', '#16a34a', '#14532d'], // gin / absinthe
+        ['#ef4444', '#dc2626', '#991b1b'], // campari
+        ['#f59e0b', '#d97706', '#92400e'], // whiskey
+        ['#3b82f6', '#2563eb', '#1e40af'], // curacao
+        ['#e2e8f0', '#cbd5e1', '#64748b'], // vodka
+        ['#a855f7', '#9333ea', '#6b21a8'], // liqueur
+      ];
+      for (let i = 0; i < 6; i++) {
+        const bx = 0.20 + i * 0.44;
+        const by = th - 0.18;
+        const col = bCols[i % bCols.length];
+        box(bx, by, bx + 0.12, by + 0.10, 33, 40, ...col);
+        box(bx + 0.04, by + 0.02, bx + 0.08, by + 0.08, 40, 43, ...STEEL); // pour spout
+      }
+      // Cocktail shaker & cocktail glass
+      box(tw / 2 - 0.08, 0.22, tw / 2 + 0.04, 0.34, 33, 41, ...STEEL); // shaker
+      box(tw / 2 + 0.14, 0.24, tw / 2 + 0.24, 0.34, 33, 38, '#e0f6fc', '#b8e6f4', '#8accd8'); // glass
+    } else {
+      box(tw - 0.20, 0.08, tw - 0.06, th - 0.08, 29, 32, ...STEEL);
+      const bCols = [
+        ['#22c55e', '#16a34a', '#14532d'],
+        ['#ef4444', '#dc2626', '#991b1b'],
+        ['#f59e0b', '#d97706', '#92400e'],
+        ['#3b82f6', '#2563eb', '#1e40af'],
+        ['#e2e8f0', '#cbd5e1', '#64748b'],
+        ['#a855f7', '#9333ea', '#6b21a8'],
+      ];
+      for (let i = 0; i < 6; i++) {
+        const bx = tw - 0.18;
+        const by = 0.20 + i * 0.44;
+        const col = bCols[i % bCols.length];
+        box(bx, by, bx + 0.10, by + 0.12, 33, 40, ...col);
+        box(bx + 0.02, by + 0.04, bx + 0.08, by + 0.08, 40, 43, ...STEEL);
+      }
+      box(0.22, th / 2 - 0.08, 0.34, th / 2 + 0.04, 33, 41, ...STEEL);
+      box(0.24, th / 2 + 0.14, 0.34, th / 2 + 0.24, 33, 38, '#e0f6fc', '#b8e6f4', '#8accd8');
     }
   });
 }
@@ -1195,303 +1636,666 @@ export function buildStringLightsSprite() {
 
 export function buildAquariumSprite(rot = 0) {
   const [tw, th] = rot % 2 ? [1, 2] : [2, 1];
-  const STAND = ['#6e4222', '#563216', '#3e200c'];
-  const BRASS = ['#ffe27a', '#e0b23a', '#b88a2a'];
-  const HOOD = ['#4e4e5e', '#363644', '#20202a'];
+  const STAND_BASE = ['#20242c', '#16181e', '#0c0e12'];
+  const STAND = ['#2c323d', '#20242c', '#14181e'];
+  const STAND_DOOR = ['#38404e', '#2c323d', '#1c2028'];
+  const CHROME = ['#eaf0f6', '#c0ccd8', '#8898a8'];
+  const SAND = ['#f4ecd0', '#ded2b0', '#b8aa88'];
+  const ROCK = ['#5e5852', '#46403a', '#302c28'];
+  const WATER = ['#4ed8d8', '#26b0b8', '#147680'];
+  const WATER_HI = ['#c8f8fa', '#88e4ec', '#48b8c4'];
+  const HOOD = ['#22262e', '#181b22', '#101216'];
 
   return isoSprite(tw, th, 46, (box) => {
-    // Dark timber cabinet stand (z = 0 .. 14)
-    box(0.04, 0.08, tw - 0.04, th - 0.08, 0, 14, ...STAND);
-    // Polished brass trim band (z = 14 .. 16)
-    box(0.02, 0.06, tw - 0.02, th - 0.06, 14, 16, ...BRASS);
-    // Coral sand bed inside tank (z = 16 .. 18)
-    box(0.06, 0.10, tw - 0.06, th - 0.10, 16, 18, '#ecdca0', '#d2c082', '#a89458');
-    // Clear aquatic blue water prism (z = 18 .. 38)
-    box(0.06, 0.10, tw - 0.06, th - 0.10, 18, 38, '#6dd8d8', '#38b0b8', '#1c7882');
-    // Corals & sea greenery
-    box(0.18, 0.28, 0.36, 0.46, 18, 28, '#38c860', '#249442', '#166428');
-    box(tw - 0.38, 0.28, tw - 0.20, 0.46, 18, 26, '#ff6098', '#cc3870', '#901c4a');
-    // Darting neon fish (clownfish + neon tetra)
-    box(tw * 0.38, th * 0.40, tw * 0.38 + 0.22, th * 0.40 + 0.12, 26, 30, '#ff7820', '#d85810', '#9c3804');
-    box(tw * 0.65, th * 0.46, tw * 0.65 + 0.16, th * 0.46 + 0.10, 22, 25, '#40c8ff', '#2090cc', '#106090');
-    // Top canopy hood with ventilation louvers (z = 38 .. 44)
-    box(0.04, 0.08, tw - 0.04, th - 0.08, 38, 44, ...HOOD);
+    // 1. Sleek modern cabinet stand
+    // Recessed plinth base (z = 0 .. 3)
+    box(0.06, 0.10, tw - 0.06, th - 0.10, 0, 3, ...STAND_BASE);
+    // Main cabinet body (z = 3 .. 15)
+    box(0.04, 0.08, tw - 0.04, th - 0.08, 3, 15, ...STAND);
+
+    // Twin cabinet doors with center seam and chrome edge handles
+    if (tw > th) {
+      box(0.06, 0.07, tw / 2 - 0.02, 0.09, 4, 14, ...STAND_DOOR);
+      box(tw / 2 + 0.02, 0.07, tw - 0.06, 0.09, 4, 14, ...STAND_DOOR);
+      box(tw / 2 - 0.05, 0.06, tw / 2 - 0.03, 0.08, 10, 13, ...CHROME);
+      box(tw / 2 + 0.03, 0.06, tw / 2 + 0.05, 0.08, 10, 13, ...CHROME);
+    } else {
+      box(0.07, 0.06, 0.09, th / 2 - 0.02, 4, 14, ...STAND_DOOR);
+      box(0.07, th / 2 + 0.02, 0.09, th - 0.06, 4, 14, ...STAND_DOOR);
+      box(0.06, th / 2 - 0.05, 0.08, th / 2 - 0.03, 10, 13, ...CHROME);
+      box(0.06, th / 2 + 0.03, 0.08, th / 2 + 0.05, 10, 13, ...CHROME);
+    }
+
+    // Polished chrome tank support collar (z = 15 .. 17)
+    box(0.02, 0.06, tw - 0.02, th - 0.06, 15, 17, ...CHROME);
+
+    // 2. Tank interior
+    // Aragonite sand substrate bed (z = 17 .. 20)
+    box(0.05, 0.09, tw - 0.05, th - 0.09, 17, 20, ...SAND);
+
+    // Live rock coral reef scape (z = 20 .. 30)
+    box(0.12 * tw, 0.22 * th, 0.42 * tw, 0.58 * th, 20, 28, ...ROCK);
+    box(tw - 0.44 * tw, 0.26 * th, tw - 0.14 * tw, 0.62 * th, 20, 26, ...ROCK);
+
+    // Branching pink coral & green sea anemone
+    box(0.16 * tw, 0.26 * th, 0.32 * tw, 0.48 * th, 28, 34, '#f472b6', '#db2777', '#9d174d');
+    box(tw - 0.38 * tw, 0.30 * th, tw - 0.20 * tw, 0.52 * th, 26, 31, '#34d399', '#059669', '#065f46');
+
+    // Rising aerator bubble stream (micro 2x air bubbles)
+    const bubX = tw > th ? 0.50 * tw : 0.48 * tw;
+    const bubY = tw > th ? 0.38 * th : 0.50 * th;
+    box(bubX - 0.02, bubY - 0.02, bubX + 0.02, bubY + 0.02, 21, 23, '#ffffff', '#e0f8fc', '#b0e8f4');
+    box(bubX - 0.01, bubY - 0.01, bubX + 0.03, bubY + 0.03, 26, 28, '#ffffff', '#e0f8fc', '#b0e8f4');
+    box(bubX - 0.02, bubY - 0.02, bubX + 0.02, bubY + 0.02, 32, 34, '#ffffff', '#e0f8fc', '#b0e8f4');
+
+    // Tropical clownfish (orange body, white bar, dark fin)
+    const cX = tw > th ? 0.36 * tw : 0.42 * tw;
+    const cY = tw > th ? 0.42 * th : 0.36 * th;
+    box(cX, cY, cX + 0.16, cY + 0.10, 27, 31, '#fb923c', '#ea580c', '#9a3412');
+    box(cX + 0.06, cY, cX + 0.10, cY + 0.10, 27, 31, '#ffffff', '#f1f5f9', '#cbd5e1'); // white vertical bar
+    box(cX + 0.14, cY + 0.02, cX + 0.17, cY + 0.08, 28, 30, '#1e293b', '#0f172a', '#020617'); // dark tail fin
+
+    // Blue tang (royal blue body, vibrant yellow tail)
+    const bX = tw > th ? 0.64 * tw : 0.52 * tw;
+    const bY = tw > th ? 0.46 * th : 0.64 * th;
+    box(bX, bY, bX + 0.14, bY + 0.08, 23, 27, '#2563eb', '#1d4ed8', '#1e3a8a');
+    box(bX + 0.12, bY + 0.01, bX + 0.16, bY + 0.07, 24, 26, '#facc15', '#eab308', '#a16207');
+
+    // Opti-white water prism with surface meniscus
+    box(0.04, 0.08, tw - 0.04, th - 0.08, 20, 38, ...WATER);
+    box(0.05, 0.09, tw - 0.05, th - 0.09, 37, 38.5, ...WATER_HI);
+
+    // Top canopy hood with ventilation louvers & feeding hatch (z = 38 .. 44)
+    box(0.03, 0.07, tw - 0.03, th - 0.07, 38, 44, ...HOOD);
+    box(0.20 * tw, 0.22 * th, 0.60 * tw, 0.68 * th, 44, 45, '#38404e', '#2c323d', '#1c2028'); // feeding lid
     // Power indicator LED
-    box(tw - 0.22, th - 0.16, tw - 0.14, th - 0.10, 44, 45, '#40ff80', '#20d050', '#109030');
+    box(tw - 0.18, th - 0.14, tw - 0.12, th - 0.10, 44, 45.5, '#4ade80', '#22c55e', '#15803d');
   });
 }
 
 export function buildBobaBarSprite(rot = 0) {
   const [tw, th] = rot % 2 ? [1, 2] : [2, 1];
   const TILES = ['#9fe0cc', '#78bfa8', '#508c78'];
+  const TILES_DARK = ['#70ac98', '#548c78', '#386454'];
   const BIRCH = ['#faeed0', '#deceaa', '#b8a680'];
+  const BIRCH_HI = ['#ffffff', '#f4e6c8', '#d0be98'];
+  const STEEL = ['#d8e0e8', '#b0bcc8', '#808c98'];
+  const SEALER = ['#e8edf4', '#c4ced8', '#94a0b0'];
+  const CUP = ['#f4f8fc', '#d0e0ec', '#a4bcc8'];
 
   return isoSprite(tw, th, 46, (box) => {
-    // Pastel tiled counter base (z = 0 .. 22)
+    // 1. Subway tiled counter base (z = 0 .. 22)
     box(0.05, 0.08, tw - 0.05, th - 0.08, 0, 22, ...TILES);
-    // Polished birch counter top with overhang (z = 22 .. 25)
-    box(0.02, 0.04, tw - 0.02, th - 0.04, 22, 25, ...BIRCH);
-    // Twin tea urn dispensers (z = 25 .. 38)
-    box(0.14 * tw, 0.24 * th, 0.14 * tw + 0.26, 0.24 * th + 0.26, 25, 38, '#d4a06a', '#b07c48', '#80542c');
-    box(0.38 * tw, 0.24 * th, 0.38 * tw + 0.26, 0.24 * th + 0.26, 25, 38, '#88cc66', '#66aa44', '#447a28');
-    // Cup sealer machine with digital display (z = 25 .. 36)
-    box(0.66 * tw, 0.22 * th, 0.66 * tw + 0.26, 0.22 * th + 0.26, 25, 36, '#e0e0ea', '#c0c0cc', '#9090a0');
-    // Prepared boba drink cups with dark tapioca pearls and wide straws
-    box(0.80 * tw, 0.50 * th, 0.80 * tw + 0.14, 0.50 * th + 0.14, 25, 33, '#e8b878', '#c49454', '#946a32');
-    box(0.80 * tw, 0.50 * th, 0.80 * tw + 0.14, 0.50 * th + 0.14, 25, 27, '#2a1a14', '#1c100c', '#100806'); // pearls
-    // Overhead mini sign frame (z = 38 .. 44)
-    box(0.20 * tw, 0.10 * th, tw - 0.20 * tw, 0.18 * th, 40, 44, '#ff9ec4', '#db789e', '#a44c70');
+    // Darker base plinth
+    box(0.05, 0.08, tw - 0.05, th - 0.08, 0, 3, ...TILES_DARK);
+
+    // 2. Polished birch counter top with overhang (z = 22 .. 25)
+    box(0.02, 0.04, tw - 0.02, th - 0.04, 22, 24, ...BIRCH);
+    box(0.01, 0.03, tw - 0.01, th - 0.03, 24, 25.5, ...BIRCH_HI);
+
+    // 3. Twin commercial stainless tea urn dispensers (z = 25 .. 38)
+    // Urn 1 (Black Tea)
+    const [u1x, u1y] = [0.12 * tw, 0.20 * th];
+    box(u1x, u1y, u1x + 0.26, u1y + 0.26, 25, 37, ...STEEL);
+    box(u1x - 0.01, u1y - 0.01, u1x + 0.27, u1y + 0.27, 36, 38, '#32363e', '#22242a', '#14161a'); // black lid
+    box(u1x + 0.08, u1y + 0.25, u1x + 0.18, u1y + 0.29, 27, 30, '#ef4444', '#dc2626', '#991b1b'); // red tap
+
+    // Urn 2 (Jasmine Green Tea)
+    const [u2x, u2y] = [0.38 * tw, 0.20 * th];
+    box(u2x, u2y, u2x + 0.26, u2y + 0.26, 25, 37, ...STEEL);
+    box(u2x - 0.01, u2y - 0.01, u2x + 0.27, u2y + 0.27, 36, 38, '#32363e', '#22242a', '#14161a');
+    box(u2x + 0.08, u2y + 0.25, u2x + 0.18, u2y + 0.29, 27, 30, '#22c55e', '#16a34a', '#15803d'); // green tap
+
+    // 4. Automatic cup sealer machine with digital display (z = 25 .. 37)
+    const [smx, smy] = [0.66 * tw, 0.18 * th];
+    box(smx, smy, smx + 0.26, smy + 0.26, 25, 36, ...SEALER);
+    box(smx + 0.04, smy + 0.25, smx + 0.22, smy + 0.28, 30, 34, '#0f172a', '#020617', '#000000'); // LED screen
+    box(smx + 0.06, smy + 0.26, smx + 0.20, smy + 0.28, 31, 33, '#38bdf8', '#0284c7', '#0369a1'); // cyan readout
+    // Film roll brackets on top
+    box(smx + 0.06, smy + 0.06, smx + 0.20, smy + 0.20, 36, 39, '#f472b6', '#db2777', '#9d174d');
+
+    // 5. Prepared boba drink cups with dark tapioca pearls and wide rainbow straws
+    const [cx, cy] = [0.78 * tw, 0.48 * th];
+    box(cx, cy, cx + 0.14, cy + 0.14, 25, 33, ...CUP);
+    box(cx + 0.01, cy + 0.01, cx + 0.13, cy + 0.13, 25, 28, '#1e1612', '#140e0c', '#0a0604'); // boba pearls
+    box(cx + 0.01, cy + 0.01, cx + 0.13, cy + 0.13, 28, 32, '#e8b878', '#c49454', '#946a32'); // milk tea
+    box(cx + 0.05, cy + 0.05, cx + 0.09, cy + 0.09, 33, 37, '#ec4899', '#db2777', '#9d174d'); // fat pink straw
+
+    // 6. Overhead menu header board
+    box(0.18 * tw, 0.08 * th, tw - 0.18 * tw, 0.16 * th, 40, 45, '#1e293b', '#0f172a', '#020617');
+    box(0.22 * tw, 0.07 * th, tw - 0.22 * tw, 0.10 * th, 41, 44, '#f472b6', '#ec4899', '#be185d');
   });
 }
 
 export function buildMiniArcadeSprite(rot = 0) {
-  const CHASSIS = ['#38244e', '#281838', '#180c24'];
-  const SCREEN = ['#204050', '#142c38', '#0c1a22'];
+  const CHASSIS = ['#221e30', '#181424', '#0e0c16'];
+  const TMOLD = ['#ff2a8c', '#d4186e', '#940c4a']; // hot magenta T-molding edge trim
+  const SCREEN_BEZEL = ['#14161e', '#0e1016', '#080a0e'];
+  const SCREEN = ['#0a1424', '#060e1a', '#040810'];
+  const CRT_GLARE = ['#38bdf8', '#0284c7', '#0369a1'];
+  const CHROME = ['#b8c4d2', '#909ea8', '#62707e'];
+  const COIN_DOOR = ['#1c1c24', '#14141a', '#0c0c10'];
 
-  return isoSprite(1, 1, 52, (box) => {
-    // Upright arcade cabinet base with coin door (z = 0 .. 18)
-    box(0.14, 0.14, 0.86, 0.86, 0, 18, ...CHASSIS);
-    box(0.32, 0.82, 0.68, 0.88, 4, 15, '#22222a', '#181820', '#101014'); // coin door
-    box(0.46, 0.84, 0.54, 0.88, 9, 13, '#ffe27a', '#d8a834', '#98721c'); // slot
-    // Slanted control panel deck (z = 18 .. 24)
-    box(0.14, 0.44, 0.86, 0.88, 18, 24, '#241634', '#1a0e26', '#12081a');
-    // Ball-top red joystick & action buttons
-    box(0.28, 0.62, 0.36, 0.70, 24, 29, '#ff3850', '#d01c32', '#940e1e');
-    box(0.52, 0.64, 0.60, 0.72, 24, 26, '#40e0d0', '#2cb4a6', '#1c7c72');
-    box(0.68, 0.60, 0.76, 0.68, 24, 26, '#ffe040', '#d4b024', '#947810');
-    // Recessed glowing CRT monitor (z = 24 .. 42)
-    box(0.18, 0.24, 0.82, 0.70, 24, 42, ...SCREEN);
-    // 8-bit spaceship graphic on screen
-    box(0.44, 0.46, 0.56, 0.58, 30, 36, '#60ff80', '#3cd458', '#20943c');
-    // Glowing marquee header (z = 42 .. 50)
-    box(0.14, 0.20, 0.86, 0.56, 42, 50, '#ff40a0', '#d02078', '#940e4e');
-    box(0.22, 0.54, 0.78, 0.58, 44, 48, '#fff080', '#e0c840', '#9c8c18'); // illuminated logo
+  return isoSprite(1, 1, 54, (box) => {
+    // 1. Upright arcade cabinet base plinth & T-molding profile (z = 0 .. 18)
+    box(0.12, 0.14, 0.88, 0.86, 0, 18, ...CHASSIS);
+    // T-molding rubber edge trim along side profile
+    box(0.11, 0.13, 0.13, 0.87, 0, 18, ...TMOLD);
+    box(0.87, 0.13, 0.89, 0.87, 0, 18, ...TMOLD);
+
+    // Double commercial steel coin door with twin illuminated 25c reject buttons
+    box(0.28, 0.80, 0.72, 0.87, 3, 16, ...COIN_DOOR);
+    box(0.30, 0.83, 0.70, 0.86, 4, 15, shade(COIN_DOOR[0], 0.1), shade(COIN_DOOR[1], 0.1), shade(COIN_DOOR[2], 0.1));
+    // Key lock
+    box(0.48, 0.85, 0.52, 0.88, 14, 15.5, ...CHROME);
+    // Twin 25c coin reject buttons (amber illuminated)
+    box(0.34, 0.85, 0.44, 0.88, 8, 12, '#ff9800', '#e65100', '#b23c00');
+    box(0.56, 0.85, 0.66, 0.88, 8, 12, '#ff9800', '#e65100', '#b23c00');
+    // Coin drop reject cups below
+    box(0.34, 0.84, 0.44, 0.88, 4.5, 7, '#101016', '#08080c', '#040406');
+    box(0.56, 0.84, 0.66, 0.88, 4.5, 7, '#101016', '#08080c', '#040406');
+
+    // 2. Slanted control panel deck (z = 18 .. 25)
+    box(0.12, 0.40, 0.88, 0.88, 18, 25, ...CHASSIS);
+    box(0.11, 0.39, 0.89, 0.89, 23.5, 25.5, ...TMOLD); // deck edge T-mold
+
+    // Ball-top red arcade joystick
+    box(0.24, 0.60, 0.32, 0.68, 25, 27, ...CHROME); // dust washer & chrome shaft
+    box(0.22, 0.58, 0.34, 0.70, 27, 31, '#ff1744', '#cc0e34', '#8a0620'); // red ball knob
+
+    // 6 arcade action buttons in 2 curved rows of 3
+    box(0.46, 0.66, 0.52, 0.72, 25, 26.5, '#00e5ff', '#00b4cc', '#007a8a'); // cyan
+    box(0.58, 0.66, 0.64, 0.72, 25, 26.5, '#ffea00', '#d4c200', '#948800'); // yellow
+    box(0.70, 0.66, 0.76, 0.72, 25, 26.5, '#00e676', '#00b85c', '#007a3d'); // green
+    box(0.46, 0.54, 0.52, 0.60, 25, 26.5, '#ff4081', '#d42862', '#941440'); // magenta
+    box(0.58, 0.54, 0.64, 0.60, 25, 26.5, '#2979ff', '#1c5ec4', '#103e84'); // blue
+    box(0.70, 0.54, 0.76, 0.60, 25, 26.5, '#ff5722', '#d83808', '#942200'); // orange
+    // Player 1 start button
+    box(0.26, 0.46, 0.30, 0.50, 25, 26.2, '#ffffff', '#e0e0e0', '#b0b0b0');
+
+    // 3. Tilted CRT monitor display & bezel (z = 24 .. 43)
+    box(0.14, 0.20, 0.86, 0.65, 24, 43, ...SCREEN_BEZEL);
+    box(0.18, 0.24, 0.82, 0.60, 25, 42, ...SCREEN);
+    // CRT curved diagonal glass glare streak
+    box(0.20, 0.52, 0.32, 0.58, 38, 41, ...CRT_GLARE);
+    box(0.26, 0.42, 0.40, 0.50, 34, 38, ...CRT_GLARE);
+
+    // Pixel art retro spaceship & stars on screen
+    box(0.44, 0.36, 0.56, 0.48, 30, 36, '#00e676', '#00b85c', '#007a3d'); // ship
+    box(0.48, 0.38, 0.52, 0.46, 36, 38, '#ffeb3b', '#fbc02d', '#f57f17'); // nose laser
+    box(0.28, 0.30, 0.32, 0.34, 38, 40, '#ffffff', '#f0f0f0', '#d0d0d0'); // star
+    box(0.68, 0.32, 0.72, 0.36, 32, 34, '#ffffff', '#f0f0f0', '#d0d0d0'); // star
+    box(0.36, 0.28, 0.40, 0.32, 28, 30, '#ff4081', '#d42862', '#941440'); // enemy alien
+
+    // 4. Illuminated top marquee sign with "ARCADE" header (z = 43 .. 54)
+    box(0.12, 0.16, 0.88, 0.52, 43, 54, ...CHASSIS);
+    box(0.11, 0.15, 0.89, 0.53, 51, 54, ...TMOLD); // top T-mold cap
+    // Backlit marquee face
+    box(0.18, 0.48, 0.82, 0.53, 44, 52, '#fff9c4', '#fff176', '#fbc02d');
+    box(0.22, 0.50, 0.78, 0.535, 46, 50, '#ff007f', '#c70063', '#8a0044'); // retro title block
   });
 }
 
 export function buildNoodleCartSprite(rot = 0) {
   const [tw, th] = rot % 2 ? [1, 2] : [2, 1];
   const CART_WOOD = ['#9e6634', '#825024', '#5c3614'];
+  const CART_DARK = ['#6c3e18', '#542e10', '#3a1e0a'];
   const WHEEL = ['#4a3828', '#38281a', '#24180e'];
-  const AWNING_BLUE = ['#2b3a67', '#1e2848', '#121a30'];
+  const BRASS = ['#f4c654', '#cb982c', '#926a14'];
+  const AWNING_BLUE = ['#1e2c52', '#141e3a', '#0c1224'];
   const AWNING_WHITE = ['#f4f0dc', '#ded6be', '#b0a890'];
+  const STEEL = ['#d8e0e8', '#b0bcc8', '#808c98'];
+  const STEAM = ['#ffffff', '#f0f8fc', '#d8eef8'];
 
   return isoSprite(tw, th, 54, (box) => {
-    // Spoke rolling wheels on floor (z = 0 .. 10)
+    // 1. Spoked timber wheels with iron rim & center brass hub (z = 0 .. 10)
     box(0.10, 0.80, 0.26, 0.90, 0, 10, ...WHEEL);
+    box(0.15, 0.79, 0.21, 0.91, 4, 7, ...BRASS); // hub
     box(tw - 0.26, 0.80, tw - 0.10, 0.90, 0, 10, ...WHEEL);
-    // Wooden food cart prep body (z = 8 .. 22)
+    box(tw - 0.21, 0.79, tw - 0.15, 0.91, 4, 7, ...BRASS);
+
+    // Cart axle beam
+    box(0.18, 0.82, tw - 0.18, 0.88, 4, 7, ...CART_DARK);
+
+    // 2. Wooden food cart body with drawers & brass pulls (z = 8 .. 22)
     box(0.06, 0.10, tw - 0.06, th - 0.10, 8, 22, ...CART_WOOD);
-    // Stainless steel soup / broth cauldron (z = 22 .. 32)
-    box(0.16 * tw, 0.24 * th, 0.16 * tw + 0.34, 0.24 * th + 0.34, 22, 32, '#c8d0d8', '#a4acb4', '#7c848c');
-    // Golden broth inside cauldron top
-    box(0.18 * tw, 0.26 * th, 0.18 * tw + 0.30, 0.26 * th + 0.30, 31, 32, '#f0b840', '#d49c24', '#946a10');
-    // Scallion & nori garnish on broth
-    box(0.20 * tw, 0.28 * th, 0.24 * tw, 0.32 * th, 32, 33, '#2a883a', '#1c6628', '#104418');
-    // Stack of ceramic ramen bowls (z = 22 .. 29)
-    box(0.56 * tw, 0.30 * th, 0.56 * tw + 0.22, 0.30 * th + 0.22, 22, 29, '#f4f0e6', '#d6d0c2', '#a8a294');
-    // Chopstick caddy (z = 22 .. 30)
-    box(tw - 0.24, 0.26 * th, tw - 0.12, 0.26 * th + 0.12, 22, 30, '#d24830', '#a8321e', '#7c2010');
-    // Canopy corner posts (z = 22 .. 44)
-    box(0.06, 0.10, 0.12, 0.16, 22, 44, ...CART_WOOD);
-    box(tw - 0.12, 0.10, tw - 0.06, 0.16, 22, 44, ...CART_WOOD);
-    box(0.06, th - 0.16, 0.12, th - 0.10, 22, 44, ...CART_WOOD);
-    box(tw - 0.12, th - 0.16, tw - 0.06, th - 0.10, 22, 44, ...CART_WOOD);
-    // Striped fabric awning roof (z = 44 .. 52)
-    box(0.02, 0.04, tw - 0.02, th - 0.04, 44, 52, ...AWNING_BLUE);
-    box(tw * 0.25, 0.02, tw * 0.45, th - 0.02, 45, 53, ...AWNING_WHITE);
-    box(tw * 0.65, 0.02, tw * 0.85, th - 0.02, 45, 53, ...AWNING_WHITE);
-    // Hanging red paper lantern (z = 30 .. 42) with gold tassel
-    box(tw - 0.25, 0.68, tw - 0.08, 0.85, 32, 42, '#f03838', '#cc2020', '#900e0e');
-    box(tw - 0.19, 0.74, tw - 0.14, 0.79, 29, 32, '#ffe27a', '#d8a834', '#98721c'); // gold tassel
+    box(0.10, 0.09, tw - 0.10, 0.11, 10, 20, ...CART_DARK); // front prep drawer seam
+    box(tw / 2 - 0.04, 0.08, tw / 2 + 0.04, 0.10, 14, 16, ...BRASS); // drawer handle
+
+    // 3. Boiling noodle broth cauldron (z = 22 .. 32)
+    const [cx, cy] = [0.14 * tw, 0.20 * th];
+    box(cx, cy, cx + 0.36, cy + 0.36, 22, 32, ...STEEL);
+    // Golden rich ramen broth
+    box(cx + 0.03, cy + 0.03, cx + 0.33, cy + 0.33, 31, 32.5, '#f0b840', '#d49c24', '#946a10');
+    // Garnish: green scallions & nori seaweed
+    box(cx + 0.06, cy + 0.06, cx + 0.14, cy + 0.14, 32.5, 33.5, '#22c55e', '#16a34a', '#14532d');
+    box(cx + 0.20, cy + 0.06, cx + 0.28, cy + 0.16, 32.5, 33.5, '#1e293b', '#0f172a', '#020617');
+
+    // Rising steam puffs above cauldron (z = 33 .. 42)
+    box(cx + 0.10, cy + 0.10, cx + 0.18, cy + 0.18, 34, 37, ...STEAM);
+    box(cx + 0.14, cy + 0.14, cx + 0.24, cy + 0.24, 38, 41, ...STEAM);
+
+    // 4. Ceramic ramen bowls stack (z = 22 .. 30)
+    const [bx, by] = [0.56 * tw, 0.26 * th];
+    box(bx, by, bx + 0.22, by + 0.22, 22, 30, '#faf6ee', '#ded6c6', '#b0a894');
+    box(bx + 0.02, by + 0.02, bx + 0.20, by + 0.20, 29, 30.5, '#2563eb', '#1d4ed8', '#1e3a8a'); // blue glazed rim
+
+    // 5. Red chopstick caddy & seasoning shakers (z = 22 .. 31)
+    box(tw - 0.22, 0.24 * th, tw - 0.10, 0.24 * th + 0.12, 22, 30, '#dc2626', '#b91c1c', '#7f1d1d');
+    box(tw - 0.20, 0.24 * th + 0.02, tw - 0.12, 0.24 * th + 0.10, 30, 33, '#e5d0a4', '#c4b082', '#98865c'); // wooden chopsticks
+
+    // 6. Canopy timber corner posts (z = 22 .. 45)
+    box(0.06, 0.10, 0.12, 0.16, 22, 45, ...CART_DARK);
+    box(tw - 0.12, 0.10, tw - 0.06, 0.16, 22, 45, ...CART_DARK);
+    box(0.06, th - 0.16, 0.12, th - 0.10, 22, 45, ...CART_DARK);
+    box(tw - 0.12, th - 0.16, tw - 0.06, th - 0.10, 22, 45, ...CART_DARK);
+
+    // 7. Striped indigo noren fabric awning roof (z = 45 .. 53)
+    box(0.02, 0.04, tw - 0.02, th - 0.04, 45, 52, ...AWNING_BLUE);
+    box(tw * 0.20, 0.02, tw * 0.40, th - 0.02, 46, 53, ...AWNING_WHITE);
+    box(tw * 0.60, 0.02, tw * 0.80, th - 0.02, 46, 53, ...AWNING_WHITE);
+
+    // 8. Glowing crimson Japanese chochin paper lantern with gold tassel (z = 28 .. 42)
+    box(tw - 0.26, 0.64, tw - 0.08, 0.82, 31, 41, '#ef4444', '#dc2626', '#991b1b');
+    box(tw - 0.23, 0.67, tw - 0.11, 0.79, 32, 40, '#f87171', '#ef4444', '#b91c1c'); // glowing core
+    box(tw - 0.19, 0.71, tw - 0.15, 0.75, 27, 31, ...BRASS); // gold tassel
   });
 }
 
 export function buildKaraokeMachineSprite(rot = 0) {
-  const KIOSK = ['#282c4e', '#1c1e36', '#101222'];
-  const DISPLAY = ['#20d0f0', '#14a4c4', '#0c7088'];
+  const KIOSK = ['#242636', '#181a26', '#0e1018'];
+  const CHROME = ['#b8c4d2', '#909ea8', '#62707e'];
+  const CHROME_HI = ['#ffffff', '#e8f0f8', '#b8c6d4'];
+  const DISPLAY = ['#0a182e', '#061020', '#040a14'];
+  const LYRIC_BLUE = ['#38bdf8', '#0284c7', '#0369a1'];
+  const BOUNCE_GOLD = ['#ffea00', '#fbc02d', '#f57f17'];
+  const WOOFER_CONE = ['#1a1c24', '#12141a', '#0a0c10'];
+  const RING_CYAN = ['#00e5ff', '#00b4cc', '#007a8a'];
+  const RING_MAGENTA = ['#ff2a8c', '#d4186e', '#940c4a'];
 
-  return isoSprite(1, 1, 50, (box) => {
-    // Mirror stage plinth (z = 0 .. 4)
-    box(0.12, 0.12, 0.88, 0.88, 0, 4, '#442854', '#301a3e', '#200e2a');
-    // Console tower cabinet (z = 4 .. 38)
-    box(0.20, 0.20, 0.80, 0.54, 4, 38, ...KIOSK);
-    // Audio VU-meter spectrum LED display (z = 10 .. 22)
-    box(0.26, 0.52, 0.38, 0.56, 10, 18, '#40f060', '#28c442', '#16842a');
-    box(0.44, 0.52, 0.56, 0.56, 10, 22, '#ffe030', '#d4b418', '#947c0c');
-    box(0.62, 0.52, 0.74, 0.56, 10, 16, '#ff3040', '#cc1826', '#880c16');
-    // Lyrics video display (z = 24 .. 36)
-    box(0.24, 0.50, 0.76, 0.56, 24, 36, ...DISPLAY);
-    // Microphone stand in front (z = 4 .. 30)
-    box(0.44, 0.68, 0.56, 0.80, 4, 6, '#404050', '#2c2c38', '#1c1c24');
-    box(0.48, 0.72, 0.52, 0.76, 6, 26, '#c0c4d4', '#9aa0b0', '#6c7280');
-    box(0.44, 0.68, 0.56, 0.80, 26, 31, '#e0e4f4', '#b8bed0', '#80889c'); // mic head
-    // Top spinning disco ball mirror dome (z = 38 .. 46)
-    box(0.32, 0.24, 0.68, 0.50, 38, 46, '#f0f4ff', '#ccd4e8', '#94a0bc');
+  return isoSprite(1, 1, 52, (box) => {
+    // 1. Stage wash plinth with multicolor LED perimeter glow (z = 0 .. 4)
+    box(0.12, 0.12, 0.88, 0.88, 0, 3, '#2a1a38', '#1c1028', '#12081a');
+    // Pulsing LED edge wash lights
+    box(0.14, 0.84, 0.48, 0.88, 1, 3.5, ...RING_MAGENTA);
+    box(0.52, 0.84, 0.86, 0.88, 1, 3.5, ...RING_CYAN);
+
+    // 2. Heavy acoustic speaker tower cabinet (z = 3 .. 40)
+    box(0.18, 0.18, 0.82, 0.62, 3, 40, ...KIOSK);
+    // Brushed chrome side vertical trim rails
+    box(0.16, 0.16, 0.20, 0.64, 3, 40, ...CHROME);
+    box(0.80, 0.16, 0.84, 0.64, 3, 40, ...CHROME);
+
+    // 3. Dual glowing speaker woofers
+    // Lower 10" subwoofer cone (z = 6 .. 17)
+    box(0.24, 0.58, 0.76, 0.64, 6, 17, ...RING_CYAN); // cyan halo ring
+    box(0.28, 0.59, 0.72, 0.63, 7, 16, ...WOOFER_CONE); // cone body
+    box(0.44, 0.60, 0.56, 0.64, 10, 13, ...CHROME_HI); // center silver phase plug
+
+    // Upper mid-woofer cone (z = 18 .. 27)
+    box(0.30, 0.58, 0.70, 0.64, 18, 27, ...RING_MAGENTA); // magenta halo ring
+    box(0.34, 0.59, 0.66, 0.63, 19, 26, ...WOOFER_CONE);
+    box(0.46, 0.60, 0.54, 0.64, 21, 24, ...CHROME_HI);
+
+    // 4. Central widescreen color monitor (z = 28 .. 39)
+    box(0.20, 0.56, 0.80, 0.63, 28, 39, '#10121a', '#0a0c12', '#06080a'); // screen bezel
+    box(0.24, 0.58, 0.76, 0.62, 29, 38, ...DISPLAY); // widescreen face
+
+    // Animated lyric prompt bars on display
+    box(0.28, 0.59, 0.60, 0.61, 34, 36, ...LYRIC_BLUE); // upper lyric text line
+    box(0.32, 0.59, 0.72, 0.61, 31, 33, '#e2e8f0', '#cbd5e1', '#94a3b8'); // lower lyric text line
+    // Bouncing golden karaoke ball over active syllable
+    box(0.48, 0.60, 0.54, 0.62, 36, 38.5, ...BOUNCE_GOLD);
+
+    // Left and right audio VU-meter spectrum LED columns
+    box(0.21, 0.59, 0.23, 0.61, 29, 33, '#22c55e', '#16a34a', '#15803d'); // green
+    box(0.21, 0.59, 0.23, 0.61, 33, 36, '#eab308', '#ca8a04', '#a16207'); // yellow
+    box(0.21, 0.59, 0.23, 0.61, 36, 38, '#ef4444', '#dc2626', '#b91c1c'); // red peak
+    box(0.77, 0.59, 0.79, 0.61, 29, 34, '#22c55e', '#16a34a', '#15803d');
+    box(0.77, 0.59, 0.79, 0.61, 34, 37, '#eab308', '#ca8a04', '#a16207');
+
+    // 5. Dual wireless microphones in side docking cradles
+    // Left microphone (red band)
+    box(0.10, 0.32, 0.18, 0.46, 20, 24, ...KIOSK); // cradle
+    box(0.12, 0.34, 0.16, 0.44, 22, 31, ...CHROME); // mic shaft
+    box(0.11, 0.33, 0.17, 0.45, 26, 27.5, '#ef4444', '#dc2626', '#b91c1c'); // red id band
+    box(0.10, 0.32, 0.18, 0.46, 31, 36, ...CHROME_HI); // silver mesh head
+
+    // Right microphone (blue band)
+    box(0.82, 0.32, 0.90, 0.46, 20, 24, ...KIOSK);
+    box(0.84, 0.34, 0.88, 0.44, 22, 31, ...CHROME);
+    box(0.83, 0.33, 0.89, 0.45, 26, 27.5, '#3b82f6', '#2563eb', '#1d4ed8'); // blue id band
+    box(0.82, 0.32, 0.90, 0.46, 31, 36, ...CHROME_HI);
+
+    // 6. Top spinning party disco ball mirror dome (z = 40 .. 49)
+    box(0.28, 0.24, 0.72, 0.56, 40, 42, ...CHROME); // dome base
+    box(0.34, 0.28, 0.66, 0.52, 42, 49, '#ffffff', '#e2e8f0', '#94a3b8'); // multifaceted mirror ball
+    box(0.38, 0.32, 0.46, 0.40, 45, 48, '#50f0ff', '#20c8e8', '#1088a8'); // cyan ray glint
+    box(0.54, 0.40, 0.62, 0.48, 44, 47, '#ff40b0', '#d82088', '#980c58'); // magenta ray glint
   });
 }
 
 export function buildTelescopeSprite(rot = 0) {
   const BRASS = ['#f6c667', '#d8a442', '#a07424'];
   const BRASS_LT = ['#ffe088', '#f6c667', '#c08e2c'];
+  const BRASS_HI = ['#ffffff', '#fff0b0', '#e2be48'];
   const TRIPOD = ['#7c4422', '#603216', '#44200c'];
 
   return isoSprite(1, 1, 56, (box) => {
-    // 3 splayed mahogany tripod legs meeting at central hub (z = 0 .. 24)
+    // 3 splayed mahogany tripod legs with brass feet shoes (z = 0 .. 24)
     // South leg
-    box(0.44, 0.72, 0.56, 0.84, 0, 8, ...TRIPOD);
+    box(0.43, 0.71, 0.57, 0.85, 0, 3, ...BRASS); // brass toe shoe
+    box(0.44, 0.72, 0.56, 0.84, 3, 8, ...TRIPOD);
     box(0.45, 0.58, 0.55, 0.72, 8, 16, ...TRIPOD);
     box(0.46, 0.48, 0.54, 0.58, 16, 24, ...TRIPOD);
+
     // West leg
-    box(0.14, 0.24, 0.26, 0.36, 0, 8, ...TRIPOD);
+    box(0.13, 0.23, 0.27, 0.37, 0, 3, ...BRASS);
+    box(0.14, 0.24, 0.26, 0.36, 3, 8, ...TRIPOD);
     box(0.24, 0.30, 0.36, 0.42, 8, 16, ...TRIPOD);
     box(0.34, 0.38, 0.44, 0.48, 16, 24, ...TRIPOD);
+
     // East leg
-    box(0.74, 0.24, 0.86, 0.36, 0, 8, ...TRIPOD);
+    box(0.73, 0.23, 0.87, 0.37, 0, 3, ...BRASS);
+    box(0.74, 0.24, 0.86, 0.36, 3, 8, ...TRIPOD);
     box(0.64, 0.30, 0.76, 0.42, 8, 16, ...TRIPOD);
     box(0.56, 0.38, 0.66, 0.48, 16, 24, ...TRIPOD);
 
-    // Equatorial mount hub & setting circles (z = 24 .. 28)
-    box(0.42, 0.42, 0.58, 0.58, 24, 28, ...BRASS);
-    // Counterweight rod extending to the right
-    box(0.58, 0.46, 0.76, 0.54, 22, 25, '#8c6418', '#6a480e', '#482e06');
-    box(0.70, 0.44, 0.78, 0.56, 21, 26, ...BRASS);
+    // Brass spreader tray & accessory rack between legs (z = 10 .. 12)
+    box(0.38, 0.38, 0.62, 0.62, 10, 12, ...BRASS);
 
-    // Slender angled brass refractor tube pointing up & towards north-west
-    // Eyepiece / diagonal at bottom
-    box(0.54, 0.54, 0.66, 0.66, 25, 29, ...BRASS);
-    // Mid barrel section
-    box(0.40, 0.40, 0.54, 0.54, 29, 39, ...BRASS);
-    // Upper barrel section
-    box(0.30, 0.30, 0.44, 0.44, 39, 47, ...BRASS);
-    // Flared objective dew shield
-    box(0.22, 0.22, 0.38, 0.38, 47, 54, ...BRASS_LT);
-    // Coated objective lens reflection
-    box(0.24, 0.24, 0.36, 0.36, 54, 55, '#e0f8ff', '#a8e8f8', '#60b8d8');
+    // Alt-azimuth swivel mount & setting circles (z = 24 .. 28)
+    box(0.40, 0.40, 0.60, 0.60, 24, 28, ...BRASS);
+    box(0.58, 0.46, 0.76, 0.54, 22, 25, '#8c6418', '#6a480e', '#482e06'); // counterweight rod
+    box(0.70, 0.44, 0.78, 0.56, 21, 26, ...BRASS); // brass counterweight
+
+    // Slender angled brass refractor optical tube
+    box(0.54, 0.54, 0.66, 0.66, 25, 29, ...BRASS); // 90-degree star diagonal & eyepiece
+    box(0.48, 0.48, 0.56, 0.56, 28, 32, ...BRASS_LT); // focusing rack & knurled knob
+    box(0.40, 0.40, 0.54, 0.54, 29, 39, ...BRASS); // mid barrel
+    box(0.38, 0.38, 0.44, 0.44, 30, 38, ...BRASS_HI); // 2x top specular highlight streak
+    box(0.30, 0.30, 0.44, 0.44, 39, 47, ...BRASS); // upper barrel
+    box(0.28, 0.28, 0.34, 0.34, 40, 46, ...BRASS_HI);
+    box(0.22, 0.22, 0.38, 0.38, 47, 54, ...BRASS_LT); // flared dew shield
+    box(0.24, 0.24, 0.36, 0.36, 54, 55, '#e0f8ff', '#a8e8f8', '#60b8d8'); // multi-coated objective lens
   });
 }
 
 export function buildKoiPondSprite(rot = 0) {
   const SLATE = ['#6a6e7c', '#505460', '#383c46'];
-  const WATER = ['#48b8c8', '#2a8e9e', '#1a6472'];
+  const SLATE_HI = ['#8c92a2', '#6e7482', '#4e5460'];
+  const WATER = ['#38b8c8', '#1e8e9e', '#106472'];
+  const WATER_HI = ['#9ae8f4', '#52cce0', '#249cb0'];
   const LILY = ['#4ebd5e', '#369e44', '#226e2e'];
+  const LILY_HI = ['#72e482', '#4ebd5e', '#30883c'];
 
   return isoSprite(2, 2, 14, (box) => {
-    // Slate stone basin rim around all 4 sides (z = 0 .. 8)
-    box(0.04, 0.04, 1.96, 0.26, 0, 8, ...SLATE); // North rim
-    box(0.04, 1.74, 1.96, 1.96, 0, 8, ...SLATE); // South rim
-    box(0.04, 0.26, 0.26, 1.74, 0, 8, ...SLATE); // West rim
-    box(1.74, 0.26, 1.96, 1.74, 0, 8, ...SLATE); // East rim
-    // Clear turquoise water pool (z = 0 .. 5)
+    // 1. Natural carved flagstone coping stone rim around all 4 sides (z = 0 .. 8)
+    stoneBlocks(box, 0.04, 0.04, 1.96, 0.26, 0, 8, { stone: SLATE, blockLength: 0.45 });
+    stoneBlocks(box, 0.04, 1.74, 1.96, 1.96, 0, 8, { stone: SLATE, blockLength: 0.45 });
+    stoneBlocks(box, 0.04, 0.26, 0.26, 1.74, 0, 8, { stone: SLATE, blockLength: 0.45 });
+    stoneBlocks(box, 1.74, 0.26, 1.96, 1.74, 0, 8, { stone: SLATE, blockLength: 0.45 });
+
+    // Coping lip overhang bevel highlight
+    box(0.02, 0.02, 1.98, 0.28, 7, 8.5, ...SLATE_HI);
+    box(0.02, 1.72, 1.98, 1.98, 7, 8.5, ...SLATE_HI);
+    box(0.02, 0.28, 0.28, 1.72, 7, 8.5, ...SLATE_HI);
+    box(1.72, 0.28, 1.98, 1.72, 7, 8.5, ...SLATE_HI);
+
+    // 2. Clear turquoise aquatic water pool with depth gradient (z = 0 .. 5.5)
     box(0.26, 0.26, 1.74, 1.74, 0, 5, ...WATER);
-    // Natural river boulder stepping stone (z = 0 .. 7)
-    box(0.85, 0.85, 1.25, 1.25, 0, 7, '#888e9c', '#6c727e', '#4c525c');
-    // Emerald floating lily pads on water surface (z = 5 .. 6)
-    box(0.42, 0.52, 0.70, 0.80, 5, 6, ...LILY);
-    box(0.54, 0.62, 0.62, 0.70, 6, 7, '#ff80b0', '#d85888', '#983058'); // pink lotus bud
-    box(1.30, 1.10, 1.56, 1.36, 5, 6, ...LILY);
-    // Swimming Kohaku koi (white with red patches)
-    box(0.70, 0.40, 1.10, 0.65, 3, 5, '#f4f4f8', '#d0d0d8', '#a0a0aa');
-    box(0.82, 0.46, 0.98, 0.58, 4, 5, '#e63820', '#b82410', '#801408'); // red mark
-    // Swimming Yamabuki koi (golden yellow)
-    box(1.10, 0.65, 1.45, 0.90, 2, 4, '#f8c830', '#d8a018', '#986c0c');
+    box(0.30, 0.30, 1.70, 1.70, 4.8, 5.4, ...WATER_HI); // caustic ripple surface
+
+    // 3. Natural mossy river boulder stepping stone (z = 0 .. 7.5)
+    box(0.85, 0.85, 1.25, 1.25, 0, 7.5, '#78808e', '#5c6470', '#3e444e');
+    box(0.88, 0.88, 1.22, 1.22, 7.2, 7.8, '#589e68', '#3c7a4a', '#245632'); // moss top
+
+    // 4. Emerald floating circular lily pads with notched leaf outlines (z = 5.2 .. 6.2)
+    box(0.42, 0.52, 0.70, 0.80, 5.2, 6.2, ...LILY);
+    box(0.46, 0.56, 0.66, 0.76, 6.0, 6.4, ...LILY_HI);
+    // Pink water lily blossom with golden stamen
+    box(0.54, 0.62, 0.62, 0.70, 6.2, 7.5, '#f472b6', '#db2777', '#9d174d');
+    box(0.56, 0.64, 0.60, 0.68, 7.4, 8.0, '#fde047', '#eab308', '#a16207');
+
+    box(1.30, 1.10, 1.56, 1.36, 5.2, 6.2, ...LILY);
+    box(1.34, 1.14, 1.52, 1.32, 6.0, 6.4, ...LILY_HI);
+
+    // 5. Swimming Kohaku koi (white with vivid scarlet red patches and black pectoral fins)
+    box(0.70, 0.40, 1.10, 0.65, 3, 5, '#f8fafc', '#e2e8f0', '#cbd5e1'); // pearl white body
+    box(0.82, 0.44, 0.98, 0.60, 4.5, 5.2, '#ef4444', '#dc2626', '#991b1b'); // scarlet hi pattern
+    box(0.68, 0.48, 0.72, 0.56, 3.5, 4.5, '#f8fafc', '#e2e8f0', '#cbd5e1'); // tail fin
+
+    // 6. Swimming Yamabuki golden Ogon koi
+    box(1.10, 0.65, 1.45, 0.90, 2.5, 4.5, '#facc15', '#eab308', '#a16207');
+    box(1.18, 0.70, 1.38, 0.85, 4.2, 4.8, '#fde047', '#facc15', '#ca8a04'); // golden metallic sheen
   });
 }
 
 export function buildCapsuleDispenserSprite(rot = 0) {
-  const RED_BODY = ['#e03040', '#b8202e', '#80101c'];
+  const IRON_BASE = ['#383a48', '#282a34', '#1a1c24'];
+  const RED_BODY = ['#e02838', '#b81c2c', '#800c18'];
+  const RED_HI = ['#ff4d5e', '#e02838', '#9e1422'];
   const GLOBE = ['#88d8f0', '#58b4d0', '#308098'];
+  const GLASS_HI = ['#ffffff', '#e8f8ff', '#b4e4f8'];
   const CHROME = ['#e0e4ec', '#b8c0cc', '#848c98'];
+  const CHROME_HI = ['#ffffff', '#f0f4fa', '#c8d0dc'];
 
-  return isoSprite(1, 1, 46, (box) => {
-    // Red gachapon pedestal stand (z = 0 .. 18)
-    box(0.18, 0.18, 0.82, 0.82, 0, 18, ...RED_BODY);
-    // Prize retrieval door flap (z = 2 .. 9)
-    box(0.32, 0.76, 0.68, 0.84, 2, 9, '#303038', '#202028', '#14141c');
-    // Rotating turn crank key (z = 11 .. 16)
-    box(0.40, 0.76, 0.60, 0.84, 11, 16, ...CHROME);
-    // Transparent spherical/prism toy capsule globe (z = 18 .. 36)
-    box(0.16, 0.16, 0.84, 0.84, 18, 36, ...GLOBE);
-    // Multi-colored toy prize capsules inside globe
-    box(0.24, 0.28, 0.44, 0.48, 20, 26, '#ff4050', '#d82030', '#94101e'); // red
-    box(0.54, 0.30, 0.74, 0.50, 20, 26, '#ffd830', '#d4b018', '#987c0c'); // yellow
-    box(0.34, 0.52, 0.54, 0.72, 22, 28, '#4ae060', '#2cb840', '#1a8428'); // green
-    box(0.30, 0.32, 0.50, 0.52, 27, 33, '#30c0ff', '#1890d0', '#0c6090'); // cyan
-    box(0.50, 0.50, 0.70, 0.70, 27, 33, '#b860f0', '#9038cc', '#601890'); // purple
-    // Molded crimson lid cap (z = 36 .. 42)
-    box(0.18, 0.18, 0.82, 0.82, 36, 40, ...RED_BODY);
-    box(0.30, 0.30, 0.70, 0.70, 40, 42, '#f44454', '#d02838', '#981420');
+  return isoSprite(1, 1, 48, (box) => {
+    // 1. Heavy cast iron circular pedestal stand with flared foot (z = 0 .. 5)
+    box(0.20, 0.20, 0.80, 0.80, 0, 3, ...IRON_BASE);
+    box(0.26, 0.26, 0.74, 0.74, 3, 5, ...IRON_BASE);
+
+    // 2. Cast metal crimson mechanism housing body (z = 5 .. 20)
+    box(0.18, 0.18, 0.82, 0.82, 5, 20, ...RED_BODY);
+    box(0.16, 0.16, 0.84, 0.84, 18, 20, ...CHROME); // polished top chrome mounting collar
+
+    // Prize retrieval door flap (z = 2 .. 10)
+    box(0.30, 0.78, 0.70, 0.85, 2, 10, '#1c1e24', '#14161a', '#0a0c0e'); // recessed chute pocket
+    box(0.32, 0.82, 0.68, 0.86, 3, 9, '#343844', '#262a34', '#181a22'); // swinging door flap
+    // Awarded prize capsule waiting in retrieval chute
+    box(0.42, 0.80, 0.58, 0.86, 4, 8, '#fde047', '#eab308', '#a16207'); // yellow capsule half
+    box(0.44, 0.82, 0.56, 0.86, 6, 8, '#ffffff', '#f1f5f9', '#cbd5e1'); // white capsule half
+
+    // Chrome coin mechanism & turn crank key (z = 11 .. 17)
+    box(0.34, 0.80, 0.66, 0.85, 12, 17, ...CHROME); // coin slide plate
+    box(0.46, 0.84, 0.54, 0.86, 14, 16.5, '#121418', '#0a0c0e', '#040608'); // coin slot
+    // Rotating winged crank handle
+    box(0.42, 0.83, 0.58, 0.87, 13, 15.5, ...CHROME_HI);
+    box(0.48, 0.82, 0.52, 0.88, 11.5, 17, ...CHROME_HI); // vertical turn wing
+
+    // 3. Transparent spherical toy capsule globe (z = 20 .. 39)
+    box(0.16, 0.16, 0.84, 0.84, 20, 39, ...GLOBE);
+
+    // Multi-colored 2-tone toy prize capsules inside globe
+    // Lower tier
+    box(0.24, 0.26, 0.42, 0.44, 21, 27, '#ef4444', '#dc2626', '#991b1b'); // red
+    box(0.24, 0.26, 0.42, 0.44, 24, 27, '#ffffff', '#f1f5f9', '#cbd5e1'); // white top
+    box(0.56, 0.28, 0.74, 0.46, 21, 27, '#eab308', '#ca8a04', '#a16207'); // yellow
+    box(0.56, 0.28, 0.74, 0.46, 24, 27, '#38bdf8', '#0284c7', '#0369a1'); // cyan top
+    box(0.34, 0.52, 0.52, 0.70, 22, 28, '#22c55e', '#16a34a', '#15803d'); // green
+    box(0.34, 0.52, 0.52, 0.70, 25, 28, '#ffffff', '#f1f5f9', '#cbd5e1');
+
+    // Mid tier
+    box(0.28, 0.32, 0.46, 0.50, 27, 33, '#3b82f6', '#2563eb', '#1d4ed8'); // blue
+    box(0.28, 0.32, 0.46, 0.50, 30, 33, '#facc15', '#eab308', '#a16207');
+    box(0.52, 0.48, 0.70, 0.66, 27, 33, '#a855f7', '#9333ea', '#6b21a8'); // purple
+    box(0.52, 0.48, 0.70, 0.66, 30, 33, '#f43f5e', '#e11d48', '#9f1239');
+
+    // Upper tier
+    box(0.40, 0.36, 0.58, 0.54, 32, 37, '#f97316', '#ea580c', '#c2410c'); // orange
+    box(0.40, 0.36, 0.58, 0.54, 34.5, 37, '#ffffff', '#f1f5f9', '#cbd5e1');
+
+    // Clear globe specular glass reflection streaks
+    box(0.18, 0.50, 0.24, 0.66, 24, 36, ...GLASS_HI);
+    box(0.20, 0.20, 0.32, 0.32, 33, 37, ...GLASS_HI);
+
+    // 4. Molded crimson metal lid cap & chrome cylinder lock (z = 39 .. 46)
+    box(0.18, 0.18, 0.82, 0.82, 39, 43, ...RED_BODY);
+    box(0.26, 0.26, 0.74, 0.74, 43, 45, ...RED_HI);
+    box(0.44, 0.44, 0.56, 0.56, 45, 47.5, ...CHROME_HI); // center keylock
   });
 }
 
 export function buildSuiteBedSprite(rot = 0) {
-  const HEAD = ['#6b4226', '#52301a', '#3a2010'];
-  const SHEET = ['#f7f4ee', '#ded8cc', '#b8b0a2'];
-  const DUVET = ['#5a82c8', '#4268ac', '#2c4a82'];
-  const PILLOW = ['#ffffff', '#e6e4ec', '#c4c0cc'];
+  const FRAME = ['#4e2a14', '#381c0c', '#241006'];
+  const TUFT = ['#382012', '#28140a', '#180a04'];
+  const TUFT_CREASE = ['#5c341c', '#442412', '#2e160a'];
+  const SHEET = ['#faf8f4', '#e2ded4', '#beb8aa'];
+  const DUVET = ['#3b6aa8', '#2a4e82', '#1a3258'];
+  const DUVET_HI = ['#5a8ad0', '#3b6aa8', '#264878'];
+  const RUNNER = ['#8c2438', '#681424', '#480c16'];
+  const PILLOW = ['#ffffff', '#f1f5f9', '#cbd5e1'];
+  const BRASS = ['#f4c654', '#cb982c', '#926a14'];
+
   return isoSprite(2, 2, 38, (box) => {
-    box(0.06, 0.06, 1.94, 1.94, 0, 7, ...HEAD);
+    // 1. King platform bed frame plinth (z = 0 .. 7)
+    box(0.06, 0.06, 1.94, 1.94, 0, 7, ...FRAME);
+
+    // 2. Thick plush mattress with fitted sheet (z = 7 .. 15)
     box(0.10, 0.10, 1.90, 1.90, 7, 15, ...SHEET);
-    // fine piped edge along the duvet hem, only resolvable at the finer bake density
-    box(0.10, 0.10, 1.90, 1.90, 14.6, 15, '#e8e2d4', '#c8c0ae', '#9c9486');
+
     if (rot % 2 === 0) {
-      box(0.06, 0.06, 1.94, 0.28, 7, 34, ...HEAD);
-      box(0.06, 0.06, 1.94, 0.28, 32, 32.6, '#8a5c38', '#6e4628', '#4e3018'); // headboard button-tuft trim
-      box(0.10, 0.70, 1.90, 1.90, 8, 16, ...DUVET);
-      box(0.24, 0.32, 0.92, 0.64, 15, 19, ...PILLOW);
-      box(1.08, 0.32, 1.76, 0.64, 15, 19, ...PILLOW);
+      // Tall upholstered headboard with vertical channel tufting seams (z = 7 .. 36)
+      box(0.06, 0.06, 1.94, 0.28, 7, 36, ...FRAME);
+      box(0.08, 0.08, 1.92, 0.26, 9, 34, ...TUFT);
+      // Vertical stitch channels at 2x density
+      for (let ch = 0.32; ch < 1.70; ch += 0.28) {
+        box(ch, 0.07, ch + 0.04, 0.27, 9, 34, ...TUFT_CREASE);
+      }
+
+      // Duvet draped over lower 65% of bed (z = 8 .. 16)
+      box(0.10, 0.68, 1.90, 1.90, 8, 15.5, ...DUVET);
+      // Turn-down top sheet fold
+      box(0.10, 0.60, 1.90, 0.70, 14.5, 16, ...SHEET);
+      // Contrasting velvet bed runner along foot of bed
+      box(0.10, 1.55, 1.90, 1.82, 15.2, 16.2, ...RUNNER);
+
+      // 4 sleeping pillows (2 king base pillows + 2 accent pillows with center indents)
+      box(0.18, 0.30, 0.94, 0.60, 15, 19, ...PILLOW);
+      box(0.50, 0.42, 0.62, 0.48, 18.5, 19.2, '#94a3b8', '#64748b', '#475569'); // indent crease
+      box(1.06, 0.30, 1.82, 0.60, 15, 19, ...PILLOW);
+      box(1.38, 0.42, 1.50, 0.48, 18.5, 19.2, '#94a3b8', '#64748b', '#475569');
+
+      // Accent burgundy throw pillows in front
+      box(0.30, 0.52, 0.74, 0.68, 16, 21, ...RUNNER);
+      box(1.26, 0.52, 1.70, 0.68, 16, 21, ...RUNNER);
     } else {
-      box(0.06, 0.06, 0.28, 1.94, 7, 34, ...HEAD);
-      box(0.06, 0.06, 0.28, 1.94, 32, 32.6, '#8a5c38', '#6e4628', '#4e3018');
-      box(0.70, 0.10, 1.90, 1.90, 8, 16, ...DUVET);
-      box(0.32, 0.24, 0.64, 0.92, 15, 19, ...PILLOW);
-      box(0.32, 1.08, 0.64, 1.76, 15, 19, ...PILLOW);
+      box(0.06, 0.06, 0.28, 1.94, 7, 36, ...FRAME);
+      box(0.08, 0.08, 0.26, 1.92, 9, 34, ...TUFT);
+      for (let ch = 0.32; ch < 1.70; ch += 0.28) {
+        box(0.07, ch, 0.27, ch + 0.04, 9, 34, ...TUFT_CREASE);
+      }
+
+      box(0.68, 0.10, 1.90, 1.90, 8, 15.5, ...DUVET);
+      box(0.60, 0.10, 0.70, 1.90, 14.5, 16, ...SHEET);
+      box(1.55, 0.10, 1.82, 1.90, 15.2, 16.2, ...RUNNER);
+
+      box(0.30, 0.18, 0.60, 0.94, 15, 19, ...PILLOW);
+      box(0.42, 0.50, 0.48, 0.62, 18.5, 19.2, '#94a3b8', '#64748b', '#475569');
+      box(0.30, 1.06, 0.60, 1.82, 15, 19, ...PILLOW);
+      box(0.42, 1.38, 0.48, 1.50, 18.5, 19.2, '#94a3b8', '#64748b', '#475569');
+
+      box(0.52, 0.30, 0.68, 0.74, 16, 21, ...RUNNER);
+      box(0.52, 1.26, 0.68, 1.70, 16, 21, ...RUNNER);
     }
   });
 }
 
 export function buildTreadmillSprite(rot = 0) {
   const [tw, th] = rot % 2 ? [2, 1] : [1, 2];
-  const FRAME = ['#525866', '#3c424e', '#282c36'];
-  const BELT = ['#282a30', '#1c1e24', '#121418'];
-  const SCREEN = ['#38d8f0', '#20a8c0', '#127488'];
-  return isoSprite(tw, th, 42, (box) => {
-    box(0.10, 0.08, tw - 0.10, th - 0.08, 0, 5, ...FRAME);
-    box(0.16, 0.14, tw - 0.16, th - 0.14, 5, 6, ...BELT);
-    if (rot % 2 === 0) {
-      box(0.12, 0.12, 0.22, 0.30, 5, 34, ...FRAME);
-      box(0.78, 0.12, 0.88, 0.30, 5, 34, ...FRAME);
-      box(0.12, 0.10, 0.88, 0.42, 32, 39, ...FRAME);
-      box(0.24, 0.16, 0.76, 0.36, 39, 41, ...SCREEN);
+  const FRAME = ['#4a505e', '#363a46', '#222630'];
+  const BELT = ['#1e2026', '#14161a', '#0c0e10'];
+  const STRIPE = ['#f4f6fa', '#d0d4de', '#9ea4b0'];
+  const CONSOLE = ['#2a2e38', '#1c2028', '#101218'];
+  const SCREEN = ['#00e5ff', '#00b4d8', '#0077b6'];
+  const RED_KEY = ['#ff3b30', '#d32f2f', '#9a0007'];
+
+  return isoSprite(tw, th, 44, (box) => {
+    // Heavy base chassis & motor housing at front
+    box(0.08, 0.08, tw - 0.08, th - 0.08, 0, 5, ...FRAME);
+
+    if (tw >= th) {
+      // 2x1 configuration (runs along u axis)
+      // Front motor hood
+      box(0.06, 0.08, 0.38, th - 0.08, 4, 12, ...FRAME);
+      // Textured rubber running belt with center lane guide stripes
+      box(0.36, 0.16, tw - 0.08, th - 0.16, 4, 6, ...BELT);
+      box(0.38, 0.46, tw - 0.10, 0.54, 6, 6.4, ...STRIPE);
+      // Extruded aluminum side foot rails with grip ridges
+      box(0.36, 0.08, tw - 0.08, 0.16, 5, 7, '#747c8c', '#545a68', '#383e48');
+      box(0.36, th - 0.16, tw - 0.08, th - 0.08, 5, 7, '#747c8c', '#545a68', '#383e48');
+
+      // Tubular steel upright support arms
+      box(0.18, 0.10, 0.28, 0.20, 5, 36, ...FRAME);
+      box(0.18, th - 0.20, 0.28, th - 0.10, 5, 36, ...FRAME);
+      // Handrails with pulse sensor pads
+      box(0.26, 0.12, 0.65, 0.18, 33, 36, '#282c34', '#1c2026', '#101216');
+      box(0.26, th - 0.18, 0.65, th - 0.12, 33, 36, '#282c34', '#1c2026', '#101216');
+
+      // Wide angled digital dashboard console
+      box(0.10, 0.10, 0.32, th - 0.10, 34, 40, ...CONSOLE);
+      // Glowing color LCD workout screen
+      box(0.14, 0.20, 0.28, th - 0.20, 40, 42, ...SCREEN);
+      // Red magnetic safety key
+      box(0.20, 0.45, 0.26, 0.55, 39, 41, ...RED_KEY);
     } else {
-      box(0.12, 0.12, 0.30, 0.22, 5, 34, ...FRAME);
-      box(0.12, 0.78, 0.30, 0.88, 5, 34, ...FRAME);
-      box(0.10, 0.12, 0.42, 0.88, 32, 39, ...FRAME);
-      box(0.16, 0.24, 0.36, 0.76, 39, 41, ...SCREEN);
+      // 1x2 configuration (runs along v axis)
+      box(0.08, 0.06, tw - 0.08, 0.38, 4, 12, ...FRAME);
+      box(0.16, 0.36, tw - 0.16, th - 0.08, 4, 6, ...BELT);
+      box(0.46, 0.38, 0.54, th - 0.10, 6, 6.4, ...STRIPE);
+      box(0.08, 0.36, 0.16, th - 0.08, 5, 7, '#747c8c', '#545a68', '#383e48');
+      box(tw - 0.16, 0.36, tw - 0.08, th - 0.08, 5, 7, '#747c8c', '#545a68', '#383e48');
+
+      box(0.10, 0.18, 0.20, 0.28, 5, 36, ...FRAME);
+      box(tw - 0.20, 0.18, tw - 0.10, 0.28, 5, 36, ...FRAME);
+      box(0.12, 0.26, 0.18, 0.65, 33, 36, '#282c34', '#1c2026', '#101216');
+      box(tw - 0.18, 0.26, tw - 0.12, 0.65, 33, 36, '#282c34', '#1c2026', '#101216');
+
+      box(0.10, 0.10, tw - 0.10, 0.32, 34, 40, ...CONSOLE);
+      box(0.20, 0.14, tw - 0.20, 0.28, 40, 42, ...SCREEN);
+      box(0.45, 0.20, 0.55, 0.26, 39, 41, ...RED_KEY);
     }
   });
 }
 
 export function buildWeightBenchSprite(rot = 0) {
   const [tw, th] = rot % 2 ? [2, 1] : [1, 2];
-  const STEEL = ['#8a92a4', '#687082', '#464c5a'];
-  const PAD = ['#d83c48', '#b02834', '#7e1822'];
-  const PLATE = ['#2c303a', '#1e222a', '#12141a'];
-  return isoSprite(tw, th, 38, (box) => {
-    box(0.26, 0.16, tw - 0.26, th - 0.16, 0, 9, ...STEEL);
-    box(0.22, 0.14, tw - 0.22, th - 0.14, 9, 13, ...PAD);
-    if (rot % 2 === 0) {
-      box(0.14, 0.18, 0.24, 0.28, 0, 30, ...STEEL);
-      box(0.76, 0.18, 0.86, 0.28, 0, 30, ...STEEL);
-      box(0.02, 0.20, 0.98, 0.26, 26, 28, '#d8e0ec', '#b0b8c6', '#7c8494');
-      box(0.04, 0.12, 0.12, 0.34, 21, 33, ...PLATE);
-      box(0.88, 0.12, 0.96, 0.34, 21, 33, ...PLATE);
+  const STEEL = ['#7c8496', '#5e6474', '#424856'];
+  const PAD = ['#242830', '#181c22', '#101216'];
+  const RED_ACCENT = ['#e53935', '#c62828', '#8e0000'];
+  const CHROME = ['#e4eaf2', '#bcc4d2', '#88909e'];
+  const PLATE = ['#22262e', '#161a20', '#0e1014'];
+
+  return isoSprite(tw, th, 40, (box) => {
+    // Heavy boxed steel frame with non-slip floor shoes
+    box(0.24, 0.16, tw - 0.24, th - 0.16, 0, 8, ...STEEL);
+
+    // Thick dense foam bench pad with red stitching borders
+    box(0.20, 0.12, tw - 0.20, th - 0.12, 8, 13, ...PAD);
+    stitching(box, 0.20, 0.12, tw - 0.20, th - 0.12, 12.8, { piping: RED_ACCENT, pipingHeight: 0.8 });
+
+    if (tw >= th) {
+      // Upright barbell support posts
+      box(0.12, 0.16, 0.22, 0.28, 0, 32, ...STEEL);
+      box(0.12, th - 0.28, 0.22, th - 0.16, 0, 32, ...STEEL);
+      // Red J-hooks
+      box(0.10, 0.14, 0.24, 0.30, 27, 30, ...RED_ACCENT);
+      box(0.10, th - 0.30, 0.24, th - 0.14, 27, 30, ...RED_ACCENT);
+
+      // Knurled barbell resting on hooks
+      box(0.14, 0.02, 0.20, th - 0.02, 29, 31, ...CHROME);
+      // Loaded Olympic weight plates on bar ends
+      box(0.10, 0.03, 0.24, 0.12, 23, 37, ...PLATE);
+      box(0.10, th - 0.12, 0.24, th - 0.03, 23, 37, ...PLATE);
     } else {
-      box(0.18, 0.14, 0.28, 0.24, 0, 30, ...STEEL);
-      box(0.18, 0.76, 0.28, 0.86, 0, 30, ...STEEL);
-      box(0.20, 0.02, 0.26, 0.98, 26, 28, '#d8e0ec', '#b0b8c6', '#7c8494');
-      box(0.12, 0.04, 0.34, 0.12, 21, 33, ...PLATE);
-      box(0.12, 0.88, 0.34, 0.96, 21, 33, ...PLATE);
+      box(0.16, 0.12, 0.28, 0.22, 0, 32, ...STEEL);
+      box(tw - 0.28, 0.12, tw - 0.16, 0.22, 0, 32, ...STEEL);
+      box(0.14, 0.10, 0.30, 0.24, 27, 30, ...RED_ACCENT);
+      box(tw - 0.30, 0.10, tw - 0.14, 0.24, 27, 30, ...RED_ACCENT);
+
+      box(0.02, 0.14, tw - 0.02, 0.20, 29, 31, ...CHROME);
+      box(0.03, 0.10, 0.12, 0.24, 23, 37, ...PLATE);
+      box(tw - 0.12, 0.10, tw - 0.03, 0.24, 23, 37, ...PLATE);
     }
   });
 }
@@ -1499,49 +2303,128 @@ export function buildWeightBenchSprite(rot = 0) {
 export function buildDumbbellRackSprite(rot = 0) {
   const [tw, th] = rot % 2 ? [1, 2] : [2, 1];
   const RACK = ['#565e6e', '#3e4452', '#262a34'];
-  const IRON = ['#2e3440', '#20242e', '#14161c'];
-  const CHROME = ['#dce2ee', '#b2bac8', '#808898'];
-  return isoSprite(tw, th, 32, (box) => {
-    box(0.08, 0.14, tw - 0.08, th - 0.14, 0, 10, ...RACK);
-    box(0.10, 0.18, tw - 0.10, th - 0.18, 10, 22, ...RACK);
-    for (let i = 0; i < 4; i++) {
-      const t = 0.20 + i * 0.40;
-      const x = rot % 2 ? 0.28 : t;
-      const y = rot % 2 ? t : 0.28;
-      box(x, y, x + 0.26, y + 0.26, 22, 26, ...IRON);
-      box(x + 0.06, y + 0.06, x + 0.20, y + 0.20, 26, 28, ...CHROME);
+  const CHROME = ['#e6edf6', '#c0c8d6', '#8e96a4'];
+  const HEX_IRON = ['#22262e', '#161a20', '#0c0e12'];
+
+  return isoSprite(tw, th, 34, (box) => {
+    // A-frame angled heavy steel uprights
+    box(0.08, 0.10, tw - 0.08, th - 0.10, 0, 6, ...RACK);
+
+    if (tw >= th) {
+      // Lower and upper angled dumbbell trays
+      box(0.10, 0.14, tw - 0.10, th - 0.14, 6, 12, ...RACK);
+      box(0.12, 0.12, tw - 0.12, th - 0.30, 14, 20, ...RACK);
+
+      // Array of paired hex dumbbells graduating in size
+      for (let i = 0; i < 4; i++) {
+        const u = 0.20 + i * 0.44;
+        const size = 0.12 + i * 0.02;
+        // Dumbbell on lower tier
+        box(u - size, 0.52, u + size, 0.84, 12, 18, ...HEX_IRON);
+        box(u - 0.03, 0.58, u + 0.03, 0.78, 18, 20, ...CHROME);
+        // Dumbbell on upper tier
+        box(u - size * 0.85, 0.16, u + size * 0.85, 0.44, 20, 25, ...HEX_IRON);
+        box(u - 0.03, 0.22, u + 0.03, 0.38, 25, 27, ...CHROME);
+      }
+    } else {
+      box(0.14, 0.10, tw - 0.14, th - 0.10, 6, 12, ...RACK);
+      box(0.12, 0.12, tw - 0.30, th - 0.12, 14, 20, ...RACK);
+
+      for (let i = 0; i < 4; i++) {
+        const v = 0.20 + i * 0.44;
+        const size = 0.12 + i * 0.02;
+        box(0.52, v - size, 0.84, v + size, 12, 18, ...HEX_IRON);
+        box(0.58, v - 0.03, 0.78, v + 0.03, 18, 20, ...CHROME);
+        box(0.16, v - size * 0.85, 0.44, v + size * 0.85, 20, 25, ...HEX_IRON);
+        box(0.22, v - 0.03, 0.38, v + 0.03, 25, 27, ...CHROME);
+      }
     }
   });
 }
 
 export function buildYogaMatSprite(rot = 0) {
   const [tw, th] = rot % 2 ? [2, 1] : [1, 2];
-  const MAT = ['#a678e2', '#8658c2', '#5e3892'];
-  const TRIM = ['#70e4d0', '#4cb8a6', '#2e8476'];
+  const MAT = ['#a87ae6', '#875ac4', '#5c3894'];
+  const MAT_DARK = ['#7c4ebc', '#60389c', '#442474'];
+  const TRIM = ['#5eead4', '#2dd4bf', '#14b8a6'];
+  const TOWEL = ['#ffffff', '#f1f5f9', '#cbd5e1'];
+
   return isoSprite(tw, th, 8, (box) => {
-    box(0.12, 0.08, tw - 0.12, th - 0.08, 0, 2, ...MAT);
-    box(0.18, 0.14, tw - 0.18, th - 0.14, 2, 3, ...TRIM);
-    box(0.22, 0.16, 0.68, 0.36, 2, 6, '#f4f0fc', '#d4cce4', '#a49cb8');
+    // 1. Unrolled textured yoga mat body (z = 0 .. 2)
+    box(0.10, 0.08, tw - 0.10, th - 0.08, 0, 2, ...MAT);
+
+    // Embossed center alignment grip lines at 2x density
+    if (tw > th) {
+      box(0.30, 0.47, tw - 0.30, 0.53, 1.8, 2.3, ...TRIM);
+      box(tw / 2 - 0.10, 0.25, tw / 2 + 0.10, 0.75, 1.8, 2.3, ...TRIM);
+      // Partially rolled end showing thickness & strap
+      box(0.08, 0.08, 0.28, th - 0.08, 2, 7, ...MAT_DARK);
+      box(0.12, 0.07, 0.24, th - 0.07, 2, 6, ...MAT);
+      box(0.16, 0.06, 0.20, th - 0.06, 2, 7.5, '#1e293b', '#0f172a', '#020617'); // strap
+      // Rolled white spa towel on mat
+      box(0.34, 0.26, 0.58, 0.74, 2, 5.5, ...TOWEL);
+    } else {
+      box(0.47, 0.30, 0.53, th - 0.30, 1.8, 2.3, ...TRIM);
+      box(0.25, th / 2 - 0.10, 0.75, th / 2 + 0.10, 1.8, 2.3, ...TRIM);
+      box(0.08, 0.08, tw - 0.08, 0.28, 2, 7, ...MAT_DARK);
+      box(0.07, 0.12, tw - 0.07, 0.24, 2, 6, ...MAT);
+      box(0.06, 0.16, tw - 0.06, 0.20, 2, 7.5, '#1e293b', '#0f172a', '#020617');
+      box(0.26, 0.34, 0.74, 0.58, 2, 5.5, ...TOWEL);
+    }
   });
 }
 
 export function buildDiningTableSprite(rot = 0) {
   const [tw, th] = rot % 2 ? [1, 2] : [2, 1];
+  const WALNUT = ['#6e4228', '#54301a', '#3c2010'];
   const LINEN = ['#fbf8f2', '#e2dcd0', '#bab2a4'];
   const GOLD = ['#f6c862', '#d4a23c', '#986e1c'];
-  return isoSprite(tw, th, 34, (box) => {
-    box(0.20, 0.20, tw - 0.20, th - 0.20, 0, 18, ...WOOD);
-    box(0.06, 0.08, tw - 0.06, th - 0.08, 18, 25, ...LINEN);
-    // linen hem shadow band, only resolvable at the finer bake density
-    box(0.06, 0.08, tw - 0.06, th - 0.08, 24.4, 25, shade('#e2dcd0', -0.14), shade('#bab2a4', -0.1), shade('#bab2a4', -0.2));
-    box(tw / 2 - 0.10, th / 2 - 0.10, tw / 2 + 0.10, th / 2 + 0.10, 25, 31, ...GOLD);
-    box(tw / 2 - 0.06, th / 2 - 0.06, tw / 2 + 0.06, th / 2 + 0.06, 31, 33, '#fff6a0', '#ffc840', '#d08818');
-    // two place settings flanking the centerpiece
+
+  return isoSprite(tw, th, 36, (box) => {
+    // 4 sturdy turned walnut table legs with mortise corner brackets (z = 0 .. 18)
+    const legCoords = [
+      [0.10, 0.12, 0.22, 0.24],
+      [tw - 0.22, 0.12, tw - 0.10, 0.24],
+      [0.10, th - 0.24, 0.22, th - 0.12],
+      [tw - 0.22, th - 0.24, tw - 0.10, th - 0.12]
+    ];
+    for (const [u0, v0, u1, v1] of legCoords) {
+      box(u0, v0, u1, v1, 0, 18, ...WALNUT);
+    }
+    // Under-table apron rails
+    box(0.12, 0.14, tw - 0.12, th - 0.14, 14, 18, shade(WALNUT[0], -0.1), shade(WALNUT[1], -0.1), shade(WALNUT[2], -0.1));
+
+    // Hardwood tabletop planks with grain and bevelled perimeter (z = 18 .. 22)
+    planks(box, 0.04, 0.06, tw - 0.04, th - 0.06, 18, 22, {
+      dir: tw >= th ? 'v' : 'u',
+      count: 3,
+      gap: 0.02,
+      wood: WALNUT,
+      grainDetail: true,
+    });
+
+    // Central woven linen table runner with gold stitched edge (z = 22 .. 23)
+    if (tw >= th) {
+      box(0.02, 0.25, tw - 0.02, th - 0.25, 22, 23, ...LINEN);
+      box(0.02, 0.25, tw - 0.02, 0.27, 22.8, 23.2, ...GOLD);
+      box(0.02, th - 0.27, tw - 0.02, th - 0.25, 22.8, 23.2, ...GOLD);
+    } else {
+      box(0.25, 0.02, tw - 0.25, th - 0.02, 22, 23, ...LINEN);
+      box(0.25, 0.02, 0.27, th - 0.02, 22.8, 23.2, ...GOLD);
+      box(tw - 0.27, 0.02, tw - 0.25, th - 0.02, 22.8, 23.2, ...GOLD);
+    }
+
+    // Elegant brass floral centerpiece vase
+    box(tw / 2 - 0.08, th / 2 - 0.08, tw / 2 + 0.08, th / 2 + 0.08, 23, 30, ...GOLD);
+    box(tw / 2 - 0.05, th / 2 - 0.05, tw / 2 + 0.05, th / 2 + 0.05, 30, 34, '#ff6b8b', '#d84a68', '#a82c48'); // rose bud
+
+    // Two porcelain dinner place settings
     const [px, py] = rot % 2 ? [tw / 2, th / 2 - 0.5] : [tw / 2 - 0.5, th / 2];
     for (const s of [-1, 1]) {
-      const x = rot % 2 ? px : px + s * 0.32;
-      const y = rot % 2 ? py + s * 0.32 : py;
-      box(x - 0.1, y - 0.1, x + 0.1, y + 0.1, 25, 25.6, '#ffffff', '#e4e0da', '#c4c0ba');
+      const x = rot % 2 ? px : px + s * 0.36;
+      const y = rot % 2 ? py + s * 0.36 : py;
+      box(x - 0.12, y - 0.12, x + 0.12, y + 0.12, 23, 24.2, '#ffffff', '#e8e6e0', '#c8c4be');
+      box(x - 0.08, y - 0.08, x + 0.08, y + 0.08, 24, 24.6, '#f4f6fa', '#dcdfe6', '#b0b6c2');
     }
   });
 }
@@ -1550,32 +2433,111 @@ export function buildDiningChairSprite(rot = 0) {
   const r = ((rot % 4) + 4) % 4;
   const VELVET = ['#c83e58', '#a22840', '#721428'];
   const PIPING = ['#f4c862', '#d2a03c', '#986c1c'];
-  return isoSprite(1, 1, 34, (box) => {
-    box(0.20, 0.20, 0.32, 0.32, 0, 10, ...WOOD);
-    box(0.68, 0.20, 0.80, 0.32, 0, 10, ...WOOD);
-    box(0.20, 0.68, 0.32, 0.80, 0, 10, ...WOOD);
-    box(0.68, 0.68, 0.80, 0.80, 0, 10, ...WOOD);
-    box(0.18, 0.18, 0.82, 0.82, 10, 14, ...VELVET);
-    box(0.18, 0.18, 0.82, 0.82, 13.5, 14, ...PIPING); // gold piping along the seat edge
-    if (r === 0) box(0.18, 0.16, 0.82, 0.32, 14, 32, ...VELVET);
-    else if (r === 1) box(0.16, 0.18, 0.32, 0.82, 14, 32, ...VELVET);
-    else if (r === 2) box(0.18, 0.68, 0.82, 0.84, 14, 32, ...VELVET);
-    else box(0.68, 0.18, 0.84, 0.82, 14, 32, ...VELVET);
+  const WALNUT = ['#5a341e', '#422414', '#2c160c'];
+  const GOLD = ['#f4c862', '#d4a034', '#986c1c'];
+
+  return isoSprite(1, 1, 36, (box) => {
+    // 4 slender tapered legs with polished gold ferrules (z = 0 .. 10)
+    const legCoords = [
+      [0.20, 0.20, 0.30, 0.30],
+      [0.70, 0.20, 0.80, 0.30],
+      [0.20, 0.70, 0.30, 0.80],
+      [0.70, 0.70, 0.80, 0.80]
+    ];
+    for (const [u0, v0, u1, v1] of legCoords) {
+      box(u0, v0, u1, v1, 0, 10, ...WALNUT);
+      box(u0 - 0.01, v0 - 0.01, u1 + 0.01, v1 + 0.01, 0, 2.5, ...GOLD);
+    }
+
+    // Plush velvet seat cushion with gold piping rim
+    box(0.18, 0.18, 0.82, 0.82, 10, 15, ...VELVET);
+    stitching(box, 0.18, 0.18, 0.82, 0.82, 14.5, { piping: PIPING, pipingHeight: 0.8 });
+
+    // Curved upholstered backrest with gold piping frame
+    if (r === 0) {
+      box(0.18, 0.16, 0.82, 0.30, 15, 34, ...VELVET);
+      box(0.18, 0.14, 0.82, 0.20, 32, 35, ...PIPING);
+      box(0.48, 0.28, 0.52, 0.32, 16, 32, ...PIPING); // vertical center flute seam
+    } else if (r === 1) {
+      box(0.16, 0.18, 0.30, 0.82, 15, 34, ...VELVET);
+      box(0.14, 0.18, 0.20, 0.82, 32, 35, ...PIPING);
+      box(0.28, 0.48, 0.32, 0.52, 16, 32, ...PIPING);
+    } else if (r === 2) {
+      box(0.18, 0.70, 0.82, 0.84, 15, 34, ...VELVET);
+      box(0.18, 0.80, 0.82, 0.86, 32, 35, ...PIPING);
+    } else {
+      box(0.70, 0.18, 0.84, 0.82, 15, 34, ...VELVET);
+      box(0.80, 0.18, 0.86, 0.82, 32, 35, ...PIPING);
+    }
   });
 }
 
 export function buildBuffetCounterSprite(rot = 0) {
   const [tw, th] = rot % 2 ? [1, 3] : [3, 1];
+  const CABINET = ['#381e14', '#26120a', '#180a04'];
   const MARBLE = ['#f6f0e4', '#dcd2c0', '#b2a692'];
-  const BRASS = ['#f4c662', '#d2a03c', '#986c1c'];
-  return isoSprite(tw, th, 40, (box) => {
-    box(0.06, 0.10, tw - 0.06, th - 0.10, 0, 22, ...WOOD);
-    box(0.02, 0.06, tw - 0.02, th - 0.06, 22, 26, ...MARBLE);
+  const MARBLE_HI = ['#ffffff', '#f4ede2', '#dcd0be'];
+  const STEEL = ['#d8e2ec', '#b0bcc8', '#808c98'];
+  const CHAFING = ['#eaf0f6', '#c4d0dc', '#94a0b0'];
+  const BRASS = ['#f4c654', '#cb982c', '#926a14'];
+  const GLASS = ['#dcf6fa', '#aee4ec', '#7ac4ce'];
+  const HEAT = ['#ff8a38', '#e05818', '#a03808'];
+
+  return isoSprite(tw, th, 44, (box) => {
+    // 1. Dark wood base cabinet with panelled doors (z = 0 .. 22)
+    box(0.06, 0.10, tw - 0.06, th - 0.10, 0, 22, ...CABINET);
+
+    // Front panels & brass handles
+    if (tw > th) {
+      for (let p = 0; p < 3; p++) {
+        const px0 = 0.10 + p * 0.94;
+        const px1 = px0 + 0.84;
+        box(px0, 0.09, px1, 0.11, 4, 20, '#4a281c', '#341a10', '#221008');
+        box((px0 + px1) / 2 - 0.03, 0.08, (px0 + px1) / 2 + 0.03, 0.10, 10, 14, ...BRASS);
+      }
+    } else {
+      for (let p = 0; p < 3; p++) {
+        const py0 = 0.10 + p * 0.94;
+        const py1 = py0 + 0.84;
+        box(0.09, py0, 0.11, py1, 4, 20, '#4a281c', '#341a10', '#221008');
+        box(0.08, (py0 + py1) / 2 - 0.03, 0.10, (py0 + py1) / 2 + 0.03, 10, 14, ...BRASS);
+      }
+    }
+
+    // 2. Polished white marble counter top with bevelled edge (z = 22 .. 26)
+    box(0.02, 0.06, tw - 0.02, th - 0.06, 22, 25, ...MARBLE);
+    box(0.01, 0.05, tw - 0.01, th - 0.05, 25, 26, ...MARBLE_HI);
+
+    // 3. Three roll-top stainless steel chafing dishes with domed covers
     for (let i = 0; i < 3; i++) {
-      const t = 0.24 + i * 0.90;
-      const x = rot % 2 ? 0.22 : t;
-      const y = rot % 2 ? t : 0.22;
-      box(x, y, x + 0.52, y + 0.52, 26, 33, ...BRASS);
+      const t = 0.20 + i * 0.92;
+      const x = rot % 2 ? 0.20 : t;
+      const y = rot % 2 ? t : 0.20;
+      const spanW = rot % 2 ? 0.60 : 0.68;
+      const spanH = rot % 2 ? 0.68 : 0.60;
+
+      // Water pan warming stand & legs
+      box(x, y, x + spanW, y + spanH, 26, 28, ...STEEL);
+      // Food pan with golden roasted meats/pasta
+      box(x + 0.04, y + 0.04, x + spanW - 0.04, y + spanH - 0.04, 27, 29, '#e09838', '#b87420', '#844c10');
+      // Polished domed roll-top lid
+      box(x + 0.02, y + 0.02, x + spanW - 0.02, y + spanH - 0.02, 29, 34, ...CHAFING);
+      // Heat-resistant lid handle
+      box(x + spanW / 2 - 0.08, y + spanH / 2 - 0.04, x + spanW / 2 + 0.08, y + spanH / 2 + 0.04, 34, 36, ...BRASS);
+    }
+
+    // 4. Sneeze guard glass canopy with brass support struts (z = 26 .. 43)
+    if (tw > th) {
+      box(0.06, 0.10, 0.10, 0.14, 26, 42, ...BRASS);
+      box(tw - 0.10, 0.10, tw - 0.06, 0.14, 26, 42, ...BRASS);
+      box(0.04, 0.12, tw - 0.04, 0.16, 40, 43, ...GLASS);
+      // Overhead heat lamp warming strip
+      box(0.18, 0.14, tw - 0.18, 0.20, 39, 41, ...HEAT);
+    } else {
+      box(0.10, 0.06, 0.14, 0.10, 26, 42, ...BRASS);
+      box(0.10, th - 0.10, 0.14, th - 0.06, 26, 42, ...BRASS);
+      box(0.12, 0.04, 0.16, th - 0.04, 40, 43, ...GLASS);
+      box(0.14, 0.18, 0.20, th - 0.18, 39, 41, ...HEAT);
     }
   });
 }
@@ -1583,12 +2545,45 @@ export function buildBuffetCounterSprite(rot = 0) {
 export function buildChefStationSprite(rot = 0) {
   const [tw, th] = rot % 2 ? [1, 2] : [2, 1];
   const STEEL = ['#d8dfe8', '#b0b8c4', '#7e8694'];
-  const GRILL = ['#383c46', '#262a32', '#16181e'];
-  const COPPER = ['#e07c44', '#b85c28', '#843c14'];
-  return isoSprite(tw, th, 38, (box) => {
+  const STEEL_HI = ['#ffffff', '#eaf0f6', '#c4ced8'];
+  const GRILL = ['#282c34', '#1c1f24', '#101216'];
+  const GRILL_HOT = ['#404652', '#2c323c', '#1a1e24'];
+  const TEAK = ['#5a341e', '#422414', '#2c1408'];
+  const FLAME = ['#ff8830', '#e04018', '#a01808'];
+
+  return isoSprite(tw, th, 42, (box) => {
+    // 1. Commercial stainless steel cabinet chassis (z = 0 .. 24)
     box(0.05, 0.08, tw - 0.05, th - 0.08, 0, 24, ...STEEL);
-    box(0.12, 0.14, tw * 0.55, th * 0.82, 24, 27, ...GRILL);
-    box(tw * 0.62, th * 0.24, tw * 0.62 + 0.26, th * 0.24 + 0.26, 24, 33, ...COPPER);
+    // Lower utility kickplate & louvers
+    box(0.07, 0.07, tw - 0.07, 0.09, 2, 8, '#262a32', '#1a1c22', '#101216');
+
+    // 2. Surrounding solid teak dining ledge
+    box(0.02, 0.04, tw - 0.02, th - 0.04, 23, 26, ...TEAK);
+
+    // 3. Heavy Japanese teppanyaki flat-top steel plancha griddle
+    const [gx0, gy0, gx1, gy1] = tw > th
+      ? [0.12, 0.16, tw * 0.65, th - 0.14]
+      : [0.16, 0.12, tw - 0.14, th * 0.65];
+
+    box(gx0 - 0.02, gy0 - 0.02, gx1 + 0.02, gy1 + 0.02, 25, 27, ...GRILL); // grease trough
+    box(gx0, gy0, gx1, gy1, 26, 28, ...GRILL_HOT); // hot plancha surface
+    // Sizzling steak / seafood searing on grill
+    box(gx0 + 0.14, gy0 + 0.10, gx0 + 0.36, gy0 + 0.28, 28, 30, '#8c3822', '#6c2814', '#4c1808');
+
+    // 4. Chef's squeeze bottles & stainless spatula
+    const [bx, by] = tw > th
+      ? [tw * 0.72, 0.25 * th]
+      : [0.25 * tw, th * 0.72];
+
+    // Red sriracha bottle
+    box(bx, by, bx + 0.10, by + 0.10, 26, 34, '#ef4444', '#dc2626', '#991b1b');
+    box(bx + 0.03, by + 0.03, bx + 0.07, by + 0.07, 34, 37, ...STEEL_HI);
+    // Yellow oil bottle
+    box(bx + 0.14, by, bx + 0.24, by + 0.10, 26, 34, '#eab308', '#ca8a04', '#854d0e');
+    box(bx + 0.17, by + 0.03, bx + 0.21, by + 0.07, 34, 37, ...STEEL_HI);
+    // Stainless teppan turner spatula
+    box(bx + 0.04, by + 0.18, bx + 0.22, by + 0.28, 26, 28, ...STEEL_HI);
+    box(bx + 0.10, by + 0.28, bx + 0.16, by + 0.38, 27, 29, ...TEAK); // wood handle
   });
 }
 
@@ -1621,87 +2616,411 @@ export function buildPoolWaterSprite(rot = 0) {
 export function buildSaunaCabinSprite(rot = 0) {
   const [tw, th] = rot % 2 ? [1, 2] : [2, 1];
   const CEDAR = ['#d48c52', '#b06c36', '#804a1e'];
-  const GLASS = ['#ffb860', '#d88c38', '#985c18'];
-  return isoSprite(tw, th, 56, (box) => {
+  const CEDAR_DARK = ['#9e5c2c', '#7c441c', '#5a3012'];
+  const CEDAR_HI = ['#f0aa6c', '#d48c52', '#a06432'];
+  const GLASS = ['#e09848', '#b87428', '#845014'];
+  const STOVE = ['#282c34', '#1c1f24', '#101216'];
+  const ROCK = ['#444852', '#30343c', '#202228'];
+  const GLOW = ['#ff8830', '#e04810', '#a02804'];
+
+  return isoSprite(tw, th, 58, (box) => {
+    // 1. Horizontal tongue-and-groove cedar plank walls (z = 0 .. 52)
     box(0.06, 0.08, tw - 0.06, th - 0.08, 0, 52, ...CEDAR);
-    box(tw * 0.30, th * 0.30, tw * 0.70, th * 0.92, 4, 44, ...GLASS);
-    box(0.04, 0.06, tw - 0.04, th - 0.06, 52, 55, '#e8a468', '#c48248', '#8c5628');
+
+    // Horizontal plank lines at 2x density along exposed walls
+    if (tw > th) {
+      for (let z = 6; z < 50; z += 6) {
+        box(0.06, 0.07, tw - 0.06, 0.09, z, z + 1, ...CEDAR_DARK);
+      }
+    } else {
+      for (let z = 6; z < 50; z += 6) {
+        box(0.07, 0.06, 0.09, th - 0.06, z, z + 1, ...CEDAR_DARK);
+      }
+    }
+
+    // 2. Bronze tempered glass observation door (z = 4 .. 46)
+    const [dx0, dy0, dx1, dy1] = tw > th
+      ? [0.24 * tw, 0.06, 0.76 * tw, 0.10]
+      : [0.06, 0.24 * th, 0.10, 0.76 * th];
+
+    box(dx0, dy0, dx1, dy1, 4, 46, ...GLASS);
+
+    // Cedar safety door handle
+    if (tw > th) {
+      box(dx0 + 0.06, dy0 - 0.02, dx0 + 0.10, dy0, 18, 34, ...CEDAR_HI);
+    } else {
+      box(dx0 - 0.02, dy0 + 0.06, dx0, dy0 + 0.10, 18, 34, ...CEDAR_HI);
+    }
+
+    // 3. Interior sauna features visible through bronze glass:
+    // Volcanic stone stove basket with glowing heater elements
+    const [sx, sy] = tw > th ? [0.12 * tw, 0.35 * th] : [0.35 * tw, 0.12 * th];
+    box(sx, sy, sx + 0.22, sy + 0.22, 0, 14, ...STOVE);
+    box(sx + 0.02, sy + 0.02, sx + 0.20, sy + 0.20, 12, 14, ...GLOW); // glowing coil
+    box(sx + 0.02, sy + 0.02, sx + 0.20, sy + 0.20, 14, 18, ...ROCK); // sauna stones
+
+    // Slatted cedar interior benches (lower step & upper bench)
+    const [bx0, by0, bx1, by1] = tw > th
+      ? [0.42 * tw, 0.30 * th, tw - 0.10, th - 0.12]
+      : [0.30 * tw, 0.42 * th, tw - 0.12, th - 0.10];
+    box(bx0, by0, bx1, by1, 10, 14, ...CEDAR_HI); // lower bench
+    box(bx0 + 0.05, by0 + 0.05, bx1, by1, 24, 28, ...CEDAR_HI); // upper bench
+
+    // 4. Overhanging carved cedar roof cornice (z = 52 .. 56)
+    box(0.04, 0.06, tw - 0.04, th - 0.06, 52, 55, ...CEDAR_DARK);
+    box(0.02, 0.04, tw - 0.02, th - 0.04, 55, 57, ...CEDAR_HI);
   });
 }
 
 export function buildTowelRackSprite(rot = 0) {
   const BAMBOO = ['#dfc082', '#ba9a58', '#886c34'];
+  const BAMBOO_HI = ['#f4d8a4', '#d8b878', '#a48444'];
   const TOWEL1 = ['#ffffff', '#dce4ec', '#b0bac6'];
-  const TOWEL2 = ['#68dcd0', '#44b4a8', '#288076'];
-  return isoSprite(1, 1, 42, (box) => {
-    box(0.18, 0.18, 0.82, 0.82, 0, 38, ...BAMBOO);
-    box(0.22, 0.22, 0.78, 0.84, 8, 15, ...TOWEL1);
-    box(0.22, 0.22, 0.78, 0.84, 18, 25, ...TOWEL2);
-    box(0.22, 0.22, 0.78, 0.84, 28, 35, ...TOWEL1);
+  const TOWEL2 = ['#38bdf8', '#0ea5e9', '#0284c7'];
+  const WICKER = ['#b88a54', '#946a38', '#6c4a20'];
+
+  return isoSprite(1, 1, 44, (box) => {
+    // 4 vertical bamboo frame corner posts with foot caps (z = 0 .. 42)
+    const posts = [
+      [0.14, 0.14],
+      [0.76, 0.14],
+      [0.14, 0.76],
+      [0.76, 0.76]
+    ];
+    for (const [px, py] of posts) {
+      box(px, py, px + 0.10, py + 0.10, 0, 42, ...BAMBOO);
+      box(px - 0.01, py - 0.01, px + 0.11, py + 0.11, 40, 42, ...BAMBOO_HI); // top cap
+    }
+
+    // 3 slatted bamboo shelves
+    box(0.16, 0.16, 0.84, 0.84, 8, 10, ...BAMBOO);
+    box(0.16, 0.16, 0.84, 0.84, 20, 22, ...BAMBOO);
+    box(0.16, 0.16, 0.84, 0.84, 32, 34, ...BAMBOO);
+
+    // Bottom shelf: Woven wicker laundry hamper basket for used linen (z = 0 .. 8)
+    box(0.20, 0.20, 0.80, 0.80, 0, 8, ...WICKER);
+    box(0.22, 0.22, 0.78, 0.78, 7, 9, '#fafafa', '#e5e5e5', '#cccccc'); // linen peeking out
+
+    // Middle shelf: Stack of rolled turquoise pool towels
+    box(0.22, 0.24, 0.78, 0.48, 10, 17, ...TOWEL2);
+    box(0.22, 0.52, 0.78, 0.76, 10, 17, ...TOWEL2);
+    // Rolled spiral highlights on towel ends
+    box(0.72, 0.26, 0.76, 0.46, 12, 15, '#bae6fd', '#7dd3fc', '#38bdf8');
+    box(0.72, 0.54, 0.76, 0.74, 12, 15, '#bae6fd', '#7dd3fc', '#38bdf8');
+
+    // Top shelf: Stack of fluffy rolled white spa towels
+    box(0.22, 0.24, 0.78, 0.48, 22, 29, ...TOWEL1);
+    box(0.22, 0.52, 0.78, 0.76, 22, 29, ...TOWEL1);
+    box(0.72, 0.26, 0.76, 0.46, 24, 27, '#f8fafc', '#f1f5f9', '#e2e8f0');
+    box(0.72, 0.54, 0.76, 0.74, 24, 27, '#f8fafc', '#f1f5f9', '#e2e8f0');
+
+    // Folded guest hand towel hanging over front crossbar
+    box(0.28, 0.78, 0.54, 0.86, 30, 36, ...TOWEL1);
   });
 }
 
 export function buildEspressoBarSprite(rot = 0) {
   const [tw, th] = rot % 2 ? [1, 2] : [2, 1];
-  const COUNTER = ['#5c3c28', '#442a1a', '#2c180e'];
+  const COUNTER = ['#4a2c1a', '#341e12', '#20120a'];
+  const MARBLE = ['#faf6ee', '#dfd8ca', '#b4ac9a'];
+  const CHROME = ['#eaf0f6', '#c4d0dc', '#90a0b0'];
+  const CHROME_HI = ['#ffffff', '#eef4f8', '#cbd7e2'];
   const COPPER = ['#e2884e', '#ba6630', '#844218'];
+  const BRASS = ['#f4c654', '#cb982c', '#926a14'];
   const GLASS = ['#d8f2ff', '#a8d4ec', '#74a0bc'];
+  const BEANS = ['#382014', '#26140c', '#140804'];
+
   return isoSprite(tw, th, 44, (box) => {
-    box(0.05, 0.08, tw - 0.05, th - 0.08, 0, 24, ...COUNTER);
-    box(0.14 * tw, 0.20 * th, 0.48 * tw, 0.76 * th, 24, 38, ...COPPER);
-    box(0.56 * tw, 0.20 * th, 0.90 * tw, 0.80 * th, 24, 35, ...GLASS);
+    // 1. Dark walnut counter base (z = 0 .. 23)
+    box(0.05, 0.08, tw - 0.05, th - 0.08, 0, 23, ...COUNTER);
+    // Brushed brass toe kick
+    box(0.06, 0.07, tw - 0.06, 0.09, 0, 3, ...BRASS);
+
+    // 2. White marble counter top with bullnose edge (z = 23 .. 26)
+    box(0.02, 0.04, tw - 0.02, th - 0.04, 23, 26, ...MARBLE);
+
+    // 3. Commercial dual-group chrome & copper espresso machine
+    const [mx0, my0] = [0.12 * tw, 0.18 * th];
+    const [mw, mh] = tw > th ? [0.46, 0.58] : [0.58, 0.46];
+
+    box(mx0, my0, mx0 + mw, my0 + mh, 26, 37, ...CHROME);
+    box(mx0 + 0.04, my0 + 0.04, mx0 + mw - 0.04, my0 + mh - 0.04, 30, 36, ...COPPER); // front copper accent panel
+    // Twin portafilters with black handles protruding forward
+    box(mx0 + 0.08, my0 + mh - 0.04, mx0 + 0.16, my0 + mh + 0.08, 28, 30, '#1e293b', '#0f172a', '#020617');
+    box(mx0 + mw - 0.16, my0 + mh - 0.04, mx0 + mw - 0.08, my0 + mh + 0.08, 28, 30, '#1e293b', '#0f172a', '#020617');
+    // Twin dual circular brass pressure gauges
+    box(mx0 + mw / 2 - 0.06, my0 + mh - 0.02, mx0 + mw / 2 + 0.06, my0 + mh + 0.01, 33, 36, ...BRASS);
+    // Angled stainless steam wand
+    box(mx0 + mw - 0.04, my0 + mh / 2 - 0.04, mx0 + mw + 0.04, my0 + mh / 2 + 0.04, 27, 33, ...CHROME_HI);
+
+    // Cup warming tray on top with ceramic espresso demitasse cups
+    box(mx0 + 0.04, my0 + 0.04, mx0 + mw - 0.04, my0 + mh - 0.04, 37, 38, ...CHROME);
+    box(mx0 + 0.08, my0 + 0.08, mx0 + 0.18, my0 + 0.18, 38, 41, '#ffffff', '#f1f5f9', '#cbd5e1');
+    box(mx0 + mw - 0.18, my0 + 0.08, mx0 + mw - 0.08, my0 + 0.18, 38, 41, '#ffffff', '#f1f5f9', '#cbd5e1');
+
+    // 4. Commercial conical burr grinder with clear bean hopper
+    const [gx, gy] = [0.65 * tw, 0.20 * th];
+    const [gw, gh] = [0.22 * tw, 0.24 * th];
+    box(gx, gy, gx + gw, gy + gh, 26, 33, '#262a32', '#1a1c22', '#101216'); // heavy matte grinder body
+    box(gx + 0.02, gy + 0.02, gx + gw - 0.02, gy + gh - 0.02, 33, 38, ...GLASS); // clear hopper
+    box(gx + 0.04, gy + 0.04, gx + gw - 0.04, gy + gh - 0.04, 33, 37, ...BEANS); // dark roast beans inside
+
+    // 5. Stainless milk pitcher & knock box
+    box(gx, gy + gh + 0.08, gx + 0.12, gy + gh + 0.20, 26, 31, ...CHROME_HI);
   });
 }
 
 export function buildCafeTableSprite(rot = 0) {
-  const BRASS = ['#e8ba54', '#c49434', '#8c6418'];
-  const TOP = ['#f8f4ec', '#dcd4c6', '#b0a898'];
-  return isoSprite(1, 1, 28, (box) => {
-    box(0.30, 0.30, 0.70, 0.70, 0, 4, ...BRASS);
-    box(0.44, 0.44, 0.56, 0.56, 4, 20, ...BRASS);
-    box(0.12, 0.12, 0.88, 0.88, 20, 24, ...TOP);
-    box(0.38, 0.38, 0.58, 0.58, 24, 27, '#d87a48', '#b05a2c', '#7c3a16');
+  const IRON = ['#303440', '#222630', '#161820'];
+  const BRASS = ['#f4c862', '#d4a034', '#986c1c'];
+  const MARBLE = ['#f8f6f0', '#dedad0', '#b4b0a4'];
+
+  return isoSprite(1, 1, 30, (box) => {
+    // 3-legged ornate cast-iron base with scrolled tripod feet (z = 0 .. 4)
+    box(0.25, 0.25, 0.75, 0.75, 0, 4, ...IRON);
+    // Fluted central iron pedestal column with brass trim ring (z = 4 .. 20)
+    box(0.42, 0.42, 0.58, 0.58, 4, 20, ...IRON);
+    box(0.40, 0.40, 0.60, 0.60, 8, 10, ...BRASS);
+    box(0.38, 0.38, 0.62, 0.62, 19, 21, ...BRASS);
+
+    // Polished circular Carrara marble top with brass bullnose rim (z = 21 .. 25)
+    box(0.10, 0.10, 0.90, 0.90, 21, 25, ...MARBLE);
+    box(0.08, 0.08, 0.92, 0.92, 23.8, 25, ...BRASS); // polished brass rim
+
+    // Ceramic coffee cup on saucer with espresso foam
+    box(0.40, 0.40, 0.60, 0.60, 25, 26, '#ffffff', '#e8e8e8', '#cccccc'); // saucer
+    box(0.44, 0.44, 0.56, 0.56, 26, 29, '#ffffff', '#e8e8e8', '#cccccc'); // cup
+    box(0.46, 0.46, 0.54, 0.54, 28, 29.2, '#6f4e37', '#4a3324', '#2d1e14'); // espresso crema
   });
 }
 
 export function buildPoolTableSprite(rot = 0) {
   const [tw, th] = rot % 2 ? [1, 2] : [2, 1];
   const MAHOGANY = ['#7c3626', '#5e2418', '#40140c'];
-  const FELT = ['#28a862', '#1c844a', '#105830'];
-  return isoSprite(tw, th, 30, (box) => {
-    box(0.12, 0.12, 0.26, 0.26, 0, 16, ...MAHOGANY);
-    box(tw - 0.26, 0.12, tw - 0.12, 0.26, 0, 16, ...MAHOGANY);
-    box(0.12, th - 0.26, 0.26, th - 0.12, 0, 16, ...MAHOGANY);
-    box(tw - 0.26, th - 0.26, tw - 0.12, th - 0.12, 0, 16, ...MAHOGANY);
-    box(0.04, 0.06, tw - 0.04, th - 0.06, 16, 24, ...MAHOGANY);
-    box(0.12, 0.14, tw - 0.12, th - 0.14, 24, 26, ...FELT);
-    box(tw * 0.35, th * 0.42, tw * 0.35 + 0.12, th * 0.42 + 0.12, 26, 28, '#ffd840', '#d4a820', '#987410');
-    box(tw * 0.62, th * 0.48, tw * 0.62 + 0.12, th * 0.48 + 0.12, 26, 28, '#ff4050', '#c82030', '#8c101c');
+  const MAHOGANY_DARK = ['#52180e', '#3c1008', '#260804'];
+  const BRASS = ['#f6c667', '#d8a442', '#a07424'];
+  const BRASS_HI = ['#ffe898', '#e2b040', '#a87818'];
+  const FELT = ['#228b48', '#186834', '#104622'];
+  const CUSHION = ['#1a7038', '#125228', '#0c381a'];
+  const POCKET_NET = ['#26221c', '#1a1612', '#0e0c08'];
+  const ASH_WOOD = ['#e6caa0', '#c8aa80', '#9c7e5a'];
+
+  return isoSprite(tw, th, 32, (box) => {
+    // 1. 4 heavy fluted turned mahogany legs with polished brass toe boots (z = 0 .. 18)
+    const legW = 0.22;
+    const legPositions = [
+      [0.08, 0.08],
+      [tw - 0.08 - legW, 0.08],
+      [0.08, th - 0.08 - legW],
+      [tw - 0.08 - legW, th - 0.08 - legW],
+    ];
+    for (const [lx, ly] of legPositions) {
+      box(lx, ly, lx + legW, ly + legW, 0, 3, ...BRASS); // brass leveler foot
+      box(lx + 0.02, ly + 0.02, lx + legW - 0.02, ly + legW - 0.02, 3, 18, ...MAHOGANY); // turned fluted leg
+      box(lx + 0.01, ly + 0.01, lx + legW - 0.01, ly + legW - 0.01, 8, 10, ...MAHOGANY_DARK); // decorative ring
+    }
+
+    // 2. Heavy hardwood cabinet apron (z = 16 .. 23)
+    box(0.04, 0.06, tw - 0.04, th - 0.06, 16, 23, ...MAHOGANY);
+    // Apron lower bead moulding
+    box(0.03, 0.05, tw - 0.03, th - 0.05, 16, 17.5, ...MAHOGANY_DARK);
+
+    // 3. Side cue sticks in brass brackets along the apron
+    if (tw > th) {
+      // Cue stick 1 along front apron
+      box(0.24, th - 0.05, tw - 0.24, th - 0.02, 18, 19.5, ...ASH_WOOD);
+      box(0.20, th - 0.05, 0.24, th - 0.02, 17.5, 20, '#1a1a20', '#121216', '#08080a'); // rubber bumper
+      box(tw - 0.28, th - 0.05, tw - 0.24, th - 0.02, 18, 19.5, '#40c4ff', '#2098d4', '#106090'); // chalked blue tip
+      box(0.40, th - 0.06, 0.44, th - 0.01, 17, 20.5, ...BRASS_HI); // clip
+      box(tw - 0.44, th - 0.06, tw - 0.40, th - 0.01, 17, 20.5, ...BRASS_HI); // clip
+    } else {
+      box(tw - 0.05, 0.24, tw - 0.02, th - 0.24, 18, 19.5, ...ASH_WOOD);
+      box(tw - 0.05, 0.20, tw - 0.02, 0.24, 17.5, 20, '#1a1a20', '#121216', '#08080a');
+      box(tw - 0.05, th - 0.28, tw - 0.02, th - 0.24, 18, 19.5, '#40c4ff', '#2098d4', '#106090');
+      box(tw - 0.06, 0.40, tw - 0.01, 0.44, 17, 20.5, ...BRASS_HI);
+      box(tw - 0.06, th - 0.44, tw - 0.01, th - 0.40, 17, 20.5, ...BRASS_HI);
+    }
+
+    // 4. Solid wood rail perimeter & cushions (z = 23 .. 26.5)
+    box(0.04, 0.06, tw - 0.04, th - 0.06, 23, 26, ...MAHOGANY);
+    // Beveled green rubber cushions framing the playing area
+    box(0.11, 0.13, tw - 0.11, th - 0.13, 24, 26, ...CUSHION);
+
+    // 5. Worst wool green baize playing surface (z = 23 .. 25)
+    box(0.14, 0.16, tw - 0.14, th - 0.16, 23, 25, ...FELT);
+
+    // 6. Leather drop pocket nets (z = 21 .. 25) & Cast brass corner pocket irons (z = 25 .. 27)
+    const pocketSize = 0.12;
+    const pockets = tw > th ? [
+      [0.05, 0.07], // NW corner
+      [tw / 2 - pocketSize / 2, 0.06], // N center
+      [tw - 0.05 - pocketSize, 0.07], // NE corner
+      [0.05, th - 0.07 - pocketSize], // SW corner
+      [tw / 2 - pocketSize / 2, th - 0.06 - pocketSize], // S center
+      [tw - 0.05 - pocketSize, th - 0.07 - pocketSize], // SE corner
+    ] : [
+      [0.07, 0.05],
+      [0.06, th / 2 - pocketSize / 2],
+      [0.07, th - 0.05 - pocketSize],
+      [tw - 0.07 - pocketSize, 0.05],
+      [tw - 0.06 - pocketSize, th / 2 - pocketSize / 2],
+      [tw - 0.07 - pocketSize, th - 0.05 - pocketSize],
+    ];
+
+    for (const [px, py] of pockets) {
+      box(px + 0.01, py + 0.01, px + pocketSize - 0.01, py + pocketSize - 0.01, 21, 25, ...POCKET_NET); // leather drop pocket
+      box(px, py, px + pocketSize, py + pocketSize, 25.5, 27, ...BRASS_HI); // polished brass pocket casting
+    }
+
+    // 7. Head string / baulk line & Balls on baize (z = 25 .. 27.5)
+    if (tw > th) {
+      // Baulk line
+      box(tw * 0.70, 0.17, tw * 0.70 + 0.02, th - 0.17, 25, 25.4, '#ffffff', '#e0f0e8', '#b8d0c0');
+      // Cue ball at head spot
+      box(tw * 0.72, th * 0.46, tw * 0.72 + 0.08, th * 0.46 + 0.08, 25, 27.2, '#ffffff', '#f4f4f4', '#dcdcdc');
+
+      // Racked 15-ball triangular cluster at foot spot (tw * 0.30, th * 0.46)
+      const balls = [
+        // apex
+        { u: tw * 0.38, v: th * 0.47, c: ['#ffdd00', '#d4b400', '#988000'] }, // 1-ball solid yellow
+        // row 2
+        { u: tw * 0.34, v: th * 0.42, c: ['#2563eb', '#1d4ed8', '#1e3a8a'] }, // 2 solid blue
+        { u: tw * 0.34, v: th * 0.52, c: ['#dc2626', '#b91c1c', '#7f1d1d'] }, // 3 solid red
+        // row 3
+        { u: tw * 0.30, v: th * 0.37, c: ['#9333ea', '#7e22ce', '#581c87'] }, // 4 solid purple
+        { u: tw * 0.30, v: th * 0.47, c: ['#18181b', '#09090b', '#000000'] }, // 8-ball black center
+        { u: tw * 0.30, v: th * 0.57, c: ['#ea580c', '#c2410c', '#7c2d12'] }, // 5 solid orange
+        // row 4
+        { u: tw * 0.26, v: th * 0.32, c: ['#16a34a', '#15803d', '#14532d'] }, // 6 solid green
+        { u: tw * 0.26, v: th * 0.42, c: ['#be123c', '#9f1239', '#881337'] }, // 7 solid maroon
+        { u: tw * 0.26, v: th * 0.52, c: ['#fef08a', '#eab308', '#a16207'] }, // 9 stripe yellow
+        { u: tw * 0.26, v: th * 0.62, c: ['#93c5fd', '#3b82f6', '#1d4ed8'] }, // 10 stripe blue
+      ];
+      for (const b of balls) {
+        box(b.u, b.v, b.u + 0.07, b.v + 0.07, 25, 27, ...b.c);
+      }
+    } else {
+      box(0.17, th * 0.70, tw - 0.17, th * 0.70 + 0.02, 25, 25.4, '#ffffff', '#e0f0e8', '#b8d0c0');
+      box(tw * 0.46, th * 0.72, tw * 0.46 + 0.08, th * 0.72 + 0.08, 25, 27.2, '#ffffff', '#f4f4f4', '#dcdcdc');
+      const balls = [
+        { u: tw * 0.47, v: th * 0.38, c: ['#ffdd00', '#d4b400', '#988000'] },
+        { u: tw * 0.42, v: th * 0.34, c: ['#2563eb', '#1d4ed8', '#1e3a8a'] },
+        { u: tw * 0.52, v: th * 0.34, c: ['#dc2626', '#b91c1c', '#7f1d1d'] },
+        { u: tw * 0.37, v: th * 0.30, c: ['#9333ea', '#7e22ce', '#581c87'] },
+        { u: tw * 0.47, v: th * 0.30, c: ['#18181b', '#09090b', '#000000'] },
+        { u: tw * 0.57, v: th * 0.30, c: ['#ea580c', '#c2410c', '#7c2d12'] },
+        { u: tw * 0.32, v: th * 0.26, c: ['#16a34a', '#15803d', '#14532d'] },
+        { u: tw * 0.42, v: th * 0.26, c: ['#be123c', '#9f1239', '#881337'] },
+        { u: tw * 0.52, v: th * 0.26, c: ['#fef08a', '#eab308', '#a16207'] },
+        { u: tw * 0.62, v: th * 0.26, c: ['#93c5fd', '#3b82f6', '#1d4ed8'] },
+      ];
+      for (const b of balls) {
+        box(b.u, b.v, b.u + 0.07, b.v + 0.07, 25, 27, ...b.c);
+      }
+    }
   });
 }
 
 export function buildComputerDeskSprite(rot = 0) {
   const [tw, th] = rot % 2 ? [1, 2] : [2, 1];
-  const MONITOR = ['#283040', '#1c222e', '#10141c'];
-  const SCREEN = ['#50d8ff', '#30a8d0', '#187494'];
-  return isoSprite(tw, th, 40, (box) => {
-    box(0.06, 0.10, tw - 0.06, th - 0.10, 0, 22, ...WOOD);
-    box(0.20 * tw, 0.20 * th, 0.56 * tw, 0.42 * th, 22, 36, ...MONITOR);
-    box(0.24 * tw, 0.38 * th, 0.52 * tw, 0.44 * th, 24, 34, ...SCREEN);
-    box(0.64 * tw, 0.28 * th, 0.82 * tw, 0.48 * th, 22, 34, '#f6c862', '#d4a23c', '#986e1c');
+  const OAK = ['#c48848', '#a06a32', '#764a1e'];
+  const CHASSIS = ['#2a2e38', '#1c2028', '#101216'];
+  const SCREEN = ['#00e5ff', '#00b4d8', '#0077b6'];
+  const HANDLE = ['#d8e0ea', '#b0b8c4', '#848c98'];
+
+  return isoSprite(tw, th, 42, (box) => {
+    // Solid timber desk gable legs & modesty panel (z = 0 .. 22)
+    box(0.06, 0.08, tw - 0.06, th - 0.08, 0, 22, ...OAK);
+
+    if (tw >= th) {
+      // Pedestal drawer bank on the right side
+      box(tw - 0.70, 0.10, tw - 0.08, th - 0.10, 2, 21, shade(OAK[0], -0.1), shade(OAK[1], -0.1), shade(OAK[2], -0.1));
+      // 3 drawer bar handles
+      for (const dz of [6, 12, 18]) {
+        box(tw - 0.50, th - 0.09, tw - 0.28, th - 0.07, dz, dz + 1.5, ...HANDLE);
+      }
+      // Kneehole opening on left
+      box(0.10, 0.14, tw - 0.72, th - 0.12, 0, 20, '#1a1008', '#120a04', '#0a0602');
+    } else {
+      box(0.10, th - 0.70, tw - 0.10, th - 0.08, 2, 21, shade(OAK[0], -0.1), shade(OAK[1], -0.1), shade(OAK[2], -0.1));
+      for (const dz of [6, 12, 18]) {
+        box(tw - 0.09, th - 0.50, tw - 0.07, th - 0.28, dz, dz + 1.5, ...HANDLE);
+      }
+      box(0.14, 0.10, tw - 0.12, th - 0.72, 0, 20, '#1a1008', '#120a04', '#0a0602');
+    }
+
+    // Hardwood desktop surface with plank grain (z = 21 .. 24)
+    planks(box, 0.04, 0.06, tw - 0.04, th - 0.06, 21, 24, {
+      dir: tw >= th ? 'v' : 'u',
+      count: 3,
+      gap: 0.02,
+      wood: OAK,
+      grainDetail: true,
+    });
+
+    // Dual-display workstation setup
+    if (tw >= th) {
+      // Primary wide LCD monitor on angled stand
+      box(0.24, 0.18, 0.82, 0.30, 24, 38, ...CHASSIS);
+      box(0.26, 0.26, 0.80, 0.31, 26, 37, ...SCREEN); // glowing screen
+      box(0.48, 0.20, 0.58, 0.28, 24, 28, ...HANDLE); // monitor arm
+
+      // Slim mechanical keyboard and mouse on black mat
+      box(0.30, 0.54, 0.65, 0.76, 24, 25.5, '#14161c', '#0e1014', '#080a0c');
+      box(0.70, 0.58, 0.80, 0.74, 24, 25.8, '#202228', '#16181e', '#0c0e12');
+      // Coffee mug
+      box(0.15, 0.35, 0.25, 0.45, 24, 29, '#f4f6fa', '#d0d8e2', '#a0a8b4');
+    } else {
+      box(0.18, 0.24, 0.30, 0.82, 24, 38, ...CHASSIS);
+      box(0.26, 0.26, 0.31, 0.80, 26, 37, ...SCREEN);
+      box(0.20, 0.48, 0.28, 0.58, 24, 28, ...HANDLE);
+
+      box(0.54, 0.30, 0.76, 0.65, 24, 25.5, '#14161c', '#0e1014', '#080a0c');
+      box(0.58, 0.70, 0.74, 0.80, 24, 25.8, '#202228', '#16181e', '#0c0e12');
+      box(0.35, 0.15, 0.45, 0.25, 24, 29, '#f4f6fa', '#d0d8e2', '#a0a8b4');
+    }
   });
 }
 
 export function buildSkyTreeSprite(rot = 0) {
-  const STONE = ['#949aa8', '#747a88', '#525662'];
-  const TRUNK = ['#6e4832', '#523422', '#382014'];
-  const BLOSSOM1 = ['#ff9ec6', '#de78a2', '#a84e74'];
-  const BLOSSOM2 = ['#ffb8d8', '#f090b8', '#ba6288'];
-  return isoSprite(1, 1, 58, (box) => {
-    box(0.20, 0.20, 0.80, 0.80, 0, 12, ...STONE);
-    box(0.42, 0.42, 0.58, 0.58, 12, 34, ...TRUNK);
-    box(0.14, 0.14, 0.86, 0.86, 32, 46, ...BLOSSOM1);
-    box(0.24, 0.24, 0.76, 0.76, 46, 56, ...BLOSSOM2);
+  const STONE = ['#b4b0a4', '#928e82', '#6c685e'];
+  const TRUNK = ['#6e442c', '#54321e', '#3a2012'];
+  const SAKURA = {
+    shadow: '#9e3868',
+    dark: '#c44882',
+    mid: '#e86da4',
+    light: '#ffa2c8',
+    bright: '#ffd2e6',
+  };
+
+  return isoSprite(1, 1, 62, (box) => {
+    // Ashlar stone hexagonal tree planter base with coping rim (z = 0 .. 10)
+    stoneBlocks(box, 0.14, 0.14, 0.86, 0.86, 0, 10, { courses: 2, stone: STONE, coping: true, copingH: 2.2 });
+    // Rich potting soil & root collar (z = 8 .. 10.5)
+    box(0.18, 0.18, 0.82, 0.82, 8, 10.5, '#321e14', '#22140c', '#160c08');
+    // Buttress roots spreading into soil
+    box(0.30, 0.36, 0.70, 0.64, 10, 14, ...TRUNK);
+    box(0.36, 0.30, 0.64, 0.70, 10, 14, ...TRUNK);
+
+    // Main gnarled trunk with bark grain
+    box(0.40, 0.40, 0.60, 0.60, 10, 32, ...TRUNK);
+    // Trunk highlight line
+    box(0.39, 0.41, 0.43, 0.59, 14, 30, shade(TRUNK[0], 0.2), shade(TRUNK[1], 0.15), shade(TRUNK[2], 0.1));
+    // Branching boughs spreading outward
+    box(0.24, 0.34, 0.42, 0.52, 26, 33, ...TRUNK);
+    box(0.58, 0.38, 0.76, 0.56, 27, 34, ...TRUNK);
+    box(0.36, 0.22, 0.54, 0.40, 28, 35, ...TRUNK);
+
+    // Billowing sakura blossom cloud clusters with organic leaf/petal jaggies
+    leafCluster(box, 0.36, 0.40, 38, 0.34, 0.34, 9, { ...SAKURA, flowers: [{ x: 0, y: 0, z: 0.3, color: '#ffffff' }] });
+    leafCluster(box, 0.64, 0.48, 41, 0.34, 0.34, 9, { ...SAKURA, flowers: [{ x: 0.1, y: -0.1, z: 0.4, color: '#fff0f6' }] });
+    leafCluster(box, 0.50, 0.36, 46, 0.36, 0.36, 10, { ...SAKURA, flowers: [{ x: -0.1, y: 0.1, z: 0.4, color: '#ffffff' }] });
+    leafCluster(box, 0.48, 0.52, 54, 0.30, 0.30, 8, { ...SAKURA, flowers: [{ x: 0, y: 0, z: 0.3, color: '#fff0f6' }] });
+
+    // Floating petal specks drifting down
+    box(0.22, 0.68, 0.26, 0.72, 16, 18, '#ffa8cb', '#e280a5', '#b45c7e');
+    box(0.72, 0.26, 0.76, 0.30, 20, 22, '#ffc0da', '#f098be', '#c46a90');
+    box(0.30, 0.22, 0.34, 0.26, 23, 25, '#ffa8cb', '#e280a5', '#b45c7e');
   });
 }
 
@@ -1709,151 +3028,573 @@ export function buildGardenBenchSprite(rot = 0) {
   const r = ((rot % 4) + 4) % 4;
   const [tw, th] = r % 2 ? [1, 2] : [2, 1];
   const TEAK = ['#d29456', '#ae743a', '#7e4e20'];
-  const IRON = ['#3c424e', '#2a2e38', '#1a1c22'];
-  return isoSprite(tw, th, 32, (box) => {
-    box(0.08, 0.14, 0.20, th - 0.14, 0, 18, ...IRON);
-    box(tw - 0.20, 0.14, tw - 0.08, th - 0.14, 0, 18, ...IRON);
-    box(0.08, 0.14, tw - 0.08, th - 0.14, 10, 14, ...TEAK);
-    if (r % 2 === 0) box(0.08, 0.12, tw - 0.08, 0.30, 14, 30, ...TEAK);
-    else box(0.12, 0.08, 0.30, th - 0.08, 14, 30, ...TEAK);
+  const IRON = ['#323844', '#222630', '#141820'];
+
+  return isoSprite(tw, th, 34, (box) => {
+    if (r % 2 === 0) {
+      // Facing along u axis (tw = 2, th = 1)
+      // Left and right cast-iron scrolled leg & armrest frames
+      box(0.10, 0.14, 0.22, th - 0.14, 0, 13, ...IRON);
+      box(tw - 0.22, 0.14, tw - 0.10, th - 0.14, 0, 13, ...IRON);
+      // Center reinforcement iron leg
+      box(0.94, 0.14, 1.06, th - 0.14, 0, 12, ...IRON);
+      // Scrolled armrests
+      box(0.08, 0.12, 0.24, th - 0.12, 13, 19, ...IRON);
+      box(tw - 0.24, 0.12, tw - 0.08, th - 0.12, 13, 19, ...IRON);
+
+      // Contoured seat: 4 separate teak wood slats with gaps and end-bolts
+      planks(box, 0.08, 0.14, tw - 0.08, th - 0.14, 11, 14, {
+        dir: 'v',
+        count: 4,
+        gap: 0.03,
+        wood: TEAK,
+        bolts: true,
+        grainDetail: true,
+      });
+
+      // Backrest: 3 separate teak wood slats with gaps and end-bolts
+      planks(box, 0.08, 0.12, tw - 0.08, 0.32, 17, 31, {
+        dir: 'v',
+        count: 3,
+        gap: 0.035,
+        wood: TEAK,
+        bolts: true,
+        grainDetail: true,
+      });
+      // Backrest rear cast-iron stanchion uprights
+      box(0.12, 0.10, 0.20, 0.16, 12, 31, ...IRON);
+      box(tw - 0.20, 0.10, tw - 0.12, 0.16, 12, 31, ...IRON);
+      box(0.96, 0.10, 1.04, 0.16, 12, 31, ...IRON);
+    } else {
+      // Facing along v axis (tw = 1, th = 2)
+      box(0.14, 0.10, tw - 0.14, 0.22, 0, 13, ...IRON);
+      box(0.14, th - 0.22, tw - 0.14, th - 0.10, 0, 13, ...IRON);
+      box(0.14, 0.94, tw - 0.14, 1.06, 0, 12, ...IRON);
+      box(0.12, 0.08, tw - 0.12, 0.24, 13, 19, ...IRON);
+      box(0.12, th - 0.24, tw - 0.12, th - 0.08, 13, 19, ...IRON);
+
+      planks(box, 0.14, 0.08, tw - 0.14, th - 0.08, 11, 14, {
+        dir: 'u',
+        count: 4,
+        gap: 0.03,
+        wood: TEAK,
+        bolts: true,
+        grainDetail: true,
+      });
+
+      planks(box, 0.12, 0.08, 0.32, th - 0.08, 17, 31, {
+        dir: 'u',
+        count: 3,
+        gap: 0.035,
+        wood: TEAK,
+        bolts: true,
+        grainDetail: true,
+      });
+      box(0.10, 0.12, 0.16, 0.20, 12, 31, ...IRON);
+      box(0.10, th - 0.20, 0.16, th - 0.12, 12, 31, ...IRON);
+      box(0.10, 0.96, 0.16, 1.04, 12, 31, ...IRON);
+    }
   });
 }
 
 export function buildFlowerPlanterSprite(rot = 0) {
   const [tw, th] = rot % 2 ? [1, 2] : [2, 1];
   const STONE = ['#b8b2a6', '#969084', '#6e685e'];
-  const FOLIAGE = ['#4ec464', '#369c4a', '#226c30'];
-  const BLOOM1 = ['#68a8ff', '#4884d8', '#2c5ca0'];
-  const BLOOM2 = ['#ffbe44', '#d89624', '#9c6610'];
-  return isoSprite(tw, th, 32, (box) => {
-    box(0.06, 0.10, tw - 0.06, th - 0.10, 0, 14, ...STONE);
-    box(0.10, 0.14, tw - 0.10, th - 0.14, 14, 24, ...FOLIAGE);
-    box(0.18 * tw, 0.24 * th, 0.44 * tw, 0.72 * th, 24, 30, ...BLOOM1);
-    box(0.56 * tw, 0.24 * th, 0.82 * tw, 0.72 * th, 24, 30, ...BLOOM2);
+
+  return isoSprite(tw, th, 36, (box) => {
+    // Stone ashlar planter box with mortar lines and coping ledge (z = 0 .. 12)
+    stoneBlocks(box, 0.06, 0.08, tw - 0.06, th - 0.08, 0, 12, {
+      courses: 2,
+      stone: STONE,
+      coping: true,
+      copingH: 2.5,
+      copingOver: 0.03,
+    });
+
+    // Dark rich nutrient potting soil bed (z = 9 .. 12.5)
+    box(0.08, 0.10, tw - 0.08, th - 0.10, 9, 12.5, '#342216', '#24160e', '#160e08');
+
+    if (tw >= th) {
+      // 2x1 configuration (tw = 2, th = 1)
+      // Dense irregular bush/hedge mass rising above rim with 3 distinct floral clusters
+      // Left clump: lush foliage with blue hydrangea flower cluster
+      leafCluster(box, 0.55, 0.50, 20, 0.42, 0.38, 9, {
+        flowers: [
+          { x: -0.15, y: -0.1, z: 0.4, color: '#5c9cff' },
+          { x: 0.2, y: 0.15, z: 0.35, color: '#7cb2ff' }
+        ]
+      });
+
+      // Center clump: dense crown foliage with yellow/orange marigold flower cluster
+      leafCluster(box, 1.0, 0.48, 22, 0.46, 0.40, 10, {
+        flowers: [
+          { x: 0.05, y: -0.15, z: 0.5, color: '#ff9a28' }
+        ]
+      });
+
+      // Right clump: lush foliage with orange/coral flower cluster
+      leafCluster(box, 1.45, 0.50, 20, 0.42, 0.38, 9, {
+        flowers: [
+          { x: -0.1, y: 0.1, z: 0.4, color: '#ffa838' },
+          { x: 0.2, y: -0.1, z: 0.35, color: '#ff7820' }
+        ]
+      });
+
+      // Spilling ivy leaves cascading organically over the front coping lip
+      box(0.35, 0.88, 0.50, 1.02, 7, 13, '#3aa84f', '#267332', '#1a4e22');
+      box(1.25, 0.88, 1.40, 1.02, 6, 12.5, '#4ec464', '#369c4a', '#226c30');
+      box(0.80, 0.90, 0.92, 1.01, 8, 13.5, '#5cd470', '#3aa84f', '#267332');
+    } else {
+      // 1x2 configuration (tw = 1, th = 2)
+      leafCluster(box, 0.50, 0.55, 20, 0.38, 0.42, 9, {
+        flowers: [
+          { x: -0.1, y: -0.15, z: 0.4, color: '#5c9cff' },
+          { x: 0.15, y: 0.2, z: 0.35, color: '#7cb2ff' }
+        ]
+      });
+
+      leafCluster(box, 0.48, 1.0, 22, 0.40, 0.46, 10, {
+        flowers: [
+          { x: -0.15, y: 0.05, z: 0.5, color: '#ff9a28' }
+        ]
+      });
+
+      leafCluster(box, 0.50, 1.45, 20, 0.38, 0.42, 9, {
+        flowers: [
+          { x: 0.1, y: -0.1, z: 0.4, color: '#ffa838' },
+          { x: -0.1, y: 0.2, z: 0.35, color: '#ff7820' }
+        ]
+      });
+
+      // Spilling ivy leaves cascading over the side coping lip
+      box(0.88, 0.35, 1.02, 0.50, 7, 13, '#3aa84f', '#267332', '#1a4e22');
+      box(0.88, 1.25, 1.02, 1.40, 6, 12.5, '#4ec464', '#369c4a', '#226c30');
+      box(0.90, 0.80, 1.01, 0.92, 8, 13.5, '#5cd470', '#3aa84f', '#267332');
+    }
   });
 }
 
 export function buildMarblePillarSprite() {
   const MARBLE = ['#f7f0e4', '#ded4c2', '#b8ab96'];
+  const MARBLE_SHADOW = ['#d8cebc', '#bcae98', '#948670'];
+  const MARBLE_HI = ['#ffffff', '#f4ede0', '#ded4c4'];
   const GOLD = ['#f8cf6a', '#d4a438', '#9c7218'];
+  const GOLD_HI = ['#ffe898', '#e2b040', '#a87818'];
+
   return isoSprite(1, 1, 58, (box) => {
-    box(0.16, 0.16, 0.84, 0.84, 0, 6, ...GOLD);
-    box(0.22, 0.22, 0.78, 0.78, 6, 11, ...MARBLE);
-    box(0.28, 0.28, 0.72, 0.72, 11, 48, ...MARBLE);
-    box(0.22, 0.22, 0.78, 0.78, 48, 53, ...MARBLE);
-    box(0.16, 0.16, 0.84, 0.84, 53, 57, ...GOLD);
+    // Stepped plinth base with gold moulding
+    box(0.10, 0.10, 0.90, 0.90, 0, 4, ...MARBLE_SHADOW);
+    box(0.14, 0.14, 0.86, 0.86, 4, 7, ...GOLD);
+    box(0.18, 0.18, 0.82, 0.82, 7, 11, ...MARBLE);
+
+    // Fluted marble column shaft
+    box(0.24, 0.24, 0.76, 0.76, 11, 48, ...MARBLE);
+
+    // Vertical fluting ridges & shadow grooves at 2x density
+    // South-east face fluting
+    box(0.74, 0.32, 0.77, 0.42, 11, 48, ...MARBLE_HI);
+    box(0.74, 0.46, 0.77, 0.54, 11, 48, ...MARBLE_HI);
+    box(0.74, 0.58, 0.77, 0.68, 11, 48, ...MARBLE_HI);
+    box(0.74, 0.42, 0.76, 0.46, 11, 48, ...MARBLE_SHADOW);
+    box(0.74, 0.54, 0.76, 0.58, 11, 48, ...MARBLE_SHADOW);
+
+    // South-west face fluting
+    box(0.32, 0.74, 0.42, 0.77, 11, 48, ...MARBLE_HI);
+    box(0.46, 0.74, 0.54, 0.77, 11, 48, ...MARBLE_HI);
+    box(0.58, 0.74, 0.68, 0.77, 11, 48, ...MARBLE_HI);
+    box(0.42, 0.74, 0.46, 0.76, 11, 48, ...MARBLE_SHADOW);
+    box(0.54, 0.74, 0.58, 0.76, 11, 48, ...MARBLE_SHADOW);
+
+    // Astragal necking ring with gold band
+    box(0.20, 0.20, 0.80, 0.80, 48, 51, ...GOLD);
+
+    // Classical carved capital header with corner scrolls
+    box(0.16, 0.16, 0.84, 0.84, 51, 54, ...MARBLE_HI);
+    box(0.12, 0.12, 0.88, 0.88, 54, 57, ...MARBLE);
+    box(0.10, 0.10, 0.90, 0.90, 57, 58, ...GOLD_HI); // top abacus edge
   });
 }
 
 export function buildChandelierSprite() {
   const GOLD = ['#ffe082', '#d8a838', '#9e7216'];
+  const GOLD_HI = ['#fff2b8', '#ffe082', '#cca028'];
   const CRYSTAL = ['#e8f8ff', '#b8e2f8', '#7cb4d8'];
+  const CRYSTAL_HI = ['#ffffff', '#f0faff', '#d0eaf8'];
   const GLOW = ['#fff9d2', '#ffe074', '#d89e28'];
+  const FLAME = ['#ffffff', '#fff4a8', '#ffc838'];
+
   return isoSprite(2, 2, 54, (box) => {
-    // Subtle inlaid golden marble floor medallion beneath chandelier
-    box(0.35, 0.35, 1.65, 1.65, 0, 2, ...GOLD);
-    box(0.55, 0.55, 1.45, 1.45, 0, 3, ...CRYSTAL);
-    // Suspended multi-tier crystal & brass chandelier crown
-    box(0.92, 0.92, 1.08, 1.08, 36, 52, ...GOLD);
-    box(0.38, 0.38, 1.62, 1.62, 30, 35, ...GOLD);
-    box(0.46, 0.46, 1.54, 1.54, 25, 30, ...CRYSTAL);
-    box(0.66, 0.66, 1.34, 1.34, 20, 25, ...CRYSTAL);
-    box(0.34, 0.34, 0.52, 0.52, 35, 41, ...GLOW);
-    box(1.48, 0.34, 1.66, 0.52, 35, 41, ...GLOW);
-    box(0.34, 1.48, 0.52, 1.66, 35, 41, ...GLOW);
-    box(1.48, 1.48, 1.66, 1.66, 35, 41, ...GLOW);
+    // 1. Subtle inlaid golden marble floor medallion beneath chandelier
+    box(0.30, 0.30, 1.70, 1.70, 0, 1.5, ...GOLD);
+    box(0.45, 0.45, 1.55, 1.55, 1, 2.2, ...CRYSTAL);
+    box(0.70, 0.70, 1.30, 1.30, 1.5, 2.8, ...GOLD_HI);
+
+    // 2. Suspended center brass hanging rod & ceiling canopy rose (z = 44 .. 54)
+    box(0.92, 0.92, 1.08, 1.08, 42, 54, ...GOLD);
+    box(0.84, 0.84, 1.16, 1.16, 51, 54, ...GOLD_HI);
+
+    // 3. Tier 1: Outer brass ring frame & candelabra candle arms (z = 32 .. 37)
+    box(0.36, 0.36, 1.64, 1.64, 32, 35, ...GOLD);
+    box(0.42, 0.42, 1.58, 1.58, 33, 35.5, ...GOLD_HI);
+
+    // 4 Candelabra candle sleeves with warm incandescent flames
+    const candleCoords = [
+      [0.34, 0.34],
+      [1.48, 0.34],
+      [0.34, 1.48],
+      [1.48, 1.48]
+    ];
+    for (const [cx, cy] of candleCoords) {
+      box(cx, cy, cx + 0.18, cy + 0.18, 35, 41, '#fffdf8', '#eee8dc', '#cac2b2'); // candle sleeve
+      box(cx + 0.04, cy + 0.04, cx + 0.14, cy + 0.14, 41, 46, ...GLOW); // flame
+      box(cx + 0.06, cy + 0.06, cx + 0.12, cy + 0.12, 42, 47, ...FLAME); // inner hot core
+    }
+
+    // 4. Cascading crystal teardrop pendant garlands (z = 20 .. 32)
+    box(0.44, 0.44, 1.56, 1.56, 26, 32, ...CRYSTAL);
+    box(0.62, 0.62, 1.38, 1.38, 21, 27, ...CRYSTAL);
+    box(0.78, 0.78, 1.22, 1.22, 17, 22, ...CRYSTAL_HI); // center crystal sphere finial
+    box(0.88, 0.88, 1.12, 1.12, 14, 17, '#ffffff', '#eaf8ff', '#b4e2f8'); // bottom crystal prism droplet
   });
 }
 
 export function buildGrandStaircaseSprite(rot = 0) {
   const MARBLE = ['#f4ece0', '#d8cebe', '#b0a492'];
-  const CARPET = ['#c83850', '#9e2438', '#6e1424'];
+  const MARBLE_SHADOW = ['#d8cebc', '#baa894', '#8c7e6c'];
+  const MARBLE_HI = ['#ffffff', '#ede4d6', '#c8bea8'];
+  const CARPET = ['#b8243c', '#8e1628', '#600e1a'];
+  const CARPET_GOLD = ['#f6c864', '#d49c2e', '#946c14'];
   const BRASS = ['#f4c658', '#ca962c', '#8e6414'];
-  return isoSprite(2, 2, 52, (box) => {
+  const BRASS_HI = ['#ffe890', '#e2b038', '#a47614'];
+  const MAHOGANY = ['#5c2818', '#421a0e', '#2a0e06'];
+
+  return isoSprite(2, 2, 54, (box) => {
     if (rot % 2 === 0) {
-      box(0.06, 0.06, 1.94, 0.65, 0, 36, ...MARBLE);
-      box(0.06, 0.65, 1.94, 1.15, 0, 24, ...MARBLE);
-      box(0.06, 1.15, 1.94, 1.60, 0, 14, ...MARBLE);
-      box(0.06, 1.60, 1.94, 1.94, 0, 6, ...MARBLE);
-      // Crimson carpet runner down steps
-      box(0.42, 0.12, 1.58, 0.65, 36, 38, ...CARPET);
-      box(0.42, 0.65, 1.58, 1.15, 24, 26, ...CARPET);
-      box(0.42, 1.15, 1.58, 1.60, 14, 16, ...CARPET);
-      box(0.42, 1.60, 1.58, 1.92, 6, 8, ...CARPET);
-      // Brass balustrades
-      box(0.08, 0.08, 0.24, 1.90, 6, 44, ...BRASS);
-      box(1.76, 0.08, 1.92, 1.90, 6, 44, ...BRASS);
+      // 4 tiered marble steps with bullnose overhangs
+      const steps = [
+        { y0: 0.06, y1: 0.62, z0: 0, z1: 36, cz0: 36, cz1: 38 },
+        { y0: 0.62, y1: 1.12, z0: 0, z1: 24, cz0: 24, cz1: 26 },
+        { y0: 1.12, y1: 1.58, z0: 0, z1: 14, cz0: 14, cz1: 16 },
+        { y0: 1.58, y1: 1.94, z0: 0, z1: 6, cz0: 6, cz1: 8 }
+      ];
+
+      for (const s of steps) {
+        box(0.06, s.y0, 1.94, s.y1, s.z0, s.z1, ...MARBLE);
+        // Tread nosing highlight along step edge
+        box(0.08, s.y1 - 0.05, 1.92, s.y1, s.z1 - 2, s.z1, ...MARBLE_HI);
+        // Crimson carpet runner centered down step
+        box(0.42, s.y0, 1.58, s.y1, s.cz0, s.cz1, ...CARPET);
+        // Gold embroidered runner borders
+        box(0.42, s.y0, 0.46, s.y1, s.cz0, s.cz1 + 0.5, ...CARPET_GOLD);
+        box(1.54, s.y0, 1.58, s.y1, s.cz0, s.cz1 + 0.5, ...CARPET_GOLD);
+        // Polished brass stair rod at riser crevice
+        box(0.40, s.y0 + 0.02, 1.60, s.y0 + 0.06, s.cz0 - 1, s.cz0 + 2, ...BRASS_HI);
+      }
+
+      // Left balustrade with newel posts & turned balusters
+      box(0.08, 0.08, 0.22, 0.22, 36, 52, ...MAHOGANY); // top newel post
+      box(0.08, 0.08, 0.22, 0.22, 52, 54, ...BRASS_HI); // newel finial
+      box(0.08, 1.76, 0.22, 1.90, 6, 24, ...MAHOGANY); // bottom newel post
+      box(0.08, 1.76, 0.22, 1.90, 24, 26, ...BRASS_HI);
+      box(0.12, 0.22, 0.18, 1.76, 12, 46, ...BRASS); // baluster spindles
+      box(0.08, 0.12, 0.22, 1.86, 22, 48, ...MAHOGANY); // angled handrail
+
+      // Right balustrade
+      box(1.78, 0.08, 1.92, 0.22, 36, 52, ...MAHOGANY);
+      box(1.78, 0.08, 1.92, 0.22, 52, 54, ...BRASS_HI);
+      box(1.78, 1.76, 1.92, 1.90, 6, 24, ...MAHOGANY);
+      box(1.78, 1.76, 1.92, 1.90, 24, 26, ...BRASS_HI);
+      box(1.82, 0.22, 1.88, 1.76, 12, 46, ...BRASS);
+      box(1.78, 0.12, 1.92, 1.86, 22, 48, ...MAHOGANY);
     } else {
-      box(0.06, 0.06, 0.65, 1.94, 0, 36, ...MARBLE);
-      box(0.65, 0.06, 1.15, 1.94, 0, 24, ...MARBLE);
-      box(1.15, 0.06, 1.60, 1.94, 0, 14, ...MARBLE);
-      box(1.60, 0.06, 1.94, 1.94, 0, 6, ...MARBLE);
-      box(0.12, 0.42, 0.65, 1.58, 36, 38, ...CARPET);
-      box(0.65, 0.42, 1.15, 1.58, 24, 26, ...CARPET);
-      box(1.15, 0.42, 1.60, 1.58, 14, 16, ...CARPET);
-      box(1.60, 0.42, 1.92, 1.58, 6, 8, ...CARPET);
-      box(0.08, 0.08, 1.90, 0.24, 6, 44, ...BRASS);
-      box(0.08, 1.76, 1.90, 1.92, 6, 44, ...BRASS);
+      const steps = [
+        { x0: 0.06, x1: 0.62, z0: 0, z1: 36, cz0: 36, cz1: 38 },
+        { x0: 0.62, x1: 1.12, z0: 0, z1: 24, cz0: 24, cz1: 26 },
+        { x0: 1.12, x1: 1.58, z0: 0, z1: 14, cz0: 14, cz1: 16 },
+        { x0: 1.58, x1: 1.94, z0: 0, z1: 6, cz0: 6, cz1: 8 }
+      ];
+
+      for (const s of steps) {
+        box(s.x0, 0.06, s.x1, 1.94, s.z0, s.z1, ...MARBLE);
+        box(s.x1 - 0.05, 0.08, s.x1, 1.92, s.z1 - 2, s.z1, ...MARBLE_HI);
+        box(s.x0, 0.42, s.x1, 1.58, s.cz0, s.cz1, ...CARPET);
+        box(s.x0, 0.42, s.x1, 0.46, s.cz0, s.cz1 + 0.5, ...CARPET_GOLD);
+        box(s.x0, 1.54, s.x1, 1.58, s.cz0, s.cz1 + 0.5, ...CARPET_GOLD);
+        box(s.x0 + 0.02, 0.40, s.x0 + 0.06, 1.60, s.cz0 - 1, s.cz0 + 2, ...BRASS_HI);
+      }
+
+      box(0.08, 0.08, 0.22, 0.22, 36, 52, ...MAHOGANY);
+      box(0.08, 0.08, 0.22, 0.22, 52, 54, ...BRASS_HI);
+      box(1.76, 0.08, 1.90, 0.22, 6, 24, ...MAHOGANY);
+      box(1.76, 0.08, 1.90, 0.22, 24, 26, ...BRASS_HI);
+      box(0.22, 0.12, 1.76, 0.18, 12, 46, ...BRASS);
+      box(0.12, 0.08, 1.86, 0.22, 22, 48, ...MAHOGANY);
+
+      box(0.08, 1.78, 0.22, 1.92, 36, 52, ...MAHOGANY);
+      box(0.08, 1.78, 0.22, 1.92, 52, 54, ...BRASS_HI);
+      box(1.76, 1.78, 1.90, 1.92, 6, 24, ...MAHOGANY);
+      box(1.76, 1.78, 1.90, 1.92, 24, 26, ...BRASS_HI);
+      box(0.22, 1.82, 1.76, 1.88, 12, 46, ...BRASS);
+      box(0.12, 1.78, 1.86, 1.92, 22, 48, ...MAHOGANY);
     }
   });
 }
 
 export function buildLobbyFountainSprite() {
   const MARBLE = ['#f2eae0', '#d4cab8', '#a89e8c'];
-  const WATER = ['#6ce4f8', '#3cb8d4', '#1e829c'];
+  const STONE_DARK = ['#b8ac98', '#988c78', '#6e6250'];
+  const WATER = ['#4ed8ec', '#26b2cc', '#127a90'];
+  const WATER_HI = ['#dcf6fa', '#9ae8f4', '#52cce0'];
   const GOLD = ['#f8cf68', '#d09e30', '#966c14'];
-  return isoSprite(2, 2, 46, (box) => {
-    box(0.10, 0.10, 1.90, 1.90, 0, 10, ...MARBLE);
-    box(0.22, 0.22, 1.78, 1.78, 10, 12, ...WATER);
-    box(0.56, 0.56, 1.44, 1.44, 12, 24, ...MARBLE);
-    box(0.64, 0.64, 1.36, 1.36, 24, 26, ...WATER);
-    box(0.82, 0.82, 1.18, 1.18, 26, 38, ...MARBLE);
-    box(0.88, 0.88, 1.12, 1.12, 38, 44, ...GOLD);
+  const SPRAY = ['#ffffff', '#e8f8fc', '#b8e8f4'];
+
+  return isoSprite(2, 2, 48, (box) => {
+    // Stepped plinth & main basin outer rim (octagonal carved stone)
+    box(0.06, 0.06, 1.94, 1.94, 0, 4, ...STONE_DARK);
+    box(0.08, 0.20, 1.92, 1.80, 4, 10, ...MARBLE);
+    box(0.20, 0.08, 1.80, 1.92, 4, 10, ...MARBLE);
+    box(0.12, 0.12, 1.88, 1.88, 4, 10, ...MARBLE);
+    // Outer coping lip
+    box(0.06, 0.18, 1.94, 1.82, 9, 11, ...MARBLE);
+    box(0.18, 0.06, 1.82, 1.94, 9, 11, ...MARBLE);
+
+    // Basin water reservoir with ripples & depth
+    box(0.18, 0.18, 1.82, 1.82, 4, 9.5, ...WATER);
+    box(0.24, 0.24, 1.76, 1.76, 9.2, 9.8, ...WATER_HI);
+
+    // Wishing coins shimmering at the bottom of the basin
+    box(0.40, 0.50, 0.48, 0.58, 4.5, 5.5, ...GOLD);
+    box(0.55, 1.40, 0.63, 1.48, 4.5, 5.5, ...GOLD);
+    box(1.42, 0.60, 1.50, 0.68, 4.5, 5.5, ...GOLD);
+    box(1.35, 1.35, 1.43, 1.43, 4.5, 5.5, ...GOLD);
+
+    // Central pedestal column
+    box(0.68, 0.68, 1.32, 1.32, 4, 16, ...MARBLE);
+    box(0.62, 0.62, 1.38, 1.38, 16, 20, ...STONE_DARK);
+
+    // Tier 2 carved basin bowl with coping rim
+    box(0.48, 0.48, 1.52, 1.52, 20, 24, ...MARBLE);
+    box(0.44, 0.44, 1.56, 1.56, 23, 25, ...MARBLE);
+    box(0.52, 0.52, 1.48, 1.48, 23, 24.5, ...WATER);
+
+    // Water overflow cascading sheets from upper basin into lower basin
+    box(0.46, 0.88, 0.50, 1.12, 10, 24, ...WATER_HI);
+    box(1.50, 0.88, 1.54, 1.12, 10, 24, ...WATER_HI);
+    box(0.88, 0.46, 1.12, 0.50, 10, 24, ...WATER_HI);
+    box(0.88, 1.50, 1.12, 1.54, 10, 24, ...WATER_HI);
+
+    // Upper fountain spire with ornate finial
+    box(0.76, 0.76, 1.24, 1.24, 24, 36, ...MARBLE);
+    box(0.82, 0.82, 1.18, 1.18, 36, 42, ...GOLD);
+
+    // Bubbling water jet / spray crown at top
+    box(0.92, 0.92, 1.08, 1.08, 42, 46, ...SPRAY);
+    box(0.95, 0.95, 1.05, 1.05, 46, 48, '#ffffff', '#f4fdff', '#e0f6fc');
   });
 }
 
 export function buildLuggageTrolleySprite(rot = 0) {
   const BRASS = ['#f6cb62', '#cf9c30', '#946a14'];
-  const BASE = ['#c4364c', '#982236', '#681222'];
-  const CASE1 = ['#8c5230', '#6c3a1e', '#4a2410'];
-  const CASE2 = ['#3e6b8c', '#2a4e68', '#183246'];
-  return isoSprite(1, 1, 44, (box) => {
-    box(0.14, 0.18, 0.86, 0.82, 0, 6, ...BASE);
-    box(0.16, 0.20, 0.26, 0.80, 6, 38, ...BRASS);
-    box(0.74, 0.20, 0.84, 0.80, 6, 38, ...BRASS);
-    box(0.16, 0.20, 0.84, 0.80, 38, 42, ...BRASS);
+  const BRASS_HI = ['#ffe88e', '#e2b038', '#a47814'];
+  const CARPET = ['#b8243c', '#8a1428', '#5e0a1a'];
+  const BUMPER = ['#323438', '#222428', '#141618'];
+  const CASTER = ['#8c94a0', '#646c78', '#424850'];
+  const LEATHER1 = ['#9e5828', '#7a4018', '#562a0c'];
+  const LEATHER2 = ['#2c4a68', '#1e344a', '#102030'];
+  const LEATHER3 = ['#883838', '#682424', '#481414'];
+  const GOLD = ['#ffd464', '#d8a428', '#966e12'];
+
+  return isoSprite(1, 1, 46, (box) => {
+    // 4 heavy-duty swivel caster wheels
+    box(0.12, 0.16, 0.22, 0.26, 0, 4, ...CASTER);
+    box(0.78, 0.16, 0.88, 0.26, 0, 4, ...CASTER);
+    box(0.12, 0.74, 0.22, 0.84, 0, 4, ...CASTER);
+    box(0.78, 0.74, 0.88, 0.84, 0, 4, ...CASTER);
+
+    // Rubber protective bumper rim (z = 4 .. 6)
+    box(0.08, 0.12, 0.92, 0.88, 4, 6, ...BUMPER);
+    // Brass platform deck frame (z = 6 .. 8)
+    box(0.10, 0.14, 0.90, 0.86, 6, 8, ...BRASS);
+    // Plush red carpeted luggage platform
+    box(0.12, 0.16, 0.88, 0.84, 7.5, 8.5, ...CARPET);
+
+    // Tubular polished brass birdcage arch frame
+    // Upright corner posts
+    box(0.14, 0.18, 0.20, 0.24, 8, 40, ...BRASS_HI);
+    box(0.80, 0.18, 0.86, 0.24, 8, 40, ...BRASS_HI);
+    box(0.14, 0.76, 0.20, 0.82, 8, 40, ...BRASS_HI);
+    box(0.80, 0.76, 0.86, 0.82, 8, 40, ...BRASS_HI);
+
+    // Top arched canopy rails & crossbars (z = 40 .. 44)
+    box(0.14, 0.18, 0.86, 0.24, 40, 43, ...BRASS);
+    box(0.14, 0.76, 0.86, 0.82, 40, 43, ...BRASS);
+    box(0.14, 0.18, 0.20, 0.82, 40, 43, ...BRASS);
+    box(0.80, 0.18, 0.86, 0.82, 40, 43, ...BRASS);
+
+    // Center coat hanging rail & finial
+    box(0.47, 0.18, 0.53, 0.82, 42, 44, ...BRASS_HI);
+    box(0.45, 0.45, 0.55, 0.55, 44, 46, ...GOLD);
+
+    // Stack of 3 authentic vintage travel trunks with straps & brass locks
     if (rot % 2 === 0) {
-      box(0.28, 0.24, 0.72, 0.54, 6, 18, ...CASE1);
-      box(0.30, 0.54, 0.70, 0.78, 6, 16, ...CASE2);
+      // Large bottom brown leather trunk
+      box(0.22, 0.22, 0.78, 0.54, 8.5, 18, ...LEATHER1);
+      box(0.20, 0.30, 0.80, 0.33, 8.5, 18.2, ...GOLD); // leather strap
+      box(0.20, 0.43, 0.80, 0.46, 8.5, 18.2, ...GOLD); // leather strap
+      box(0.77, 0.36, 0.79, 0.40, 12, 15, ...GOLD); // brass latch
+
+      // Medium navy blue case on right
+      box(0.24, 0.56, 0.76, 0.80, 8.5, 16, ...LEATHER2);
+      box(0.75, 0.66, 0.77, 0.70, 11, 14, ...GOLD);
+
+      // Top burgundy vanity case resting on top
+      box(0.30, 0.26, 0.70, 0.50, 18, 26, ...LEATHER3);
+      box(0.69, 0.36, 0.71, 0.40, 21, 24, ...GOLD);
+      box(0.46, 0.35, 0.54, 0.41, 26, 28, ...LEATHER1); // top handle
     } else {
-      box(0.24, 0.28, 0.54, 0.72, 6, 18, ...CASE1);
-      box(0.54, 0.30, 0.78, 0.70, 6, 16, ...CASE2);
+      box(0.22, 0.22, 0.54, 0.78, 8.5, 18, ...LEATHER1);
+      box(0.30, 0.20, 0.33, 0.80, 8.5, 18.2, ...GOLD);
+      box(0.43, 0.20, 0.46, 0.80, 8.5, 18.2, ...GOLD);
+      box(0.36, 0.77, 0.40, 0.79, 12, 15, ...GOLD);
+
+      box(0.56, 0.24, 0.80, 0.76, 8.5, 16, ...LEATHER2);
+      box(0.66, 0.75, 0.70, 0.77, 11, 14, ...GOLD);
+
+      box(0.26, 0.30, 0.50, 0.70, 18, 26, ...LEATHER3);
+      box(0.36, 0.69, 0.40, 0.71, 21, 24, ...GOLD);
+      box(0.35, 0.46, 0.41, 0.54, 26, 28, ...LEATHER1);
     }
   });
 }
 
 export function buildConciergeDeskSprite(rot = 0) {
   const [tw, th] = rot % 2 ? [1, 2] : [2, 1];
+  const WALNUT_DARK = ['#4e2b14', '#381c0c', '#241006'];
   const WALNUT = ['#6e4228', '#522e18', '#361c0c'];
+  const WALNUT_LGT = ['#8c5836', '#6e4228', '#522e18'];
   const BRASS = ['#f4c65a', '#cc982e', '#926814'];
+  const BRASS_HI = ['#ffe898', '#e2b040', '#a87818'];
   const LEDGER = ['#fcf6e8', '#dfd4be', '#b4a890'];
-  return isoSprite(tw, th, 38, (box) => {
-    box(0.06, 0.10, tw - 0.06, th - 0.10, 0, 22, ...WALNUT);
-    box(0.04, 0.08, tw - 0.04, th - 0.08, 22, 26, ...BRASS);
-    box(0.22 * tw, 0.26 * th, 0.54 * tw, 0.72 * th, 26, 30, ...LEDGER);
-    box(0.66 * tw, 0.30 * th, 0.84 * tw, 0.68 * th, 26, 35, ...BRASS);
+  const BLOTTER = ['#2c342a', '#1e261c', '#121810'];
+  const GREEN_SHADE = ['#249454', '#166e3c', '#0e4a26'];
+  return isoSprite(tw, th, 42, (box) => {
+    // Stepped plinth base with wood moulding
+    box(0.04, 0.08, tw - 0.04, th - 0.08, 0, 3, ...WALNUT_DARK);
+    box(0.06, 0.10, tw - 0.06, th - 0.10, 3, 5, ...WALNUT_LGT);
+
+    // Main desk carcass
+    box(0.08, 0.12, tw - 0.08, th - 0.12, 5, 23, ...WALNUT);
+
+    // Front/side raised panel mouldings
+    if (tw > th) {
+      box(0.12, 0.10, tw / 2 - 0.04, 0.12, 6, 21, ...WALNUT_DARK);
+      box(0.14, 0.09, tw / 2 - 0.06, 0.11, 7, 20, ...WALNUT_LGT);
+      box(tw / 2 + 0.04, 0.10, tw - 0.12, 0.12, 6, 21, ...WALNUT_DARK);
+      box(tw / 2 + 0.06, 0.09, tw - 0.14, 0.11, 7, 20, ...WALNUT_LGT);
+    } else {
+      box(0.10, 0.12, 0.12, th / 2 - 0.04, 6, 21, ...WALNUT_DARK);
+      box(0.09, 0.14, 0.11, th / 2 - 0.06, 7, 20, ...WALNUT_LGT);
+      box(0.10, th / 2 + 0.04, 0.12, th - 0.12, 6, 21, ...WALNUT_DARK);
+      box(0.09, th / 2 + 0.06, 0.11, th - 0.14, 7, 20, ...WALNUT_LGT);
+    }
+
+    // Polished brass wrap-around footrail along guest side
+    if (tw > th) {
+      box(0.06, 0.04, tw - 0.06, 0.07, 3, 5, ...BRASS);
+      box(0.15, 0.04, 0.18, 0.10, 2, 4, ...BRASS_HI);
+      box(tw - 0.18, 0.04, tw - 0.15, 0.10, 2, 4, ...BRASS_HI);
+    } else {
+      box(0.04, 0.06, 0.07, th - 0.06, 3, 5, ...BRASS);
+      box(0.04, 0.15, 0.10, 0.18, 2, 4, ...BRASS_HI);
+      box(0.04, th - 0.18, 0.10, th - 0.15, 2, 4, ...BRASS_HI);
+    }
+
+    // Heavy mahogany counter top with bullnose overhang
+    box(0.04, 0.06, tw - 0.04, th - 0.06, 23, 26, ...WALNUT_DARK);
+    box(0.03, 0.05, tw - 0.03, th - 0.05, 25, 27, ...WALNUT_LGT);
+
+    // Leather desk blotter
+    const [bx0, by0, bx1, by1] = tw > th
+      ? [0.18 * tw, 0.22 * th, 0.62 * tw, 0.78 * th]
+      : [0.22 * tw, 0.18 * th, 0.78 * tw, 0.62 * th];
+    box(bx0, by0, bx1, by1, 27, 28, ...BLOTTER);
+
+    // Open leather guest register / ledger book
+    const [lx0, ly0, lx1, ly1] = tw > th
+      ? [0.22 * tw, 0.26 * th, 0.58 * tw, 0.74 * th]
+      : [0.26 * tw, 0.22 * th, 0.74 * tw, 0.58 * th];
+    box(lx0, ly0, lx1, ly1, 28, 30, ...LEDGER);
+    // Dark spine seam and bookmark ribbon
+    if (tw > th) {
+      box((lx0 + lx1) / 2 - 0.02, ly0, (lx0 + lx1) / 2 + 0.02, ly1, 30, 31, '#8b1e2c', '#6e1420', '#4a0a14');
+      box((lx0 + lx1) / 2 - 0.01, ly1 - 0.02, (lx0 + lx1) / 2 + 0.01, ly1 + 0.08, 27, 29, '#cc2438', '#991424', '#660a14'); // draped ribbon tail
+    } else {
+      box(lx0, (ly0 + ly1) / 2 - 0.02, lx1, (ly0 + ly1) / 2 + 0.02, 30, 31, '#8b1e2c', '#6e1420', '#4a0a14');
+      box(lx1 - 0.02, (ly0 + ly1) / 2 - 0.01, lx1 + 0.08, (ly0 + ly1) / 2 + 0.01, 27, 29, '#cc2438', '#991424', '#660a14');
+    }
+
+    // Classic Banker's Lamp
+    const [lampX, lampY] = tw > th ? [0.76 * tw, 0.45 * th] : [0.45 * tw, 0.76 * th];
+    box(lampX - 0.06, lampY - 0.06, lampX + 0.06, lampY + 0.06, 27, 29, ...BRASS); // base
+    box(lampX - 0.02, lampY - 0.02, lampX + 0.02, lampY + 0.02, 29, 36, ...BRASS_HI); // neck
+    box(lampX - 0.10, lampY - 0.05, lampX + 0.10, lampY + 0.05, 36, 40, ...GREEN_SHADE); // emerald glass shade
+    box(lampX - 0.06, lampY - 0.03, lampX + 0.06, lampY + 0.03, 35, 36, '#ffea90', '#ffd450', '#c89e24'); // bulb glow
+
+    // Polished brass reception bell
+    const [bellX, bellY] = tw > th ? [0.10 * tw, 0.50 * th] : [0.50 * tw, 0.10 * th];
+    box(bellX - 0.04, bellY - 0.04, bellX + 0.04, bellY + 0.04, 27, 29, ...BRASS_HI);
+    box(bellX - 0.01, bellY - 0.01, bellX + 0.01, bellY + 0.01, 29, 31, '#ffffff', '#e8c044', '#996e14');
   });
 }
 
 export function buildLobbyRunnerSprite(rot = 0) {
   const [tw, th] = rot % 2 ? [3, 2] : [2, 3];
   const GOLD = ['#f6c667', '#d8a442', '#a07424'];
-  const CRIMSON = ['#b8324a', '#942238', '#681424'];
-  const INNER = ['#d84a64', '#b4344c', '#822034'];
+  const GOLD_HI = ['#ffe898', '#e2b040', '#a87818'];
+  const CRIMSON = ['#b8243c', '#8a1428', '#5e0a1a'];
+  const INNER = ['#d83652', '#b0243c', '#7e1426'];
+  const FRINGE = ['#ffea9c', '#d8a43c', '#986c1c'];
+
   return isoSprite(tw, th, 10, (box) => {
-    box(0.04, 0.04, tw - 0.04, th - 0.04, 0, 2, ...GOLD);
-    box(0.14, 0.14, tw - 0.14, th - 0.14, 0, 2, ...CRIMSON);
-    box(0.32, 0.32, tw - 0.32, th - 0.32, 0, 2, ...INNER);
+    // 1. Fringe tassels along short ends at 2x density
+    if (tw > th) {
+      for (let i = 0; i < 10; i++) {
+        const y = 0.08 + i * 0.185;
+        box(-0.04, y, 0.04, y + 0.06, 0, 1, ...FRINGE);
+        box(tw - 0.04, y, tw + 0.04, y + 0.06, 0, 1, ...FRINGE);
+      }
+    } else {
+      for (let i = 0; i < 10; i++) {
+        const x = 0.08 + i * 0.185;
+        box(x, -0.04, x + 0.06, 0.04, 0, 1, ...FRINGE);
+        box(x, th - 0.04, x + 0.06, th + 0.04, 0, 1, ...FRINGE);
+      }
+    }
+
+    // 2. Heavy crimson velvet runner field
+    box(0.04, 0.04, tw - 0.04, th - 0.04, 0, 2, ...CRIMSON);
+
+    // 3. Intricate gold bullion braided border
+    box(0.12, 0.12, tw - 0.12, th - 0.12, 1, 2.2, ...GOLD);
+    box(0.18, 0.18, tw - 0.18, th - 0.18, 1, 2.2, ...CRIMSON);
+
+    // 4. Inner ruby panel
+    box(0.24, 0.24, tw - 0.24, th - 0.24, 1, 2.4, ...INNER);
+
+    // 5. Repeating gold damask medallions along runner center
+    if (tw > th) {
+      for (let m = 0; m < 3; m++) {
+        const mx = 0.50 + m * 1.0;
+        box(mx - 0.20, 0.80, mx + 0.20, 1.20, 1.5, 2.6, ...GOLD_HI);
+        box(mx - 0.08, 0.92, mx + 0.08, 1.08, 1.8, 2.8, ...CRIMSON);
+      }
+    } else {
+      for (let m = 0; m < 3; m++) {
+        const my = 0.50 + m * 1.0;
+        box(0.80, my - 0.20, 1.20, my + 0.20, 1.5, 2.6, ...GOLD_HI);
+        box(0.92, my - 0.08, 1.08, my + 0.08, 1.8, 2.8, ...CRIMSON);
+      }
+    }
   });
 }
 
@@ -1861,262 +3602,1004 @@ export function buildLobbyRunnerSprite(rot = 0) {
 
 export function buildGymMirror(rot = 0) {
   const [tw, th] = rot % 2 ? [1, 2] : [2, 1];
-  const FRAME = ['#d8e0e8', '#b0b8c4', '#848c98'];
-  const GLASS = ['#c8e8f4', '#a0ccde', '#7aa4b6'];
-  const SHEEN = ['#ffffff', '#e8f4fc', '#b8d8ec'];
-  return isoSprite(tw, th, 46, (box) => {
-    box(0.04, 0.04, tw - 0.04, th - 0.04, 6, 44, ...FRAME);
-    box(0.10, 0.10, tw - 0.10, th - 0.10, 8, 42, ...GLASS);
-    // Diagonal glass highlight / reflection streak
-    box(tw * 0.2, th * 0.2, tw * 0.45, th * 0.45, 14, 38, ...SHEEN);
+  const FRAME = ['#7c8496', '#5c6474', '#3e4452'];
+  const GLASS = ['#d2ecf8', '#a8d2e4', '#7eaab8'];
+  const SHEEN = ['#ffffff', '#eaf6fd', '#c4e0f0'];
+  const BASE_RAIL = ['#9ea8b8', '#7c8494', '#586070'];
+
+  return isoSprite(tw, th, 48, (box) => {
+    // Brushed aluminum floor and ceiling mounting channels
+    box(0.04, 0.04, tw - 0.04, th - 0.04, 0, 5, ...BASE_RAIL);
+    box(0.04, 0.04, tw - 0.04, th - 0.04, 45, 48, ...FRAME);
+
+    // Full-height bevelled mirror glass panels
+    box(0.08, 0.08, tw - 0.08, th - 0.08, 5, 45, ...GLASS);
+
+    // Vertical seam dividing multiple mirror panels
+    if (tw >= th) {
+      box(tw / 2 - 0.015, 0.07, tw / 2 + 0.015, th - 0.07, 5, 45, '#5c6474', '#444c5a', '#303642');
+      // Diagonal reflection streaks across mirror surfaces
+      box(0.25, 0.09, 0.55, th - 0.09, 12, 38, ...SHEEN);
+      box(1.25, 0.09, 1.55, th - 0.09, 12, 38, ...SHEEN);
+    } else {
+      box(0.07, th / 2 - 0.015, tw - 0.07, th / 2 + 0.015, 5, 45, '#5c6474', '#444c5a', '#303642');
+      box(0.09, 0.25, tw - 0.09, 0.55, 12, 38, ...SHEEN);
+      box(0.09, 1.25, tw - 0.09, 1.55, 12, 38, ...SHEEN);
+    }
   });
 }
 
 export function buildExerciseBike(rot = 0) {
-  const [tw, th] = rot % 2 ? [1, 1] : [1, 1];
-  const FRAME = ['#444c5c', '#303644', '#1e222c'];
+  const r = ((rot % 4) + 4) % 4;
+  const tw = 1;
+  const th = 1;
+  const CHASSIS = ['#303440', '#222630', '#161820'];
+  const CHROME = ['#e4eaf2', '#bcc4d2', '#88909e'];
+  const FLYWHEEL = ['#606878', '#444c5a', '#2c323e'];
   const ACCENT = ['#00e5ff', '#00b4d8', '#0077b6'];
-  return isoSprite(tw, th, 38, (box) => {
-    box(0.25, 0.25, 0.75, 0.75, 0, 4, ...FRAME); // Base
-    box(0.35, 0.35, 0.65, 0.65, 4, 18, ...FRAME); // Flywheel housing
-    box(0.42, 0.42, 0.58, 0.58, 18, 30, ...FRAME); // Post
-    box(0.32, 0.28, 0.68, 0.45, 28, 32, '#202228', '#14161a', '#0a0c0e'); // Saddle
-    box(0.30, 0.60, 0.70, 0.75, 30, 36, ...ACCENT); // Handlebars & digital display
+  const SADDLE = ['#1a1c22', '#121418', '#0a0c0e'];
+
+  return isoSprite(tw, th, 40, (box) => {
+    // Wide front & rear steel stabilizer feet with non-slip floor rubber caps
+    box(0.18, 0.12, 0.82, 0.22, 0, 3, ...CHASSIS);
+    box(0.18, 0.78, 0.82, 0.88, 0, 3, ...CHASSIS);
+    // Rubber end caps
+    box(0.14, 0.11, 0.20, 0.23, 0, 3.5, '#14161a', '#0c0e10', '#06080a');
+    box(0.80, 0.11, 0.86, 0.23, 0, 3.5, '#14161a', '#0c0e10', '#06080a');
+    box(0.14, 0.77, 0.20, 0.89, 0, 3.5, '#14161a', '#0c0e10', '#06080a');
+    box(0.80, 0.77, 0.86, 0.89, 0, 3.5, '#14161a', '#0c0e10', '#06080a');
+
+    // Central bottom frame tube & bottom bracket (z = 2 .. 8)
+    box(0.44, 0.20, 0.56, 0.80, 2, 7, ...CHASSIS);
+
+    // Front weighted flywheel disc with metallic sheen reflections (z = 5 .. 20)
+    box(0.42, 0.20, 0.58, 0.50, 5, 20, ...FLYWHEEL);
+    box(0.40, 0.22, 0.60, 0.48, 7, 18, ...CHROME);
+    box(0.43, 0.26, 0.57, 0.44, 9, 16, '#282c36', '#1c2028', '#101218');
+
+    // Crank arms and pedals on left and right
+    box(0.32, 0.38, 0.44, 0.44, 8, 12, ...CHROME);
+    box(0.56, 0.46, 0.68, 0.52, 6, 10, ...CHROME);
+    // Pedals with toe cages
+    box(0.24, 0.36, 0.34, 0.46, 7, 9, '#1a1c22', '#121418', '#0a0c0e');
+    box(0.66, 0.44, 0.76, 0.54, 5, 7, '#1a1c22', '#121418', '#0a0c0e');
+
+    // Diagonal frame tube rising from bottom bracket to head tube
+    box(0.44, 0.30, 0.56, 0.60, 7, 16, ...CHASSIS);
+    // Cyan aerodynamic racing stripe
+    box(0.43, 0.34, 0.57, 0.56, 15, 17, ...ACCENT);
+
+    // Adjustable chrome seatpost (z = 14 .. 26) & ergonomic racing saddle
+    box(0.46, 0.60, 0.54, 0.72, 12, 26, ...CHROME);
+    // Ergonomic racing saddle with contoured nose and rear flare (z = 26 .. 30)
+    box(0.40, 0.54, 0.60, 0.80, 26, 29, ...SADDLE);
+    box(0.44, 0.48, 0.56, 0.62, 27, 29.5, ...SADDLE); // saddle nose
+    box(0.48, 0.56, 0.52, 0.76, 29, 30, ...ACCENT); // saddle center channel stripe
+
+    // Front handlebar stem & curved bullhorn handlebars (z = 18 .. 34)
+    box(0.46, 0.24, 0.54, 0.34, 18, 32, ...CHROME);
+    box(0.32, 0.18, 0.68, 0.28, 31, 34, ...CHASSIS);
+    // Rubber grip bullhorns extending forward
+    box(0.30, 0.14, 0.36, 0.26, 33, 36, ...SADDLE);
+    box(0.64, 0.14, 0.70, 0.26, 33, 36, ...SADDLE);
+
+    // Glowing cyan workout digital console screen in center
+    box(0.42, 0.18, 0.58, 0.30, 33, 37, ...CHASSIS);
+    box(0.44, 0.20, 0.56, 0.28, 37, 39, ...ACCENT);
   });
 }
 
 export function buildRowingMachine(rot = 0) {
   const [tw, th] = rot % 2 ? [1, 2] : [2, 1];
-  const FRAME = ['#505868', '#383e4c', '#242a34'];
-  return isoSprite(tw, th, 28, (box) => {
-    box(0.12, 0.12, tw - 0.12, th - 0.12, 0, 4, ...FRAME); // Long track
-    box(0.20 * tw, 0.20 * th, 0.55 * tw, 0.55 * th, 4, 26, ...FRAME); // Flywheel housing
-    box(0.60 * tw, 0.35 * th, 0.85 * tw, 0.65 * th, 4, 10, '#e85042', '#b83428', '#802018'); // Sliding seat
+  const FRAME = ['#444a58', '#323642', '#20242e'];
+  const MONORAIL = ['#d8e2ee', '#b0bcc8', '#7e8a96'];
+  const HOUSING = ['#282c36', '#1c2028', '#101218'];
+  const SEAT = ['#202228', '#16181e', '#0c0e12'];
+  const RED_ACCENT = ['#e53935', '#c62828', '#8e0000'];
+  const SCREEN = ['#00e676', '#00c853', '#009624'];
+
+  return isoSprite(tw, th, 32, (box) => {
+    if (tw >= th) {
+      // 2x1 configuration (runs along u axis)
+      // Front and rear stabilizer feet with rubber pads
+      box(0.08, 0.16, 0.24, th - 0.16, 0, 4, ...FRAME);
+      box(tw - 0.20, 0.18, tw - 0.08, th - 0.18, 0, 4, ...FRAME);
+
+      // Long extruded aluminum monorail runner beam
+      box(0.24, 0.40, tw - 0.16, 0.60, 3, 7, ...MONORAIL);
+      box(0.24, 0.44, tw - 0.16, 0.56, 7, 7.8, '#f0f4fa', '#d0d8e2', '#a0a8b4'); // rail top track
+
+      // Front air turbine / flywheel housing with radial ventilation
+      box(0.12, 0.24, 0.48, th - 0.24, 4, 22, ...HOUSING);
+      box(0.16, 0.20, 0.44, th - 0.20, 6, 20, '#505868', '#3a404c', '#262a34');
+      box(0.22, 0.32, 0.38, th - 0.32, 9, 17, '#707c90', '#545e6e', '#38404c');
+
+      // Angled footplates with heel cups and foot straps
+      box(0.44, 0.18, 0.62, 0.38, 4, 14, ...FRAME);
+      box(0.44, th - 0.38, 0.62, th - 0.18, 4, 14, ...FRAME);
+      // Foot strap bands
+      box(0.48, 0.17, 0.56, 0.39, 10, 12, ...RED_ACCENT);
+      box(0.48, th - 0.39, 0.56, th - 0.17, 10, 12, ...RED_ACCENT);
+
+      // Ergonomic contoured sliding seat with roller bracket
+      box(1.05, 0.30, 1.45, th - 0.30, 8, 13, ...SEAT);
+      box(1.05, 0.30, 1.45, th - 0.30, 12.5, 13, ...RED_ACCENT); // seat piping
+      box(1.15, 0.38, 1.35, 0.62, 6, 8, ...FRAME); // seat rollers
+
+      // Handlebar and chain catch cradle
+      box(0.46, 0.42, 0.54, 0.58, 14, 18, '#d8dfe8', '#b0b8c4', '#848c98');
+      box(0.48, 0.32, 0.52, th - 0.32, 17, 20, ...SEAT);
+
+      // Performance workout monitor on angled support stalk
+      box(0.36, 0.44, 0.42, 0.56, 20, 26, ...FRAME);
+      box(0.34, 0.40, 0.44, 0.60, 25, 29, ...HOUSING);
+      box(0.36, 0.43, 0.42, 0.57, 29, 31, ...SCREEN);
+    } else {
+      // 1x2 configuration (runs along v axis)
+      box(0.16, 0.08, tw - 0.16, 0.24, 0, 4, ...FRAME);
+      box(0.18, th - 0.20, tw - 0.18, th - 0.08, 0, 4, ...FRAME);
+
+      box(0.40, 0.24, 0.60, th - 0.16, 3, 7, ...MONORAIL);
+      box(0.44, 0.24, 0.56, th - 0.16, 7, 7.8, '#f0f4fa', '#d0d8e2', '#a0a8b4');
+
+      box(0.24, 0.12, tw - 0.24, 0.48, 4, 22, ...HOUSING);
+      box(0.20, 0.16, tw - 0.20, 0.44, 6, 20, '#505868', '#3a404c', '#262a34');
+      box(0.32, 0.22, tw - 0.32, 0.38, 9, 17, '#707c90', '#545e6e', '#38404c');
+
+      box(0.18, 0.44, 0.38, 0.62, 4, 14, ...FRAME);
+      box(tw - 0.38, 0.44, tw - 0.18, 0.62, 4, 14, ...FRAME);
+      box(0.17, 0.48, 0.39, 0.56, 10, 12, ...RED_ACCENT);
+      box(tw - 0.39, 0.48, tw - 0.17, 0.56, 10, 12, ...RED_ACCENT);
+
+      box(0.30, 1.05, tw - 0.30, 1.45, 8, 13, ...SEAT);
+      box(0.30, 1.05, tw - 0.30, 1.45, 12.5, 13, ...RED_ACCENT);
+      box(0.38, 1.15, 0.62, 1.35, 6, 8, ...FRAME);
+
+      box(0.42, 0.46, 0.58, 0.54, 14, 18, '#d8dfe8', '#b0b8c4', '#848c98');
+      box(0.32, 0.48, tw - 0.32, 0.52, 17, 20, ...SEAT);
+
+      box(0.44, 0.36, 0.56, 0.42, 20, 26, ...FRAME);
+      box(0.40, 0.34, 0.60, 0.44, 25, 29, ...HOUSING);
+      box(0.43, 0.36, 0.57, 0.42, 29, 31, ...SCREEN);
+    }
   });
 }
 
 export function buildSquatRack(rot = 0) {
   const [tw, th] = rot % 2 ? [1, 2] : [2, 1];
-  const STEEL = ['#8892a0', '#646c78', '#444a54'];
-  const PLATES = ['#282c34', '#1a1d22', '#101216'];
-  return isoSprite(tw, th, 54, (box) => {
-    box(0.10, 0.10, tw - 0.10, th - 0.10, 0, 4, ...STEEL); // Base frame
-    // Upright posts
-    box(0.12, 0.12, 0.24, 0.24, 4, 52, ...STEEL);
-    box(tw - 0.24, th - 0.24, tw - 0.12, th - 0.12, 4, 52, ...STEEL);
-    // Overhead pull-up bar
-    box(0.12, 0.12, tw - 0.12, th - 0.12, 50, 53, ...STEEL);
-    // Barbell resting on safety pins with weight plates
-    box(0.04, 0.20 * th, tw - 0.04, 0.40 * th, 28, 30, '#d8e0ea', '#b0b8c4', '#7c8490');
-    box(0.06, 0.15 * th, 0.14, 0.45 * th, 23, 35, ...PLATES);
-    box(tw - 0.14, 0.15 * th, tw - 0.06, 0.45 * th, 23, 35, ...PLATES);
+  const STEEL = ['#7c8698', '#5c6474', '#404652'];
+  const PEG_HOLE = ['#282c34', '#1c2026', '#101216'];
+  const J_HOOK = ['#e53935', '#c62828', '#8e0000'];
+  const CHROME = ['#e8edf4', '#c0c8d4', '#8c94a0'];
+  const PLATES_45 = ['#22262e', '#161a20', '#0e1014'];
+  const RING_RED = ['#ef5350', '#d32f2f', '#9a0007'];
+
+  return isoSprite(tw, th, 56, (box) => {
+    // Heavy boxed steel base frame
+    box(0.08, 0.08, tw - 0.08, th - 0.08, 0, 4, ...STEEL);
+
+    if (tw >= th) {
+      // 2x1 configuration (tw = 2, th = 1)
+      // Front and rear upright columns
+      const cols = [
+        [0.12, 0.12, 0.24, 0.26],
+        [tw - 0.24, 0.12, tw - 0.12, 0.26],
+        [0.12, th - 0.26, 0.24, th - 0.12],
+        [tw - 0.24, th - 0.26, tw - 0.12, th - 0.12]
+      ];
+      for (const [u0, v0, u1, v1] of cols) {
+        box(u0, v0, u1, v1, 4, 52, ...STEEL);
+        // Laser-cut adjustment pin holes along uprights
+        for (let hz = 12; hz <= 48; hz += 6) {
+          box(u0 + 0.02, v1 - 0.02, u1 - 0.02, v1, hz, hz + 2, ...PEG_HOLE);
+        }
+      }
+
+      // Overhead pull-up crossbar with multi-grip knurled bars
+      box(0.12, 0.14, tw - 0.12, 0.24, 50, 53, ...CHROME);
+      box(0.12, th - 0.24, tw - 0.12, th - 0.14, 50, 53, ...CHROME);
+
+      // Red J-hooks positioned on front posts at z = 26
+      box(0.10, th - 0.32, 0.26, th - 0.22, 24, 28, ...J_HOOK);
+      box(tw - 0.26, th - 0.32, tw - 0.10, th - 0.22, 24, 28, ...J_HOOK);
+
+      // Knurled chrome Olympic barbell resting on J-hooks
+      box(0.02, th - 0.30, tw - 0.02, th - 0.24, 28, 30, ...CHROME);
+
+      // Olympic bumper plates on bar
+      box(0.04, th - 0.38, 0.14, th - 0.16, 21, 37, ...PLATES_45);
+      box(0.05, th - 0.36, 0.13, th - 0.18, 23, 35, ...RING_RED);
+      box(tw - 0.14, th - 0.38, tw - 0.04, th - 0.16, 21, 37, ...PLATES_45);
+      box(tw - 0.13, th - 0.36, tw - 0.05, th - 0.18, 23, 35, ...RING_RED);
+
+      // Rear storage pegs holding spare plates
+      box(0.14, 0.04, 0.22, 0.14, 14, 26, ...PLATES_45);
+      box(tw - 0.22, 0.04, tw - 0.14, 0.14, 14, 26, ...PLATES_45);
+    } else {
+      // 1x2 configuration (tw = 1, th = 2)
+      const cols = [
+        [0.12, 0.12, 0.26, 0.24],
+        [tw - 0.26, 0.12, tw - 0.12, 0.24],
+        [0.12, th - 0.24, 0.26, th - 0.12],
+        [tw - 0.26, th - 0.24, tw - 0.12, th - 0.12]
+      ];
+      for (const [u0, v0, u1, v1] of cols) {
+        box(u0, v0, u1, v1, 4, 52, ...STEEL);
+        for (let hz = 12; hz <= 48; hz += 6) {
+          box(u1 - 0.02, v0 + 0.02, u1, v1 - 0.02, hz, hz + 2, ...PEG_HOLE);
+        }
+      }
+
+      box(0.14, 0.12, 0.24, th - 0.12, 50, 53, ...CHROME);
+      box(tw - 0.24, 0.12, tw - 0.14, th - 0.12, 50, 53, ...CHROME);
+
+      box(tw - 0.32, 0.10, tw - 0.22, 0.26, 24, 28, ...J_HOOK);
+      box(tw - 0.32, th - 0.26, tw - 0.22, th - 0.10, 24, 28, ...J_HOOK);
+
+      box(tw - 0.30, 0.02, tw - 0.24, th - 0.02, 28, 30, ...CHROME);
+
+      box(tw - 0.38, 0.04, tw - 0.16, 0.14, 21, 37, ...PLATES_45);
+      box(tw - 0.36, 0.05, tw - 0.18, 0.13, 23, 35, ...RING_RED);
+      box(tw - 0.38, th - 0.14, tw - 0.16, th - 0.04, 21, 37, ...PLATES_45);
+      box(tw - 0.36, th - 0.13, tw - 0.18, th - 0.05, 23, 35, ...RING_RED);
+
+      box(0.04, 0.14, 0.14, 0.22, 14, 26, ...PLATES_45);
+      box(0.04, th - 0.22, 0.14, th - 0.14, 14, 26, ...PLATES_45);
+    }
   });
 }
 
 export function buildGymLockers(rot = 0) {
   const [tw, th] = rot % 2 ? [1, 2] : [2, 1];
-  const STEEL = ['#647082', '#4a5464', '#323c4a'];
-  const HANDLE = ['#e0e4ec', '#b4bcc8', '#808894'];
-  return isoSprite(tw, th, 50, (box) => {
-    box(0.08, 0.10, tw - 0.08, th - 0.10, 0, 48, ...STEEL);
-    box(0.15 * tw, 0.20 * th, 0.25 * tw, 0.35 * th, 22, 28, ...HANDLE);
-    box(0.65 * tw, 0.20 * th, 0.75 * tw, 0.35 * th, 22, 28, ...HANDLE);
+  const STEEL = ['#626e80', '#4a5464', '#343c48'];
+  const SEAM = ['#282e38', '#1c2028', '#12161c'];
+  const HANDLE = ['#e4eaf2', '#bcc4d2', '#88909e'];
+  const LOUVER = ['#303642', '#222832', '#161a20'];
+  const BRASS_TAG = ['#f4c862', '#d4a034', '#986c1c'];
+
+  return isoSprite(tw, th, 52, (box) => {
+    // Heavy plinth base (z = 0 .. 4)
+    box(0.06, 0.08, tw - 0.06, th - 0.08, 0, 4, ...SEAM);
+    // Main locker cabinet outer body (z = 4 .. 50)
+    box(0.06, 0.08, tw - 0.06, th - 0.08, 4, 50, ...STEEL);
+
+    // 3 individual locker door panels with vertical seams, louvers, and number badges
+    const cols = 3;
+    if (tw >= th) {
+      const colW = (tw - 0.16) / cols;
+      for (let i = 0; i < cols; i++) {
+        const u0 = 0.08 + i * colW + 0.02;
+        const u1 = u0 + colW - 0.04;
+
+        // Recessed door frame
+        box(u0, th - 0.12, u1, th - 0.08, 5, 49, shade(STEEL[0], 0.05), shade(STEEL[1], 0.05), shade(STEEL[2], 0.05));
+
+        // Upper ventilation louvers (slots)
+        for (let lz = 41; lz <= 46; lz += 2) {
+          box(u0 + 0.04, th - 0.09, u1 - 0.04, th - 0.075, lz, lz + 1, ...LOUVER);
+        }
+
+        // Brass locker number tag
+        box((u0 + u1) / 2 - 0.04, th - 0.09, (u0 + u1) / 2 + 0.04, th - 0.075, 36, 39, ...BRASS_TAG);
+
+        // Chrome latch hasp handle & padlock eyelet
+        box(u1 - 0.08, th - 0.095, u1 - 0.02, th - 0.07, 22, 28, ...HANDLE);
+
+        // Lower ventilation louvers
+        for (let lz = 8; lz <= 13; lz += 2) {
+          box(u0 + 0.04, th - 0.09, u1 - 0.04, th - 0.075, lz, lz + 1, ...LOUVER);
+        }
+      }
+    } else {
+      const colD = (th - 0.16) / cols;
+      for (let i = 0; i < cols; i++) {
+        const v0 = 0.08 + i * colD + 0.02;
+        const v1 = v0 + colD - 0.04;
+
+        box(tw - 0.12, v0, tw - 0.08, v1, 5, 49, shade(STEEL[0], 0.05), shade(STEEL[1], 0.05), shade(STEEL[2], 0.05));
+
+        for (let lz = 41; lz <= 46; lz += 2) {
+          box(tw - 0.09, v0 + 0.04, tw - 0.075, v1 - 0.04, lz, lz + 1, ...LOUVER);
+        }
+
+        box(tw - 0.09, (v0 + v1) / 2 - 0.04, tw - 0.075, (v0 + v1) / 2 + 0.04, 36, 39, ...BRASS_TAG);
+
+        box(tw - 0.095, v1 - 0.08, tw - 0.07, v1 - 0.02, 22, 28, ...HANDLE);
+
+        for (let lz = 8; lz <= 13; lz += 2) {
+          box(tw - 0.09, v0 + 0.04, tw - 0.075, v1 - 0.04, lz, lz + 1, ...LOUVER);
+        }
+      }
+    }
   });
 }
 
 export function buildWaterCooler(rot = 0) {
   const WHITE = ['#f4f6fa', '#d4d8e2', '#a8b0c0'];
   const BOTTLE = ['#50c8ff', '#28a0e0', '#1074b0'];
-  return isoSprite(1, 1, 42, (box) => {
-    box(0.20, 0.20, 0.80, 0.80, 0, 22, ...WHITE); // Base cabinet
-    box(0.30, 0.30, 0.70, 0.70, 22, 38, ...BOTTLE); // Inverted water bottle
-    box(0.40, 0.72, 0.60, 0.82, 14, 18, '#e03040', '#b81828', '#800c18'); // Spigot
+  const HIGHLIGHT = ['#eaf8ff', '#c4e8fa', '#94d0f0'];
+  const TRAY = ['#282c34', '#1c2026', '#101216'];
+
+  return isoSprite(1, 1, 44, (box) => {
+    // Base cabinet body with recessed toe-kick (z = 0 .. 22)
+    box(0.24, 0.24, 0.76, 0.76, 0, 3, shade(WHITE[0], -0.2), shade(WHITE[1], -0.2), shade(WHITE[2], -0.2));
+    box(0.22, 0.22, 0.78, 0.78, 3, 22, ...WHITE);
+
+    // Front recessed water dispensing alcove
+    box(0.30, 0.62, 0.70, 0.79, 10, 20, '#e8ecf4', '#c4ccd8', '#9ca4b2');
+    // Drip tray with black drain grating
+    box(0.32, 0.64, 0.68, 0.78, 10, 12, ...TRAY);
+    // Red (hot) and Blue (cold) push taps
+    box(0.36, 0.68, 0.46, 0.76, 17, 20, '#e53935', '#c62828', '#8e0000');
+    box(0.54, 0.68, 0.64, 0.76, 17, 20, '#1e88e5', '#1565c0', '#0d47a1');
+
+    // Bottle collar mounting ring (z = 21 .. 23)
+    box(0.26, 0.26, 0.74, 0.74, 21, 23, '#8e98a8', '#6e7686', '#505664');
+
+    // Inverted 5-gallon blue water bottle with ribbed contours (z = 23 .. 39)
+    box(0.28, 0.28, 0.72, 0.72, 23, 38, ...BOTTLE);
+    // Water bottle rib rings
+    box(0.27, 0.27, 0.73, 0.73, 27, 28, ...HIGHLIGHT);
+    box(0.27, 0.27, 0.73, 0.73, 32, 33, ...HIGHLIGHT);
+    // Top inverted bottle dome
+    box(0.32, 0.32, 0.68, 0.68, 38, 41, ...BOTTLE);
+    // Air bubble highlight inside bottle
+    box(0.34, 0.34, 0.44, 0.44, 30, 34, ...HIGHLIGHT);
+
+    // Side paper cup dispenser tube (attached to left side)
+    box(0.14, 0.42, 0.21, 0.58, 8, 24, '#d8e4ee', '#b0c0ce', '#8494a4');
+    box(0.15, 0.44, 0.20, 0.56, 10, 22, '#ffffff', '#e8e8e8', '#cccccc'); // stacked white cups
   });
 }
 
 export function buildRoundDiningTable(rot = 0) {
   const LINEN = ['#faf8f4', '#dedad0', '#b8b2a4'];
+  const LINEN_SHADOW = ['#e6e2d8', '#cac4b6', '#9e9686'];
+  const LINEN_HI = ['#ffffff', '#f4f2ec', '#dcd8cc'];
+  const RUNNER = ['#8c2438', '#6a1424', '#480c16'];
   const CANDLE = ['#ffdf78', '#e8b834', '#b08418'];
   const PLATE = ['#ffffff', '#e8e6e2', '#c0bcb4'];
-  return isoSprite(2, 2, 32, (box) => {
-    // Pedestal base
-    box(0.60, 0.60, 1.40, 1.40, 0, 6, '#4a2818', '#341a0e', '#200e06');
-    box(0.85, 0.85, 1.15, 1.15, 6, 20, '#4a2818', '#341a0e', '#200e06');
-    // Tabletop draped in crisp white linen
-    box(0.15, 0.15, 1.85, 1.85, 18, 24, ...LINEN);
-    box(0.10, 0.10, 1.90, 1.90, 23, 25, ...LINEN);
-    // Table place settings (plates)
-    box(0.35, 0.85, 0.65, 1.15, 25, 26, ...PLATE);
-    box(1.35, 0.85, 1.65, 1.15, 25, 26, ...PLATE);
-    box(0.85, 0.35, 1.15, 0.65, 25, 26, ...PLATE);
-    box(0.85, 1.35, 1.15, 1.65, 25, 26, ...PLATE);
-    // Center glowing candle in crystal holder
-    box(0.90, 0.90, 1.10, 1.10, 25, 30, '#f0f4f8', '#c8d4e0', '#94a4b4');
-    box(0.94, 0.94, 1.06, 1.06, 30, 34, ...CANDLE);
+  const GOLD_RIM = ['#f4c65a', '#cc982e', '#926814'];
+  const GLASS = ['#eaf6fc', '#c8e2f0', '#96bcd2'];
+  const WOOD = ['#4a2818', '#341a0e', '#200e06'];
+  const BRASS = ['#eec054', '#c49428', '#886212'];
+
+  return isoSprite(2, 2, 34, (box) => {
+    // 4 scrolled pedestal outrigger feet
+    box(0.40, 0.92, 0.70, 1.08, 0, 4, ...WOOD);
+    box(0.35, 0.92, 0.40, 1.08, 0, 3, ...BRASS); // left brass toe cap
+    box(1.30, 0.92, 1.60, 1.08, 0, 4, ...WOOD);
+    box(1.60, 0.92, 1.65, 1.08, 0, 3, ...BRASS); // right brass toe cap
+    box(0.92, 0.40, 1.08, 0.70, 0, 4, ...WOOD);
+    box(0.92, 0.35, 1.08, 0.40, 0, 3, ...BRASS); // top brass toe cap
+    box(0.92, 1.30, 1.08, 1.60, 0, 4, ...WOOD);
+    box(0.92, 1.60, 1.08, 1.65, 0, 3, ...BRASS); // bottom brass toe cap
+
+    // Central turned timber pedestal column
+    box(0.70, 0.70, 1.30, 1.30, 0, 5, ...WOOD);
+    box(0.82, 0.82, 1.18, 1.18, 5, 17, ...WOOD);
+    box(0.76, 0.76, 1.24, 1.24, 17, 20, ...WOOD);
+
+    // Cascading tablecloth corners (draped fabric hanging lower at cardinal diagonals)
+    box(0.24, 0.24, 1.76, 1.76, 15, 20, ...LINEN_SHADOW);
+    box(0.18, 0.18, 1.82, 1.82, 20, 24, ...LINEN);
+
+    // Main rounded tablecloth draped over table
+    box(0.12, 0.30, 1.88, 1.70, 23, 25, ...LINEN);
+    box(0.30, 0.12, 1.70, 1.88, 23, 25, ...LINEN);
+    box(0.18, 0.18, 1.82, 1.82, 24, 25.5, ...LINEN_HI);
+
+    // Damask red circular runner / centerpiece mat
+    box(0.60, 0.60, 1.40, 1.40, 25.5, 26, ...RUNNER);
+    box(0.65, 0.65, 1.35, 1.35, 25.7, 26.2, ...GOLD_RIM);
+
+    // 4 full place settings (charger plate, inner plate, cloth napkin, wine goblet)
+    const settings = [
+      { px: 0.42, py: 1.0, nx: 0.42, ny: 0.85, gx: 0.50, gy: 1.15 },
+      { px: 1.58, py: 1.0, nx: 1.58, ny: 1.15, gx: 1.50, gy: 0.85 },
+      { px: 1.0, py: 0.42, nx: 1.15, ny: 0.42, gx: 0.85, gy: 0.50 },
+      { px: 1.0, py: 1.58, nx: 0.85, ny: 1.58, gx: 1.15, gy: 1.50 }
+    ];
+
+    for (const s of settings) {
+      // Charger plate with gold rim
+      box(s.px - 0.14, s.py - 0.14, s.px + 0.14, s.py + 0.14, 25.5, 26.2, ...GOLD_RIM);
+      box(s.px - 0.11, s.py - 0.11, s.px + 0.11, s.py + 0.11, 26.0, 26.6, ...PLATE);
+      // Folded damask napkin
+      box(s.nx - 0.05, s.ny - 0.07, s.nx + 0.05, s.ny + 0.07, 25.5, 26.4, ...RUNNER);
+      // Crystal wine goblet
+      box(s.gx - 0.04, s.gy - 0.04, s.gx + 0.04, s.gy + 0.04, 25.5, 29.5, ...GLASS);
+      box(s.gx - 0.02, s.gy - 0.02, s.gx + 0.02, s.gy + 0.02, 29.5, 30.5, '#ffffff', '#eaf6fc', '#c8e2f0'); // glint
+    }
+
+    // Centerpiece: Crystal hurricane candle holder with glowing flame
+    box(0.92, 0.92, 1.08, 1.08, 26.2, 27.2, ...GOLD_RIM);
+    box(0.90, 0.90, 1.10, 1.10, 27.2, 31.5, ...GLASS);
+    box(0.95, 0.95, 1.05, 1.05, 27.5, 30.5, '#fff6d4', '#eed090', '#c8a450'); // wax candle
+    box(0.97, 0.97, 1.03, 1.03, 30.5, 32.5, ...CANDLE); // flame
+    box(0.98, 0.98, 1.02, 1.02, 31.0, 33.0, '#ffffff', '#fff0a0', '#ffc040'); // inner white-hot flame
   });
 }
 
 export function buildDiningBooth(rot = 0) {
   const [tw, th] = rot % 2 ? [1, 2] : [2, 1];
   const VELVET = ['#c82442', '#a01830', '#740c20'];
+  const VELVET_LT = ['#e03856', '#c82442', '#901228'];
   const WALNUT = ['#381c14', '#26120c', '#160804'];
-  return isoSprite(tw, th, 38, (box) => {
-    box(0.06, 0.08, tw - 0.06, th - 0.08, 0, 8, ...WALNUT); // Plinth
-    box(0.08, 0.10, tw - 0.08, th - 0.10, 8, 16, ...VELVET); // Cushioned seat
-    // High-backed tufted velvet backrest
-    if (rot % 2 === 0) {
-      box(0.08, 0.10, tw - 0.08, 0.35, 16, 36, ...VELVET);
+  const PIPING = ['#f4c862', '#d4a034', '#986c1c'];
+
+  return isoSprite(tw, th, 40, (box) => {
+    // Solid dark walnut kickplate plinth (z = 0 .. 8)
+    box(0.06, 0.08, tw - 0.06, th - 0.08, 0, 8, ...WALNUT);
+    grain(box, 0.06, 0.08, tw - 0.06, th - 0.08, 8, { wood: WALNUT[0] });
+
+    // Deep cushioned velvet bench seat (z = 8 .. 16) with gold piping welt
+    box(0.08, 0.10, tw - 0.08, th - 0.10, 8, 16, ...VELVET);
+    stitching(box, 0.08, 0.10, tw - 0.08, th - 0.10, 15.5, { piping: PIPING, pipingHeight: 0.8 });
+
+    // High-backed booth backrest with vertical channel tufting
+    if (tw >= th) {
+      // 2x1 configuration: backrest along north edge
+      box(0.06, 0.08, tw - 0.06, 0.34, 16, 38, ...VELVET);
+      // Vertical channel tufting flutes
+      const flutes = 5;
+      const fW = (tw - 0.16) / flutes;
+      for (let i = 0; i < flutes; i++) {
+        const fu0 = 0.08 + i * fW + 0.015;
+        const fu1 = fu0 + fW - 0.03;
+        box(fu0, 0.28, fu1, 0.35, 17, 37, ...VELVET_LT);
+      }
+      // Top crown roll with gold piping
+      box(0.06, 0.06, tw - 0.06, 0.14, 37, 40, ...PIPING);
+      // End gable wings
+      box(0.06, 0.08, 0.14, th - 0.08, 8, 30, ...WALNUT);
+      box(tw - 0.14, 0.08, tw - 0.06, th - 0.08, 8, 30, ...WALNUT);
     } else {
-      box(0.10, 0.08, 0.35, th - 0.08, 16, 36, ...VELVET);
+      // 1x2 configuration: backrest along west edge
+      box(0.08, 0.06, 0.34, th - 0.06, 16, 38, ...VELVET);
+      const flutes = 5;
+      const fD = (th - 0.16) / flutes;
+      for (let i = 0; i < flutes; i++) {
+        const fv0 = 0.08 + i * fD + 0.015;
+        const fv1 = fv0 + fD - 0.03;
+        box(0.28, fv0, 0.35, fv1, 17, 37, ...VELVET_LT);
+      }
+      box(0.06, 0.06, 0.14, th - 0.06, 37, 40, ...PIPING);
+      box(0.08, 0.06, tw - 0.08, 0.14, 8, 30, ...WALNUT);
+      box(0.08, th - 0.14, tw - 0.08, th - 0.06, 8, 30, ...WALNUT);
     }
   });
 }
 
 export function buildWineWall(rot = 0) {
   const [tw, th] = rot % 2 ? [1, 3] : [3, 1];
-  const WOOD = ['#341a12', '#24100a', '#140804'];
-  const GLOW = ['#ffc860', '#d89830', '#986414'];
-  const BOTTLE = ['#285436', '#1a3c24', '#0e2414'];
+  const OAK_DARK = ['#28140c', '#1a0c06', '#0e0602'];
+  const OAK = ['#3e2014', '#2c140a', '#1a0a04'];
+  const OAK_TRIM = ['#5c3422', '#442214', '#2e140a'];
+  const GLOW = ['#ffd878', '#dca438', '#986c18'];
+  const CHROME = ['#eaf0f6', '#c4d0dc', '#90a0b0'];
+  const BOTTLE_GREEN = ['#225c34', '#164224', '#0c2814'];
+  const BOTTLE_BURGUNDY = ['#6e1c28', '#4e101a', '#320810'];
+  const BOTTLE_AMBER = ['#8c4a18', '#64320e', '#421e06'];
+  const FOIL_GOLD = ['#ffd460', '#daa028', '#966810'];
+  const FOIL_SILVER = ['#f0f4f8', '#c8d4e0', '#94a0b0'];
+
   return isoSprite(tw, th, 64, (box) => {
-    box(0.06, 0.08, tw - 0.06, th - 0.08, 0, 62, ...WOOD);
-    // Backlit glass racks
+    // Solid dark oak base plinth & top cornice
+    box(0.04, 0.06, tw - 0.04, th - 0.06, 0, 4, ...OAK_DARK);
+    box(0.02, 0.04, tw - 0.02, th - 0.04, 60, 64, ...OAK_TRIM);
+
+    // Carcass framing & back panel
+    box(0.06, 0.08, tw - 0.06, th - 0.08, 4, 60, ...OAK);
+
+    // Backlit illuminated interior cavity
     box(0.10, 0.12, tw - 0.10, th - 0.12, 6, 58, ...GLOW);
-    // Rows of wine bottles
-    for (let r = 0; r < 4; r++) {
-      const z0 = 10 + r * 12;
-      box(0.14 * tw, 0.18 * th, 0.86 * tw, 0.82 * th, z0, z0 + 8, ...BOTTLE);
+
+    // 4 tiers of wine racks with individual bottles & foil capsules
+    const bottles = [
+      { col: BOTTLE_GREEN, foil: FOIL_GOLD },
+      { col: BOTTLE_BURGUNDY, foil: FOIL_SILVER },
+      { col: BOTTLE_AMBER, foil: FOIL_GOLD },
+      { col: BOTTLE_GREEN, foil: FOIL_SILVER }
+    ];
+
+    if (tw > th) {
+      // 3x1 configuration
+      for (let r = 0; r < 4; r++) {
+        const z0 = 8 + r * 13;
+        // Wood shelf beam
+        box(0.10, 0.10, tw - 0.10, th - 0.10, z0, z0 + 2, ...OAK_TRIM);
+        const { col, foil } = bottles[r % bottles.length];
+        const numCols = 7;
+        const span = tw - 0.32;
+        for (let c = 0; c < numCols; c++) {
+          const x0 = 0.16 + (c / numCols) * span;
+          const x1 = x0 + span / numCols - 0.04;
+          // Bottle body
+          box(x0, 0.16, x1, th - 0.10, z0 + 2, z0 + 9, ...col);
+          // Paper label on front
+          box(x0 + 0.02, th - 0.11, x1 - 0.02, th - 0.09, z0 + 4, z0 + 7, '#faf6ee', '#ded6c6', '#b0a894');
+          // Bottle neck & foil capsule
+          box((x0 + x1) / 2 - 0.02, 0.18, (x0 + x1) / 2 + 0.02, th - 0.12, z0 + 9, z0 + 12, ...foil);
+        }
+      }
+      // Glass door mullions & chrome handles
+      box(tw / 3 - 0.02, 0.07, tw / 3 + 0.02, 0.09, 4, 60, ...OAK_DARK);
+      box((2 * tw) / 3 - 0.02, 0.07, (2 * tw) / 3 + 0.02, 0.09, 4, 60, ...OAK_DARK);
+      box(tw / 3 - 0.05, 0.05, tw / 3 - 0.03, 0.08, 28, 36, ...CHROME);
+      box((2 * tw) / 3 + 0.03, 0.05, (2 * tw) / 3 + 0.05, 0.08, 28, 36, ...CHROME);
+    } else {
+      // 1x3 configuration
+      for (let r = 0; r < 4; r++) {
+        const z0 = 8 + r * 13;
+        box(0.10, 0.10, tw - 0.10, th - 0.10, z0, z0 + 2, ...OAK_TRIM);
+        const { col, foil } = bottles[r % bottles.length];
+        const numCols = 7;
+        const span = th - 0.32;
+        for (let c = 0; c < numCols; c++) {
+          const y0 = 0.16 + (c / numCols) * span;
+          const y1 = y0 + span / numCols - 0.04;
+          box(0.16, y0, tw - 0.10, y1, z0 + 2, z0 + 9, ...col);
+          box(tw - 0.11, y0 + 0.02, tw - 0.09, y1 - 0.02, z0 + 4, z0 + 7, '#faf6ee', '#ded6c6', '#b0a894');
+          box(0.18, (y0 + y1) / 2 - 0.02, tw - 0.12, (y0 + y1) / 2 + 0.02, z0 + 9, z0 + 12, ...foil);
+        }
+      }
+      box(0.07, th / 3 - 0.02, 0.09, th / 3 + 0.02, 4, 60, ...OAK_DARK);
+      box(0.07, (2 * th) / 3 - 0.02, 0.09, (2 * th) / 3 + 0.02, 4, 60, ...OAK_DARK);
+      box(0.05, th / 3 - 0.05, 0.08, th / 3 - 0.03, 28, 36, ...CHROME);
+      box(0.05, (2 * th) / 3 + 0.03, 0.08, (2 * th) / 3 + 0.05, 28, 36, ...CHROME);
     }
   });
 }
 
 export function buildMaitreDPodium(rot = 0) {
-  const WALNUT = ['#442216', '#30160c', '#1e0c06'];
-  const BRASS = ['#f0c454', '#c89c30', '#906c14'];
-  return isoSprite(1, 1, 40, (box) => {
-    box(0.20, 0.20, 0.80, 0.80, 0, 6, ...WALNUT);
-    box(0.35, 0.35, 0.65, 0.65, 6, 28, ...WALNUT);
-    box(0.18, 0.18, 0.82, 0.82, 28, 34, ...WALNUT); // Slanted reading surface
-    box(0.30, 0.30, 0.70, 0.70, 34, 37, '#e8dcbc', '#c4b898', '#988c70'); // Open reservation book
-    box(0.65, 0.25, 0.75, 0.35, 34, 40, ...BRASS); // Brass reading lamp
+  const WALNUT = ['#4e2818', '#381c10', '#221008'];
+  const WALNUT_HI = ['#723e26', '#562e1c', '#3a1e12'];
+  const BRASS = ['#f4c654', '#cb982c', '#926a14'];
+  const BRASS_HI = ['#ffe68c', '#e0ae36', '#a27614'];
+  const BLOTTER = ['#28342a', '#1a241c', '#101812'];
+  const LEDGER = ['#fcf6e8', '#dfd4be', '#b4a890'];
+
+  return isoSprite(1, 1, 42, (box) => {
+    // Stepped plinth base with brass perimeter accent
+    box(0.16, 0.16, 0.84, 0.84, 0, 3, ...WALNUT);
+    box(0.18, 0.18, 0.82, 0.82, 3, 5, ...BRASS);
+    box(0.20, 0.20, 0.80, 0.80, 5, 8, ...WALNUT_HI);
+
+    // Fluted central column shaft
+    box(0.32, 0.32, 0.68, 0.68, 8, 28, ...WALNUT);
+    box(0.66, 0.38, 0.70, 0.62, 8, 28, ...WALNUT_HI); // vertical highlight flute
+    box(0.38, 0.66, 0.62, 0.70, 8, 28, ...WALNUT_HI);
+
+    // Upper lectern body & slanted reading apron
+    box(0.18, 0.18, 0.82, 0.82, 28, 32, ...WALNUT_HI);
+    box(0.14, 0.14, 0.86, 0.86, 32, 35, ...WALNUT);
+
+    // Leather blotter mat on lectern
+    box(0.20, 0.20, 0.80, 0.80, 35, 36, ...BLOTTER);
+
+    // Open hotel reservation ledger book
+    box(0.26, 0.26, 0.74, 0.74, 36, 38, ...LEDGER);
+    // Center spine crease & red bookmark ribbon
+    box(0.48, 0.26, 0.52, 0.74, 38, 38.5, '#7e1622', '#5c0e18', '#3c080e');
+    box(0.49, 0.72, 0.51, 0.84, 34, 37, '#c82436', '#941424', '#640a14'); // hanging ribbon tail
+
+    // Polished brass reading lamp with emerald/brass banker's shade
+    box(0.66, 0.24, 0.76, 0.34, 36, 38, ...BRASS); // base
+    box(0.70, 0.28, 0.72, 0.30, 38, 43, ...BRASS_HI); // curved gooseneck
+    box(0.62, 0.24, 0.78, 0.34, 43, 46, ...BRASS); // lamp shade
+    box(0.64, 0.26, 0.76, 0.32, 42, 43, '#fff4b4', '#ffd654', '#cca028'); // warm illumination
   });
 }
 
 export function buildGrandPiano(rot = 0) {
   const [tw, th] = [2, 2];
-  const EBONY = ['#1a1c22', '#101216', '#080a0c'];
-  const KEYS = ['#f8f8fc', '#d8d8e0', '#a4a4b0'];
-  return isoSprite(tw, th, 42, (box) => {
-    // 3 tapered legs
-    box(0.18, 0.18, 0.35, 0.35, 0, 16, ...EBONY);
-    box(1.65, 0.18, 1.82, 0.35, 0, 16, ...EBONY);
-    box(0.90, 1.65, 1.07, 1.82, 0, 16, ...EBONY);
-    // Piano body casing
-    box(0.10, 0.10, 1.90, 1.90, 16, 28, ...EBONY);
-    // Keyboard
-    box(0.25, 0.12, 1.75, 0.38, 22, 25, ...KEYS);
-    // Prop stick and open wing lid
-    box(0.12, 0.12, 1.88, 1.88, 28, 36, ...EBONY);
-    box(0.80, 0.40, 1.20, 0.50, 36, 42, '#f0e8d0', '#c8be9e', '#948868'); // Sheet music
+  const EBONY = ['#20242e', '#14161e', '#0a0c12'];
+  const EBONY_HI = ['#384050', '#262c38', '#161a22'];
+  const SOUNDBOARD = ['#c89c62', '#a07842', '#745428'];
+  const GOLD_HARP = ['#f4c654', '#cb982c', '#926a14'];
+  const GOLD_HI = ['#ffe68c', '#e0ae36', '#a27614'];
+  const STRINGS = ['#d8e0e8', '#b0bcc8', '#808c98'];
+  const KEYS_WHITE = ['#ffffff', '#f4f4f4', '#dcdcdc'];
+  const KEYS_BLACK = ['#181a20', '#101216', '#080a0c'];
+  const BRASS = ['#f6c667', '#d8a442', '#a07424'];
+  const SHEET = ['#fffdf4', '#f0e8d0', '#c8be9e'];
+
+  return isoSprite(tw, th, 46, (box) => {
+    // 1. 3 classical turned legs with polished brass caster wheels (z = 0 .. 16)
+    // Front-left leg
+    box(0.18, 0.18, 0.32, 0.32, 0, 3, ...BRASS);
+    box(0.20, 0.20, 0.30, 0.30, 3, 16, ...EBONY);
+    // Front-right leg
+    box(1.68, 0.18, 1.82, 0.32, 0, 3, ...BRASS);
+    box(1.70, 0.20, 1.80, 0.30, 3, 16, ...EBONY);
+    // Rear curved tail leg
+    box(0.32, 1.55, 0.46, 1.69, 0, 3, ...BRASS);
+    box(0.34, 1.57, 0.44, 1.67, 3, 16, ...EBONY);
+
+    // 2. Central lyre pedal assembly with 3 solid brass pedals (z = 1 .. 16)
+    box(0.92, 0.36, 1.08, 0.44, 3, 16, ...EBONY); // lyre pillar
+    box(0.86, 0.32, 0.92, 0.40, 1, 3.5, ...BRASS); // soft pedal
+    box(0.97, 0.32, 1.03, 0.40, 1, 3.5, ...BRASS); // sostenuto pedal
+    box(1.08, 0.32, 1.14, 0.40, 1, 3.5, ...BRASS); // sustain pedal
+
+    // 3. Curved grand piano rim casing (z = 16 .. 26)
+    // Front straight keybed case
+    box(0.14, 0.12, 1.86, 0.48, 16, 26, ...EBONY);
+    // Straight left spine rim
+    box(0.14, 0.48, 0.52, 1.68, 16, 26, ...EBONY);
+    // Straight right cheek rim
+    box(1.52, 0.48, 1.86, 1.15, 16, 26, ...EBONY);
+    // Inward bentside curve
+    box(1.05, 1.05, 1.62, 1.50, 16, 26, ...EBONY);
+    // Rear rounded tail rim
+    box(0.22, 1.48, 0.95, 1.82, 16, 26, ...EBONY);
+    // Glossy lacquer specular edge highlights
+    box(0.14, 0.12, 1.86, 0.14, 25.2, 26.2, ...EBONY_HI);
+    box(1.84, 0.14, 1.86, 1.14, 25.2, 26.2, ...EBONY_HI);
+
+    // 4. Spruce soundboard interior (z = 20 .. 22)
+    box(0.35, 0.44, 1.62, 1.58, 20, 22, ...SOUNDBOARD);
+
+    // 5. Cast-iron gold harp plate frame (z = 22 .. 24)
+    box(0.40, 0.48, 1.54, 0.60, 22, 24, ...GOLD_HARP);
+    box(0.44, 0.60, 0.65, 1.45, 22, 24, ...GOLD_HARP);
+    box(1.00, 0.60, 1.48, 1.25, 22, 24, ...GOLD_HARP);
+    box(0.55, 1.10, 0.95, 1.55, 22, 24, ...GOLD_HARP);
+    // Sound holes in gold harp
+    box(0.70, 0.80, 0.86, 0.96, 22, 24.2, '#181208', '#100c04', '#080602');
+    box(1.10, 0.85, 1.25, 1.00, 22, 24.2, '#181208', '#100c04', '#080602');
+
+    // Silver piano strings stretched across soundboard
+    for (let s = 0.52; s <= 1.42; s += 0.09) {
+      box(s, 0.50, s + 0.02, 1.30, 23.5, 24.2, ...STRINGS);
+    }
+
+    // 6. Keyboard assembly (z = 21 .. 26.5)
+    // Keybed recessed shelf
+    box(0.22, 0.14, 1.78, 0.42, 21, 23, '#101216', '#0a0c0e', '#040608');
+    // White ivory keys
+    box(0.24, 0.14, 1.76, 0.38, 23, 25, ...KEYS_WHITE);
+    // Black ebony sharps/flats (fine 2x raised keys)
+    for (let k = 0.28; k <= 1.68; k += 0.075) {
+      if (Math.abs(k - 0.73) < 0.02 || Math.abs(k - 1.255) < 0.02) continue; // natural half-step gap
+      box(k, 0.14, k + 0.04, 0.30, 24.8, 26, ...KEYS_BLACK);
+    }
+
+    // Fallboard behind keys with gold brand script
+    box(0.20, 0.38, 1.80, 0.45, 24, 27, ...EBONY);
+    box(0.92, 0.37, 1.08, 0.40, 25.5, 26.5, ...GOLD_HI); // gold emblem
+
+    // 7. Music desk & tilted open sheet music (z = 27 .. 36)
+    box(0.68, 0.42, 1.32, 0.48, 26, 32, ...EBONY);
+    box(0.72, 0.40, 1.28, 0.45, 27, 34, ...SHEET); // sheet music
+    // Stave notation lines
+    box(0.76, 0.39, 0.96, 0.41, 29, 29.8, '#262626', '#1a1a1a', '#0a0a0a');
+    box(0.76, 0.39, 0.96, 0.41, 31, 31.8, '#262626', '#1a1a1a', '#0a0a0a');
+    box(1.04, 0.39, 1.24, 0.41, 29, 29.8, '#262626', '#1a1a1a', '#0a0a0a');
+    box(1.04, 0.39, 1.24, 0.41, 31, 31.8, '#262626', '#1a1a1a', '#0a0a0a');
+
+    // 8. Open grand piano lid propped high on wooden lid stick (z = 26 .. 44)
+    // Lid prop stick
+    box(1.52, 0.82, 1.57, 0.87, 24, 40, '#8c5e38', '#6a4224', '#482a14');
+    // Sculpted open lid propped at angle
+    box(0.20, 0.44, 1.70, 1.72, 34, 42, ...EBONY);
+    box(0.22, 0.42, 1.68, 0.50, 41, 43, ...EBONY_HI); // top propped lid bevel
+    box(0.18, 0.46, 0.28, 1.70, 26, 36, ...EBONY); // hinge side
   });
 }
 
 export function buildWallSconce(rot = 0) {
   const BRASS = ['#f4ca5c', '#c89e34', '#947018'];
-  const FROSTED = ['#fff4cc', '#e8d498', '#b8a068'];
-  return isoSprite(1, 1, 30, (box) => {
-    box(0.35, 0.08, 0.65, 0.25, 14, 22, ...BRASS); // Backplate
-    box(0.42, 0.25, 0.58, 0.45, 16, 20, ...BRASS); // Arm
-    box(0.35, 0.35, 0.65, 0.65, 18, 28, ...FROSTED); // Glowing tulip shade
+  const BRASS_HI = ['#ffe68c', '#e0ae36', '#a27614'];
+  const BRASS_DARK = ['#7c5812', '#5a3e0c', '#3a2606'];
+  const FROSTED = ['#fffbf0', '#f4e6c8', '#d0bc94'];
+  const GLOW = ['#fff29e', '#ffd048', '#d49818'];
+  const CORE = ['#ffffff', '#fff8cc', '#ffe078'];
+
+  return isoSprite(1, 1, 36, (box) => {
+    // 1. Subtle warm incandescent wall glow halo (z = 10 .. 34)
+    box(0.22, 0.02, 0.78, 0.10, 10, 32, '#503818', '#38260e', '#241608');
+    box(0.28, 0.03, 0.72, 0.10, 14, 28, '#785020', '#543612', '#362008');
+
+    // 2. Polished brass wall escutcheon mounting plate (z = 12 .. 26)
+    box(0.32, 0.06, 0.68, 0.16, 12, 26, ...BRASS);
+    box(0.36, 0.08, 0.64, 0.18, 14, 24, ...BRASS_HI); // stepped inner plate
+    // Top and bottom mounting screw rivets
+    box(0.48, 0.05, 0.52, 0.09, 23.5, 25, ...BRASS_DARK);
+    box(0.48, 0.05, 0.52, 0.09, 13, 14.5, ...BRASS_DARK);
+
+    // 3. Graceful swan-neck cast brass gooseneck arm (z = 15 .. 24)
+    box(0.44, 0.16, 0.56, 0.42, 17, 21, ...BRASS);
+    box(0.45, 0.38, 0.55, 0.52, 18, 24, ...BRASS_HI); // ascending curve
+    // Turned decorative brass socket cup
+    box(0.40, 0.44, 0.60, 0.64, 21, 25, ...BRASS);
+    box(0.38, 0.42, 0.62, 0.66, 24, 26, ...BRASS_HI); // socket lip
+
+    // 4. Frosted fluted glass tulip shade with scalloped petals (z = 25 .. 35)
+    box(0.32, 0.36, 0.68, 0.72, 26, 33, ...FROSTED);
+    // Fluted vertical petal ribs
+    box(0.30, 0.34, 0.70, 0.74, 32, 35, ...FROSTED);
+    box(0.28, 0.32, 0.72, 0.76, 34, 36, shade(FROSTED[0], 0.1), shade(FROSTED[1], 0.1), shade(FROSTED[2], 0.1)); // scalloped rim
+
+    // 5. Glowing incandescent filament core (z = 26 .. 31)
+    box(0.42, 0.46, 0.58, 0.62, 26, 31, ...GLOW);
+    box(0.46, 0.50, 0.54, 0.58, 27, 30, ...CORE);
   });
 }
 
 export function buildKitchenRange(rot = 0) {
   const [tw, th] = rot % 2 ? [1, 2] : [2, 1];
-  const STEEL = ['#a0aab8', '#788290', '#505864'];
-  const BURNER = ['#282c34', '#181b20', '#0e1014'];
-  const FLAME = ['#ff9030', '#e04018', '#a01808'];
-  return isoSprite(tw, th, 38, (box) => {
-    box(0.06, 0.08, tw - 0.06, th - 0.08, 0, 24, ...STEEL); // Heavy base
-    box(0.10, 0.12, tw - 0.10, th - 0.12, 24, 26, ...BURNER); // Cast iron grates
-    // Cookware & animated cooking flames
-    box(0.20 * tw, 0.30 * th, 0.45 * tw, 0.70 * th, 26, 32, '#d47038', '#aa4e20', '#743010'); // Copper pot
-    box(0.28 * tw, 0.38 * th, 0.38 * tw, 0.62 * th, 32, 38, ...FLAME); // Flame
-    box(0.60 * tw, 0.25 * th, 0.85 * tw, 0.75 * th, 26, 30, '#505866', '#383e4a', '#222630'); // Saute pan
+  const STEEL = ['#b8c4d2', '#8e9aa8', '#646e7a'];
+  const STEEL_HI = ['#ffffff', '#e2ebf4', '#b8c6d4'];
+  const OVEN_DOOR = ['#282c34', '#1c1f24', '#101216'];
+  const BURNER = ['#181a20', '#101216', '#080a0c'];
+  const RED_KNOB = ['#ef4444', '#dc2626', '#991b1b'];
+  const FLAME = ['#38bdf8', '#0284c7', '#f97316'];
+
+  return isoSprite(tw, th, 42, (box) => {
+    // 1. Heavy commercial stainless body (z = 0 .. 24)
+    box(0.06, 0.08, tw - 0.06, th - 0.08, 0, 24, ...STEEL);
+
+    // Twin commercial oven doors below with wide chrome pull handles
+    if (tw > th) {
+      box(0.10, 0.07, tw / 2 - 0.04, 0.09, 4, 20, ...OVEN_DOOR);
+      box(tw / 2 + 0.04, 0.07, tw - 0.10, 0.09, 4, 20, ...OVEN_DOOR);
+      box(0.14, 0.06, tw / 2 - 0.08, 0.08, 16, 18, ...STEEL_HI);
+      box(tw / 2 + 0.08, 0.06, tw - 0.14, 0.08, 16, 18, ...STEEL_HI);
+      // Red burner control knobs along front manifold rail
+      for (let k = 0; k < 6; k++) {
+        const kx = 0.14 + k * ((tw - 0.28) / 5);
+        box(kx - 0.03, 0.06, kx + 0.03, 0.08, 21, 23, ...RED_KNOB);
+      }
+    } else {
+      box(0.07, 0.10, 0.09, th / 2 - 0.04, 4, 20, ...OVEN_DOOR);
+      box(0.07, th / 2 + 0.04, 0.09, th - 0.10, 4, 20, ...OVEN_DOOR);
+      box(0.06, 0.14, 0.08, th / 2 - 0.08, 16, 18, ...STEEL_HI);
+      box(0.06, th / 2 + 0.08, 0.08, th - 0.14, 16, 18, ...STEEL_HI);
+      for (let k = 0; k < 6; k++) {
+        const ky = 0.14 + k * ((th - 0.28) / 5);
+        box(0.06, ky - 0.03, 0.08, ky + 0.03, 21, 23, ...RED_KNOB);
+      }
+    }
+
+    // 2. Cast iron burner grates (z = 24 .. 26)
+    box(0.08, 0.10, tw - 0.08, th - 0.10, 24, 26, ...BURNER);
+
+    // 3. Cookware on range: Heavy copper stockpot & black carbon saute pan with flame
+    const [p1x, p1y] = [0.16 * tw, 0.24 * th];
+    box(p1x, p1y, p1x + 0.30, p1y + 0.30, 26, 34, '#ea580c', '#c2410c', '#7c2d12'); // copper pot
+    box(p1x - 0.04, p1y + 0.11, p1x, p1y + 0.19, 30, 32, ...STEEL_HI); // left handle
+    box(p1x + 0.30, p1y + 0.11, p1x + 0.34, p1y + 0.19, 30, 32, ...STEEL_HI); // right handle
+
+    const [p2x, p2y] = [0.58 * tw, 0.28 * th];
+    // Blue/orange gas flame ring beneath saute pan
+    box(p2x + 0.04, p2y + 0.04, p2x + 0.26, p2y + 0.26, 26, 28, ...FLAME);
+    box(p2x, p2y, p2x + 0.30, p2y + 0.30, 28, 31, ...OVEN_DOOR); // saute pan
+    box(p2x + 0.26, p2y + 0.12, p2x + 0.44, p2y + 0.18, 30, 32, ...STEEL_HI); // pan handle
   });
 }
 
 export function buildKitchenPrepTable(rot = 0) {
   const [tw, th] = rot % 2 ? [1, 2] : [2, 1];
-  const STEEL = ['#c8d2de', '#9aa4b0', '#6c7480'];
+  const STEEL = ['#c8d4e2', '#9eb0c2', '#728294'];
+  const STEEL_HI = ['#ffffff', '#eaf0f8', '#c4d2e0'];
   const BOARD = ['#d8a468', '#b48048', '#805428'];
-  return isoSprite(tw, th, 34, (box) => {
-    // 4 stainless legs
-    box(0.08, 0.10, 0.18, 0.20, 0, 24, ...STEEL);
-    box(tw - 0.18, 0.10, tw - 0.08, 0.20, 0, 24, ...STEEL);
-    box(0.08, th - 0.20, 0.18, th - 0.10, 0, 24, ...STEEL);
-    box(tw - 0.18, th - 0.20, tw - 0.08, th - 0.10, 0, 24, ...STEEL);
-    // Lower shelf & worktop
+
+  return isoSprite(tw, th, 36, (box) => {
+    // 4 tubular stainless legs with threaded bullet levelling feet
+    const legs = [
+      [0.08, 0.10],
+      [tw - 0.18, 0.10],
+      [0.08, th - 0.20],
+      [tw - 0.18, th - 0.20]
+    ];
+    for (const [lx, ly] of legs) {
+      box(lx + 0.01, ly + 0.01, lx + 0.09, ly + 0.09, 0, 3, ...STEEL_HI); // bullet foot
+      box(lx, ly, lx + 0.10, ly + 0.10, 3, 24, ...STEEL); // leg post
+    }
+
+    // Lower galvanised undershelf holding nested stainless hotel pans
     box(0.08, 0.10, tw - 0.08, th - 0.10, 4, 7, ...STEEL);
-    box(0.04, 0.06, tw - 0.04, th - 0.06, 24, 27, ...STEEL);
-    // Cutting board & ingredients
-    box(0.18 * tw, 0.25 * th, 0.55 * tw, 0.75 * th, 27, 29, ...BOARD);
-    box(0.65 * tw, 0.35 * th, 0.82 * tw, 0.65 * th, 27, 32, '#48c454', '#2ca038', '#1c6c22'); // Fresh herbs bowl
+    box(0.20 * tw, 0.25 * th, 0.50 * tw, 0.75 * th, 7, 12, ...STEEL_HI); // hotel pans
+
+    // Rolled bullnose food-grade stainless top (z = 24 .. 27)
+    box(0.04, 0.06, tw - 0.04, th - 0.06, 24, 26, ...STEEL);
+    box(0.02, 0.04, tw - 0.02, th - 0.04, 26, 27.5, ...STEEL_HI);
+
+    // Thick end-grain butcher block cutting board
+    const [bx0, by0] = [0.15 * tw, 0.20 * th];
+    const [bw, bh] = tw > th ? [0.42, 0.58] : [0.58, 0.42];
+    box(bx0, by0, bx0 + bw, by0 + bh, 27.5, 30, ...BOARD);
+
+    // Chef's knife resting on cutting board
+    box(bx0 + 0.08, by0 + 0.10, bx0 + 0.32, by0 + 0.14, 30, 31, ...STEEL_HI); // knife blade
+    box(bx0 + 0.30, by0 + 0.10, bx0 + 0.38, by0 + 0.14, 30, 31.5, '#1e293b', '#0f172a', '#020617'); // handle
+
+    // Fresh chopped herbs & prep bowls
+    box(bx0 + bw + 0.08, by0 + 0.10, bx0 + bw + 0.24, by0 + 0.26, 27.5, 31, ...STEEL_HI);
+    box(bx0 + bw + 0.10, by0 + 0.12, bx0 + bw + 0.22, by0 + 0.24, 31, 33, '#22c55e', '#16a34a', '#14532d'); // herbs
   });
 }
 
 export function buildKitchenSink(rot = 0) {
   const [tw, th] = rot % 2 ? [1, 2] : [2, 1];
-  const STEEL = ['#b8c4d2', '#8e9aa8', '#646e7a'];
-  const WATER = ['#48c4e8', '#2a98b8', '#186880'];
-  return isoSprite(tw, th, 44, (box) => {
-    box(0.06, 0.08, tw - 0.06, th - 0.08, 0, 26, ...STEEL); // Body
-    box(0.15 * tw, 0.20 * th, 0.45 * tw, 0.80 * th, 16, 22, ...WATER); // Left basin
-    box(0.55 * tw, 0.20 * th, 0.85 * tw, 0.80 * th, 16, 22, ...WATER); // Right basin
-    // Gooseneck pre-rinse faucet
-    box(0.46 * tw, 0.12 * th, 0.54 * tw, 0.22 * th, 26, 42, ...STEEL);
+  const STEEL = ['#b8c6d6', '#8e9ea8', '#647280'];
+  const STEEL_HI = ['#ffffff', '#e8f0f8', '#c0ccd8'];
+  const WATER = ['#38bdf8', '#0284c7', '#0369a1'];
+
+  return isoSprite(tw, th, 46, (box) => {
+    // 1. Stainless cabinet body with lower doors (z = 0 .. 25)
+    box(0.06, 0.08, tw - 0.06, th - 0.08, 0, 25, ...STEEL);
+
+    // 2. High splashback guard along back wall
+    if (tw > th) {
+      box(0.04, 0.06, tw - 0.04, 0.12, 25, 36, ...STEEL);
+    } else {
+      box(0.06, 0.04, 0.12, th - 0.04, 25, 36, ...STEEL);
+    }
+
+    // 3. Counter deck with corrugated drainage washboards
+    box(0.04, 0.06, tw - 0.04, th - 0.06, 24, 26, ...STEEL_HI);
+
+    // 4. Double deep commercial sink basins
+    const [b1x, b1y, b1w, b1h] = tw > th
+      ? [0.12 * tw, 0.18 * th, 0.34, 0.64]
+      : [0.18 * tw, 0.12 * th, 0.64, 0.34];
+    const [b2x, b2y, b2w, b2h] = tw > th
+      ? [0.54 * tw, 0.18 * th, 0.34, 0.64]
+      : [0.18 * tw, 0.54 * th, 0.64, 0.34];
+
+    // Left wash basin with sudsy water
+    box(b1x, b1y, b1x + b1w, b1y + b1h, 16, 24, ...WATER);
+    box(b1x + 0.04, b1y + 0.04, b1x + b1w - 0.04, b1y + b1h - 0.04, 23, 24.5, '#f0fdf4', '#dcfce7', '#bbf7d0'); // foam suds
+
+    // Right rinse basin
+    box(b2x, b2y, b2x + b2w, b2y + b2h, 16, 21, ...WATER);
+    box(b2x + b2w / 2 - 0.03, b2y + b2h / 2 - 0.03, b2x + b2w / 2 + 0.03, b2y + b2h / 2 + 0.03, 16, 17, '#0f172a', '#020617', '#000000'); // drain
+
+    // 5. Commercial high-arc pre-rinse coiled spring gooseneck faucet
+    const [fx, fy] = tw > th ? [tw / 2, 0.14] : [0.14, th / 2];
+    box(fx - 0.04, fy - 0.04, fx + 0.04, fy + 0.04, 26, 44, ...STEEL_HI);
+    box(fx - 0.06, fy + 0.04, fx + 0.06, fy + 0.12, 38, 43, '#38bdf8', '#0284c7', '#0369a1'); // spray valve
   });
 }
 
 export function buildKitchenFridge(rot = 0) {
   const [tw, th] = rot % 2 ? [1, 2] : [2, 1];
-  const STEEL = ['#b0bcc8', '#86929e', '#5a646e'];
+  const STEEL = ['#b8c6d4', '#8e9ca8', '#62707c'];
+  const STEEL_HI = ['#ffffff', '#eaf2f8', '#c4d0dc'];
+  const GRILLE = ['#282c34', '#1c1f24', '#101216'];
   const HANDLE = ['#e8edf4', '#bcc4ce', '#848c96'];
-  return isoSprite(tw, th, 58, (box) => {
-    box(0.06, 0.08, tw - 0.06, th - 0.08, 0, 56, ...STEEL);
-    box(0.12 * tw, 0.20 * th, 0.20 * tw, 0.30 * th, 24, 38, ...HANDLE);
-    box(0.80 * tw, 0.20 * th, 0.88 * tw, 0.30 * th, 24, 38, ...HANDLE);
+
+  return isoSprite(tw, th, 60, (box) => {
+    // 1. Lower plinth / wheel base (z = 0 .. 3)
+    box(0.06, 0.08, tw - 0.06, th - 0.08, 0, 3, '#22262e', '#16181e', '#0c0e12');
+
+    // 2. Main refrigerator carcass (z = 3 .. 48)
+    box(0.04, 0.06, tw - 0.04, th - 0.06, 3, 48, ...STEEL);
+
+    // Twin massive reach-in doors with center gasket seal
+    if (tw > th) {
+      box(0.06, 0.05, tw / 2 - 0.02, 0.07, 4, 46, ...STEEL_HI);
+      box(tw / 2 + 0.02, 0.05, tw - 0.06, 0.07, 4, 46, ...STEEL_HI);
+      box(tw / 2 - 0.02, 0.05, tw / 2 + 0.02, 0.07, 4, 46, '#181b20', '#101216', '#080a0c'); // gasket
+      // Heavy cam-lift latch handles
+      box(tw / 2 - 0.06, 0.04, tw / 2 - 0.04, 0.06, 22, 36, ...HANDLE);
+      box(tw / 2 + 0.04, 0.04, tw / 2 + 0.06, 0.06, 22, 36, ...HANDLE);
+      // Digital temperature readout display
+      box(tw - 0.22, 0.04, tw - 0.12, 0.06, 42, 45, '#0f172a', '#020617', '#000000');
+      box(tw - 0.20, 0.04, tw - 0.14, 0.06, 43, 44, '#38bdf8', '#0284c7', '#0369a1');
+    } else {
+      box(0.05, 0.06, 0.07, th / 2 - 0.02, 4, 46, ...STEEL_HI);
+      box(0.05, th / 2 + 0.02, 0.07, th - 0.06, 4, 46, ...STEEL_HI);
+      box(0.05, th / 2 - 0.02, 0.07, th / 2 + 0.02, 4, 46, '#181b20', '#101216', '#080a0c');
+      box(0.04, th / 2 - 0.06, 0.06, th / 2 - 0.04, 22, 36, ...HANDLE);
+      box(0.04, th / 2 + 0.04, 0.06, th / 2 + 0.06, 22, 36, ...HANDLE);
+      box(0.04, th - 0.22, 0.06, th - 0.12, 42, 45, '#0f172a', '#020617', '#000000');
+      box(0.04, th - 0.20, 0.06, th - 0.14, 43, 44, '#38bdf8', '#0284c7', '#0369a1');
+    }
+
+    // 3. Top-mounted commercial compressor housing with ventilation intake grilles (z = 48 .. 58)
+    box(0.04, 0.06, tw - 0.04, th - 0.06, 48, 58, ...STEEL);
+    if (tw > th) {
+      box(0.10, 0.05, tw - 0.10, 0.07, 50, 56, ...GRILLE);
+    } else {
+      box(0.05, 0.10, 0.07, th - 0.10, 50, 56, ...GRILLE);
+    }
   });
 }
 
 export function buildKitchenPass(rot = 0) {
   const [tw, th] = rot % 2 ? [1, 3] : [3, 1];
-  const STEEL = ['#c0cbd8', '#949ea8', '#66707c'];
+  const STEEL = ['#c8d4e2', '#9eb0c2', '#728294'];
+  const STEEL_HI = ['#ffffff', '#eaf0f8', '#c4d2e0'];
   const HEAT = ['#ff5030', '#d82810', '#901004'];
+  const HEAT_GLOW = ['#ffd4a4', '#ff8a44', '#cc4014'];
+  const BRASS = ['#f4c654', '#cb982c', '#926a14'];
+
   return isoSprite(tw, th, 46, (box) => {
-    box(0.04, 0.06, tw - 0.04, th - 0.06, 0, 24, ...STEEL); // Counter
-    // Overhead shelf with heat lamps
-    box(0.10, 0.12, 0.20, 0.22, 24, 42, ...STEEL);
-    box(tw - 0.20, th - 0.22, tw - 0.10, th - 0.12, 24, 42, ...STEEL);
-    box(0.08, 0.10, tw - 0.08, th - 0.10, 40, 44, ...STEEL);
-    // Red heat lamp bulbs
-    box(0.25 * tw, 0.40 * th, 0.35 * tw, 0.60 * th, 37, 40, ...HEAT);
-    box(0.65 * tw, 0.40 * th, 0.75 * tw, 0.60 * th, 37, 40, ...HEAT);
+    // 1. Heated stainless plating counter (z = 0 .. 25)
+    box(0.04, 0.06, tw - 0.04, th - 0.06, 0, 24, ...STEEL);
+    box(0.02, 0.04, tw - 0.02, th - 0.04, 24, 26, ...STEEL_HI);
+
+    // 2. Stainless upright posts supporting overhead pass shelf (z = 26 .. 42)
+    const posts = tw > th
+      ? [[0.10, 0.12], [tw - 0.18, 0.12], [0.10, th - 0.20], [tw - 0.18, th - 0.20]]
+      : [[0.12, 0.10], [0.12, th - 0.18], [tw - 0.20, 0.10], [tw - 0.20, th - 0.18]];
+    for (const [px, py] of posts) {
+      box(px, py, px + 0.08, py + 0.08, 26, 42, ...STEEL);
+    }
+
+    // 3. Overhead warming shelf (z = 40 .. 44)
+    box(0.06, 0.08, tw - 0.06, th - 0.08, 40, 44, ...STEEL);
+
+    // Infrared heat lamp fixtures & radiant glow cones (z = 36 .. 40)
+    const lamp1 = tw > th ? [0.28 * tw, 0.35 * th] : [0.35 * tw, 0.28 * th];
+    const lamp2 = tw > th ? [0.68 * tw, 0.35 * th] : [0.35 * tw, 0.68 * th];
+    box(lamp1[0], lamp1[1], lamp1[0] + 0.20, lamp1[1] + 0.20, 37, 40, ...HEAT);
+    box(lamp1[0] - 0.04, lamp1[1] - 0.04, lamp1[0] + 0.24, lamp1[1] + 0.24, 35, 37, ...HEAT_GLOW);
+    box(lamp2[0], lamp2[1], lamp2[0] + 0.20, lamp2[1] + 0.20, 37, 40, ...HEAT);
+    box(lamp2[0] - 0.04, lamp2[1] - 0.04, lamp2[0] + 0.24, lamp2[1] + 0.24, 35, 37, ...HEAT_GLOW);
+
+    // Ticket order rail along front of warming shelf with white order slips
+    if (tw > th) {
+      box(0.12, 0.06, tw - 0.12, 0.08, 38, 40, ...STEEL_HI);
+      box(0.25, 0.05, 0.35, 0.07, 34, 38, '#ffffff', '#f1f5f9', '#cbd5e1'); // ticket slip 1
+      box(0.55, 0.05, 0.65, 0.07, 34, 38, '#ffffff', '#f1f5f9', '#cbd5e1'); // ticket slip 2
+    } else {
+      box(0.06, 0.12, 0.08, th - 0.12, 38, 40, ...STEEL_HI);
+      box(0.05, 0.25, 0.07, 0.35, 34, 38, '#ffffff', '#f1f5f9', '#cbd5e1');
+      box(0.05, 0.55, 0.07, 0.65, 34, 38, '#ffffff', '#f1f5f9', '#cbd5e1');
+    }
+
+    // Service call bell on counter
+    const [bellX, bellY] = tw > th ? [tw - 0.25, 0.25] : [0.25, th - 0.25];
+    box(bellX, bellY, bellX + 0.10, bellY + 0.10, 26, 28, ...BRASS);
+    box(bellX + 0.04, bellY + 0.04, bellX + 0.06, bellY + 0.06, 28, 30, ...STEEL_HI);
+
+    // Two plated gourmet dishes on the pass waiting for pickup
+    const p1 = tw > th ? [0.26 * tw, 0.35 * th] : [0.35 * tw, 0.26 * th];
+    const p2 = tw > th ? [0.66 * tw, 0.35 * th] : [0.35 * tw, 0.66 * th];
+    box(p1[0], p1[1], p1[0] + 0.18, p1[1] + 0.18, 26, 28, '#ffffff', '#f8fafc', '#e2e8f0');
+    box(p1[0] + 0.04, p1[1] + 0.04, p1[0] + 0.14, p1[1] + 0.14, 28, 30, '#854d0e', '#713f12', '#451a03'); // entree
+    box(p2[0], p2[1], p2[0] + 0.18, p2[1] + 0.18, 26, 28, '#ffffff', '#f8fafc', '#e2e8f0');
+    box(p2[0] + 0.04, p2[1] + 0.04, p2[0] + 0.14, p2[1] + 0.14, 28, 30, '#dc2626', '#b91c1c', '#7f1d1d');
   });
 }
 
 export function buildStartingBlock(rot = 0) {
-  const BLOCK = ['#3888d8', '#2064aa', '#124478'];
-  const TOP = ['#f4f8fc', '#d0e0f0', '#9cb4cc'];
-  const NUM_BG = ['#10243c', '#0c1a2c', '#08121e'];
-  const NUM = ['#ffffff', '#e0eaf4', '#b0c0d0'];
+  const BLOCK = ['#2563eb', '#1d4ed8', '#1e40af'];
+  const BLOCK_DARK = ['#1e3a8a', '#172554', '#0f172a'];
+  const TOP = ['#f8fafc', '#e2e8f0', '#cbd5e1'];
+  const TREAD = ['#475569', '#334155', '#1e293b'];
+  const STEEL = ['#e2e8f0', '#cbd5e1', '#94a3b8'];
+  const STEEL_HI = ['#ffffff', '#f1f5f9', '#cbd5e1'];
+  const NUM_BG = ['#0f172a', '#020617', '#000000'];
+  const NUM = ['#ffffff', '#f8fafc', '#e2e8f0'];
   const laneNum = ((rot % 4 + 4) % 4) + 1;
-  return isoSprite(1, 1, 24, (box) => {
-    box(0.20, 0.20, 0.80, 0.80, 0, 16, ...BLOCK);
-    box(0.16, 0.16, 0.84, 0.84, 16, 20, ...TOP); // Grippy platform
-    // Stainless step handle
-    box(0.35, 0.10, 0.65, 0.20, 16, 24, '#d8e0e8', '#b0b8c2', '#7c848e');
+
+  return isoSprite(1, 1, 26, (box) => {
+    // Deck mounting base plate & anchor bolts (z = 0 .. 3)
+    box(0.18, 0.18, 0.82, 0.82, 0, 3, ...BLOCK_DARK);
+    box(0.20, 0.20, 0.24, 0.24, 0, 3.5, ...STEEL_HI);
+    box(0.76, 0.20, 0.80, 0.24, 0, 3.5, ...STEEL_HI);
+    box(0.20, 0.76, 0.24, 0.80, 0, 3.5, ...STEEL_HI);
+    box(0.76, 0.76, 0.80, 0.80, 0, 3.5, ...STEEL_HI);
+
+    // Sturdy powder-coated pedestal base (z = 3 .. 16)
+    box(0.22, 0.22, 0.78, 0.78, 3, 16, ...BLOCK);
+
+    // Forward-angled platform deck with high-traction textured non-slip tread (z = 16 .. 20)
+    box(0.14, 0.14, 0.86, 0.86, 16, 19, ...TOP);
+    box(0.16, 0.16, 0.84, 0.84, 19, 20.5, ...TREAD);
+
+    // Stainless steel backstroke starting grab bar mounted to front (z = 16 .. 25)
+    box(0.32, 0.08, 0.68, 0.14, 16, 24, ...STEEL);
+    box(0.34, 0.08, 0.66, 0.12, 23, 25, ...STEEL_HI);
+
     // Number plaque on front face facing pool
-    box(0.32, 0.79, 0.68, 0.81, 3, 14, ...NUM_BG);
+    box(0.30, 0.79, 0.70, 0.81, 3, 14, ...NUM_BG);
     if (laneNum === 1) {
       box(0.46, 0.79, 0.54, 0.82, 4, 13, ...NUM);
     } else if (laneNum === 2) {
@@ -2141,171 +4624,419 @@ export function buildStartingBlock(rot = 0) {
 
 export function buildLaneRope(rot = 0) {
   const [tw, th] = rot % 2 ? [1, 2] : [2, 1];
-  const RED = ['#e83848', '#b82030', '#80101c'];
-  const WHITE = ['#ffffff', '#dce4ec', '#a4b0bc'];
-  const BLUE = ['#2880d8', '#1a5ea0', '#103e6c'];
-  return isoSprite(tw, th, 8, (box) => {
+  const RED = ['#ef4444', '#dc2626', '#991b1b'];
+  const WHITE = ['#ffffff', '#f1f5f9', '#cbd5e1'];
+  const BLUE = ['#2563eb', '#1d4ed8', '#1e40af'];
+  const STEEL = ['#d8e0e8', '#b0bcc8', '#808c98'];
+  const CABLE = ['#475569', '#334155', '#1e293b'];
+
+  return isoSprite(tw, th, 9, (box) => {
+    // Stainless tensioning cable running through center
     if (rot % 2 === 0) {
-      box(0.10, 0.35, 0.60, 0.65, 3, 7, ...RED);
-      box(0.70, 0.35, 1.20, 0.65, 3, 7, ...WHITE);
-      box(1.30, 0.35, 1.80, 0.65, 3, 7, ...BLUE);
+      box(0.04, 0.48, tw - 0.04, 0.52, 4, 6, ...CABLE);
+      // Deck anchor tension ratchet on end
+      box(0.02, 0.42, 0.12, 0.58, 2, 7, ...STEEL);
+
+      // Alternating anti-turbulent buoyant discs (6 repeating sections)
+      const numDiscs = 6;
+      const span = tw - 0.20;
+      for (let i = 0; i < numDiscs; i++) {
+        const x0 = 0.14 + (i / numDiscs) * span;
+        const x1 = x0 + span / numDiscs - 0.03;
+        const col = i % 2 === 0 ? RED : WHITE;
+        box(x0, 0.36, x1, 0.64, 3, 7.5, ...col);
+        // Disc ribbed outer turbine teeth at 2x density
+        box(x0 + 0.02, 0.34, x1 - 0.02, 0.66, 4, 6.5, ...col);
+      }
     } else {
-      box(0.35, 0.10, 0.65, 0.60, 3, 7, ...RED);
-      box(0.35, 0.70, 0.65, 1.20, 3, 7, ...WHITE);
-      box(0.35, 1.30, 0.65, 1.80, 3, 7, ...BLUE);
+      box(0.48, 0.04, 0.52, th - 0.04, 4, 6, ...CABLE);
+      box(0.42, 0.02, 0.58, 0.12, 2, 7, ...STEEL);
+
+      const numDiscs = 6;
+      const span = th - 0.20;
+      for (let i = 0; i < numDiscs; i++) {
+        const y0 = 0.14 + (i / numDiscs) * span;
+        const y1 = y0 + span / numDiscs - 0.03;
+        const col = i % 2 === 0 ? RED : WHITE;
+        box(0.36, y0, 0.64, y1, 3, 7.5, ...col);
+        box(0.34, y0 + 0.02, 0.66, y1 - 0.02, 4, 6.5, ...col);
+      }
     }
   });
 }
 
 export function buildPoolLadder(rot = 0) {
-  const STEEL = ['#e4ecf4', '#b8c4d2', '#8490a0'];
-  return isoSprite(1, 1, 38, (box) => {
-    // Curved rails extending up
-    box(0.20, 0.20, 0.32, 0.32, 0, 36, ...STEEL);
-    box(0.68, 0.20, 0.80, 0.32, 0, 36, ...STEEL);
-    // Ladder rungs
-    box(0.32, 0.22, 0.68, 0.30, 8, 11, ...STEEL);
-    box(0.32, 0.22, 0.68, 0.30, 18, 21, ...STEEL);
-    box(0.32, 0.22, 0.68, 0.30, 28, 31, ...STEEL);
+  const STEEL = ['#eaf0f8', '#c4d0dc', '#94a0b0'];
+  const STEEL_HI = ['#ffffff', '#f4f8fc', '#d0dce8'];
+  const RUBBER = ['#1e293b', '#0f172a', '#020617'];
+
+  return isoSprite(1, 1, 40, (box) => {
+    // Twin round deck escutcheon anchor flanges securing rails to coping (z = 0 .. 3)
+    box(0.18, 0.18, 0.34, 0.34, 0, 3, ...STEEL);
+    box(0.66, 0.18, 0.82, 0.34, 0, 3, ...STEEL);
+
+    // Polished 316 marine-grade stainless steel tubular handrails with smooth sweeping bends
+    box(0.21, 0.21, 0.31, 0.31, 3, 38, ...STEEL);
+    box(0.20, 0.20, 0.28, 0.28, 3, 38, ...STEEL_HI); // specular highlight streak
+    box(0.69, 0.21, 0.79, 0.31, 3, 38, ...STEEL);
+    box(0.68, 0.20, 0.76, 0.28, 3, 38, ...STEEL_HI);
+
+    // 3 wide non-skid stainless step treads with rubber grip pads
+    const treads = [9, 19, 29];
+    for (const z of treads) {
+      box(0.29, 0.22, 0.71, 0.30, z, z + 3, ...STEEL);
+      box(0.33, 0.23, 0.67, 0.29, z + 2.5, z + 3.5, ...RUBBER); // rubber non-skid pad
+    }
+
+    // Submerged lower rubber bumpers resting against pool wall (z = 0 .. 4)
+    box(0.20, 0.20, 0.32, 0.32, 0, 4, ...RUBBER);
+    box(0.68, 0.20, 0.80, 0.32, 0, 4, ...RUBBER);
   });
 }
 
 export function buildPoolLounger(rot = 0) {
   const [tw, th] = rot % 2 ? [1, 2] : [2, 1];
-  const FRAME = ['#f4f6fa', '#d8dce6', '#aab2c0'];
-  const CUSHION = ['#00b4d8', '#0096c7', '#0077b6'];
-  return isoSprite(tw, th, 24, (box) => {
-    box(0.10, 0.12, tw - 0.10, th - 0.12, 0, 8, ...FRAME);
-    box(0.12, 0.14, tw - 0.12, th - 0.14, 8, 14, ...CUSHION);
-    // Raised angled headrest
-    if (rot % 2 === 0) {
-      box(0.12, 0.14, 0.65, th - 0.14, 14, 22, ...CUSHION);
+  const TEAK = ['#c88a4e', '#a46c36', '#764c20'];
+  const CUSHION = ['#ffffff', '#e0e8f0', '#b0c0d0'];
+  const ACCENT = ['#00b4d8', '#0096c7', '#0077b6'];
+  const WHEEL = ['#22262e', '#161a20', '#0c0e12'];
+
+  return isoSprite(tw, th, 26, (box) => {
+    if (tw >= th) {
+      box(0.12, 0.14, 0.22, 0.24, 0, 8, ...TEAK);
+      box(0.12, th - 0.24, 0.22, th - 0.14, 0, 8, ...TEAK);
+      box(tw - 0.22, 0.14, tw - 0.12, 0.24, 0, 8, ...TEAK);
+      box(tw - 0.22, th - 0.24, tw - 0.12, th - 0.14, 0, 8, ...TEAK);
+      box(0.08, 0.08, 0.20, 0.14, 1, 6, ...WHEEL);
+      box(0.08, th - 0.14, 0.20, th - 0.08, 1, 6, ...WHEEL);
+
+      planks(box, 0.08, 0.12, tw - 0.08, th - 0.12, 6, 9, {
+        dir: 'v',
+        count: 5,
+        gap: 0.025,
+        wood: TEAK,
+        grainDetail: true,
+      });
+
+      box(0.10, 0.14, tw - 0.10, th - 0.14, 9, 14, ...CUSHION);
+      stitching(box, 0.10, 0.14, tw - 0.10, th - 0.14, 13.5, { piping: ACCENT, pipingHeight: 0.8 });
+
+      box(0.10, 0.14, 0.65, th - 0.14, 14, 23, ...CUSHION);
+      box(0.14, 0.20, 0.45, th - 0.20, 21, 25, ...ACCENT);
     } else {
-      box(0.12, 0.14, tw - 0.12, 0.65, 14, 22, ...CUSHION);
+      box(0.14, 0.12, 0.24, 0.22, 0, 8, ...TEAK);
+      box(tw - 0.24, 0.12, tw - 0.14, 0.22, 0, 8, ...TEAK);
+      box(0.14, th - 0.22, 0.24, th - 0.12, 0, 8, ...TEAK);
+      box(tw - 0.24, th - 0.22, tw - 0.14, th - 0.12, 0, 8, ...TEAK);
+      box(0.08, 0.08, 0.14, 0.20, 1, 6, ...WHEEL);
+      box(tw - 0.14, 0.08, tw - 0.08, 0.20, 1, 6, ...WHEEL);
+
+      planks(box, 0.12, 0.08, tw - 0.12, th - 0.08, 6, 9, {
+        dir: 'u',
+        count: 5,
+        gap: 0.025,
+        wood: TEAK,
+        grainDetail: true,
+      });
+
+      box(0.14, 0.10, tw - 0.14, th - 0.10, 9, 14, ...CUSHION);
+      stitching(box, 0.14, 0.10, tw - 0.14, th - 0.10, 13.5, { piping: ACCENT, pipingHeight: 0.8 });
+
+      box(0.14, 0.10, tw - 0.14, 0.65, 14, 23, ...CUSHION);
+      box(0.20, 0.14, tw - 0.20, 0.45, 21, 25, ...ACCENT);
     }
   });
 }
 
 export function buildPoolUmbrella(rot = 0) {
-  const POLE = ['#e8edf4', '#b8c2cc', '#84909c'];
-  const CANOPY = ['#00b4d8', '#0077b6', '#03045e'];
-  const WHITE = ['#ffffff', '#e0e6ed', '#b0bcc8'];
-  return isoSprite(1, 1, 62, (box) => {
-    box(0.44, 0.44, 0.56, 0.56, 0, 48, ...POLE); // Pole
-    // Striped cabana canopy
-    box(0.04, 0.04, 0.96, 0.96, 48, 54, ...CANOPY);
-    box(0.16, 0.16, 0.84, 0.84, 54, 58, ...WHITE);
-    box(0.30, 0.30, 0.70, 0.70, 58, 62, ...CANOPY);
+  const GRANITE = ['#64748b', '#475569', '#334155'];
+  const MAST = ['#d97706', '#b45309', '#78350f'];
+  const BRASS = ['#f4c654', '#cb982c', '#926a14'];
+  const CANOPY_CYAN = ['#00b4d8', '#0077b6', '#03045e'];
+  const CANOPY_WHITE = ['#ffffff', '#f1f5f9', '#cbd5e1'];
+  const CANOPY_HI = ['#caf0f8', '#90e0ef', '#0096c7'];
+
+  return isoSprite(1, 1, 64, (box) => {
+    // 1. Heavy circular granite slab base with locking brass collar (z = 0 .. 4)
+    box(0.24, 0.24, 0.76, 0.76, 0, 3, ...GRANITE);
+    box(0.38, 0.38, 0.62, 0.62, 3, 5, ...BRASS);
+
+    // 2. Solid eucalyptus center mast pole (z = 4 .. 50)
+    box(0.44, 0.44, 0.56, 0.56, 4, 50, ...MAST);
+    box(0.42, 0.42, 0.58, 0.58, 44, 48, ...BRASS); // rib runner hub mechanism
+
+    // 3. Multi-tier octagonal resort canvas parasol canopy (z = 48 .. 64)
+    // Tier 1: Wide octagonal scalloped canopy valance hem
+    box(0.04, 0.04, 0.96, 0.96, 48, 53, ...CANOPY_CYAN);
+    // Alternating white striped triangular canopy segments
+    box(0.08, 0.30, 0.92, 0.70, 49, 54, ...CANOPY_WHITE);
+    box(0.30, 0.08, 0.70, 0.92, 49, 54, ...CANOPY_WHITE);
+
+    // Tier 2: Mid canopy rise
+    box(0.16, 0.16, 0.84, 0.84, 53, 58, ...CANOPY_CYAN);
+    box(0.24, 0.24, 0.76, 0.76, 54, 59, ...CANOPY_HI);
+
+    // Tier 3: Conical apex with top wind vent cap
+    box(0.30, 0.30, 0.70, 0.70, 58, 62, ...CANOPY_CYAN);
+    box(0.40, 0.40, 0.60, 0.60, 62, 64, ...CANOPY_WHITE); // wind vent cap
+    box(0.46, 0.46, 0.54, 0.54, 64, 65, ...BRASS); // top finial
   });
 }
 
 export function buildChangingCubicle(rot = 0) {
-  const WALL = ['#e6ecf2', '#c0ccd8', '#94a0ae'];
-  const CURTAIN = ['#20b2aa', '#188e88', '#106460'];
-  return isoSprite(1, 1, 52, (box) => {
-    // Back and side privacy walls
-    box(0.06, 0.06, 0.94, 0.20, 0, 50, ...WALL);
-    box(0.06, 0.20, 0.20, 0.94, 0, 50, ...WALL);
-    box(0.80, 0.20, 0.94, 0.94, 0, 50, ...WALL);
-    // Privacy front drape curtain
-    box(0.20, 0.80, 0.80, 0.92, 4, 46, ...CURTAIN);
+  const WALL = ['#f8fafc', '#e2e8f0', '#cbd5e1'];
+  const TRIM = ['#64748b', '#475569', '#334155'];
+  const CHROME = ['#e2e8f0', '#cbd5e1', '#94a3b8'];
+  const CURTAIN = ['#0d9488', '#0f766e', '#115e59'];
+  const CURTAIN_HI = ['#2dd4bf', '#14b8a6', '#0d9488'];
+  const WOOD = ['#b45309', '#92400e', '#713f12'];
+
+  return isoSprite(1, 1, 54, (box) => {
+    // 1. Satin anodised aluminum upright corner posts (z = 0 .. 52)
+    const posts = [
+      [0.06, 0.06],
+      [0.84, 0.06],
+      [0.06, 0.84],
+      [0.84, 0.84]
+    ];
+    for (const [px, py] of posts) {
+      box(px, py, px + 0.10, py + 0.10, 0, 52, ...TRIM);
+    }
+
+    // 2. White moisture-resistant melamine privacy wall panels (z = 4 .. 48)
+    box(0.08, 0.08, 0.92, 0.16, 4, 48, ...WALL); // back wall
+    box(0.08, 0.16, 0.16, 0.84, 4, 48, ...WALL); // left wall
+    box(0.84, 0.16, 0.92, 0.84, 4, 48, ...WALL); // right wall
+
+    // Overhead ceiling bracing rail & curtain track (z = 48 .. 51)
+    box(0.06, 0.06, 0.94, 0.94, 48, 51, ...TRIM);
+
+    // 3. Interior corner changing bench & coat hook
+    box(0.16, 0.20, 0.50, 0.50, 10, 14, ...WOOD);
+    box(0.18, 0.14, 0.22, 0.18, 32, 36, ...CHROME); // coat hook
+
+    // 4. Privacy front drape curtain with natural vertical pleat folds (z = 4 .. 48)
+    box(0.16, 0.80, 0.84, 0.88, 4, 48, ...CURTAIN);
+    // Pleat highlight folds at 2x density
+    box(0.24, 0.84, 0.32, 0.90, 6, 46, ...CURTAIN_HI);
+    box(0.44, 0.84, 0.52, 0.90, 6, 46, ...CURTAIN_HI);
+    box(0.64, 0.84, 0.72, 0.90, 6, 46, ...CURTAIN_HI);
   });
 }
 
 export function buildSalonChair(rot = 0) {
-  const CHROME = ['#dce4ec', '#b0bac8', '#808c9a'];
-  const LEATHER = ['#24262c', '#181a1e', '#101214'];
-  const MIRROR = ['#b8e8f8', '#8cc4d8', '#649eb0'];
-  return isoSprite(1, 1, 48, (box) => {
-    // Round pedestal & hydraulic column
-    box(0.25, 0.25, 0.75, 0.75, 0, 4, ...CHROME);
-    box(0.42, 0.42, 0.58, 0.58, 4, 14, ...CHROME);
-    // Black leather salon chair
-    box(0.22, 0.22, 0.78, 0.78, 14, 20, ...LEATHER);
-    box(0.22, 0.18, 0.78, 0.36, 20, 34, ...LEATHER); // Backrest
-    // Attached vanity mirror station behind
-    box(0.12, 0.04, 0.88, 0.16, 0, 46, ...CHROME);
-    box(0.18, 0.06, 0.82, 0.14, 16, 44, ...MIRROR);
+  const CHROME = ['#e6edf6', '#b8c2d0', '#8894a4'];
+  const LEATHER = ['#22242a', '#16181e', '#0c0e12'];
+  const STITCH = ['#3a404c', '#282c36', '#1a1c24'];
+  const MIRROR = ['#d2ecf8', '#a8d2e4', '#7eaab8'];
+  const SHEEN = ['#ffffff', '#eaf6fd', '#c4e0f0'];
+
+  return isoSprite(1, 1, 50, (box) => {
+    // Heavy circular chrome hydraulic pump base with foot pedal (z = 0 .. 4)
+    box(0.22, 0.22, 0.78, 0.78, 0, 4, ...CHROME);
+    box(0.40, 0.40, 0.60, 0.60, 4, 14, ...CHROME);
+    // Hydraulic pump foot lever
+    box(0.22, 0.68, 0.32, 0.82, 3, 5, ...CHROME);
+
+    // Contoured black faux-leather bucket seat with horizontal ribbed seams
+    box(0.20, 0.20, 0.80, 0.78, 14, 20, ...LEATHER);
+    box(0.22, 0.32, 0.78, 0.36, 19.5, 20.5, ...STITCH);
+    box(0.22, 0.52, 0.78, 0.56, 19.5, 20.5, ...STITCH);
+
+    // Chrome padded armrests
+    box(0.14, 0.24, 0.22, 0.76, 20, 27, ...CHROME);
+    box(0.78, 0.24, 0.86, 0.76, 20, 27, ...CHROME);
+    box(0.12, 0.26, 0.24, 0.74, 26, 28, ...LEATHER);
+    box(0.76, 0.26, 0.88, 0.74, 26, 28, ...LEATHER);
+
+    // Backrest with horizontal fluting
+    box(0.20, 0.16, 0.80, 0.32, 20, 36, ...LEATHER);
+    box(0.22, 0.28, 0.78, 0.33, 25, 26, ...STITCH);
+    box(0.22, 0.28, 0.78, 0.33, 30, 31, ...STITCH);
+
+    // Padded chrome footrest bar extending forward
+    box(0.32, 0.76, 0.68, 0.94, 7, 9, ...CHROME);
+    box(0.36, 0.84, 0.64, 0.92, 9, 11, ...LEATHER);
+
+    // Vanity mirror station behind
+    box(0.10, 0.04, 0.90, 0.14, 0, 48, ...CHROME);
+    box(0.14, 0.06, 0.86, 0.12, 14, 46, ...MIRROR);
+    box(0.25, 0.07, 0.55, 0.11, 20, 42, ...SHEEN);
   });
 }
 
 export function buildMassageBed(rot = 0) {
   const [tw, th] = rot % 2 ? [1, 2] : [2, 1];
-  const WOOD = ['#6c442c', '#503220', '#342014'];
+  const BEECH = ['#dfb882', '#b88a52', '#865e28'];
   const LINEN = ['#f8f8fc', '#dce0e8', '#b0b8c4'];
   const TOWEL = ['#c8a2c8', '#a87ca8', '#805480'];
-  return isoSprite(tw, th, 28, (box) => {
-    // 4 sturdy timber legs
-    box(0.10, 0.12, 0.22, 0.24, 0, 16, ...WOOD);
-    box(tw - 0.22, 0.12, tw - 0.10, 0.24, 0, 16, ...WOOD);
-    box(0.10, th - 0.24, 0.22, th - 0.12, 0, 16, ...WOOD);
-    box(tw - 0.22, th - 0.24, tw - 0.10, th - 0.12, 0, 16, ...WOOD);
-    // Padded mattress & soft linen
-    box(0.08, 0.10, tw - 0.08, th - 0.10, 14, 22, ...LINEN);
-    // Folded lavender treatment towel & face cradle
-    if (rot % 2 === 0) {
-      box(0.20, 0.30, 0.65, 0.70, 22, 26, ...TOWEL);
+  const BOTTLE = ['#50b498', '#388c74', '#20604e'];
+
+  return isoSprite(tw, th, 30, (box) => {
+    // 4 sturdy beechwood legs with lower cross-stretchers (z = 0 .. 15)
+    box(0.10, 0.12, 0.22, 0.24, 0, 15, ...BEECH);
+    box(tw - 0.22, 0.12, tw - 0.10, 0.24, 0, 15, ...BEECH);
+    box(0.10, th - 0.24, 0.22, th - 0.12, 0, 15, ...BEECH);
+    box(tw - 0.22, th - 0.24, tw - 0.10, th - 0.12, 0, 15, ...BEECH);
+
+    // Lower slatted timber shelf holding spare linens
+    planks(box, 0.12, 0.14, tw - 0.12, th - 0.14, 4, 6, {
+      dir: tw >= th ? 'v' : 'u',
+      count: 4,
+      gap: 0.03,
+      wood: BEECH,
+      grainDetail: true,
+    });
+
+    // Padded treatment mattress with stitched perimeter (z = 14 .. 23)
+    box(0.08, 0.10, tw - 0.08, th - 0.10, 14, 23, ...LINEN);
+    stitching(box, 0.08, 0.10, tw - 0.08, th - 0.10, 22.5, {
+      piping: ['#ffffff', '#e8e8f0', '#c8c8d8'],
+      pipingHeight: 0.8
+    });
+
+    // Ergonomic face cradle ring opening & folded waffle-weave spa towel
+    if (tw >= th) {
+      box(0.12, 0.40, 0.32, 0.60, 22, 25, '#c0c8d4', '#9ca4b2', '#78808e');
+      box(0.16, 0.44, 0.28, 0.56, 21, 25.5, ...LINEN);
+      box(1.20, 0.25, 1.65, 0.75, 23, 27, ...TOWEL);
+      box(1.72, 0.35, 1.84, 0.47, 23, 28, ...BOTTLE);
     } else {
-      box(0.30, 0.20, 0.70, 0.65, 22, 26, ...TOWEL);
+      box(0.40, 0.12, 0.60, 0.32, 22, 25, '#c0c8d4', '#9ca4b2', '#78808e');
+      box(0.44, 0.16, 0.56, 0.28, 21, 25.5, ...LINEN);
+      box(0.25, 1.20, 0.75, 1.65, 23, 27, ...TOWEL);
+      box(0.35, 1.72, 0.47, 1.84, 23, 28, ...BOTTLE);
     }
   });
 }
 
 export function buildChangingRoomDoor(rot = 0) {
   const FRAME = ['#7c522e', '#5a3b20', '#3e2816'];
+  const FRAME_HI = ['#9e6c3e', '#7c522e', '#5a381c'];
   const SLAT = ['#a06c3c', '#84542c', '#5e3c1e'];
+  const SLAT_DARK = ['#6e4222', '#523016', '#38200e'];
   const BRASS = ['#ffd268', '#d4a43c', '#9e7820'];
-  return isoSprite(1, 1, 54, (box) => {
-    // Outer door jamb frame
-    box(0.08, 0.08, 0.92, 0.20, 0, 52, ...FRAME);
-    box(0.08, 0.20, 0.20, 0.92, 0, 52, ...FRAME);
-    box(0.80, 0.20, 0.92, 0.92, 0, 52, ...FRAME);
-    box(0.20, 0.20, 0.80, 0.32, 50, 54, ...FRAME);
-    // Louvered panel slats
-    box(0.20, 0.40, 0.80, 0.48, 6, 48, ...SLAT);
-    // Brass handle & cabin signage plaque
-    box(0.72, 0.36, 0.78, 0.52, 22, 28, ...BRASS);
-    box(0.38, 0.36, 0.62, 0.50, 36, 42, ...BRASS);
+  const STEEL = ['#e2e8f0', '#cbd5e1', '#94a3b8'];
+
+  return isoSprite(1, 1, 56, (box) => {
+    // 1. Deep door frame jamb & threshold
+    box(0.06, 0.06, 0.94, 0.18, 0, 54, ...FRAME);
+    box(0.06, 0.18, 0.18, 0.94, 0, 54, ...FRAME);
+    box(0.82, 0.18, 0.94, 0.94, 0, 54, ...FRAME);
+    box(0.04, 0.04, 0.96, 0.20, 52, 56, ...FRAME_HI); // top lintel moulding
+
+    // 2. Door leaf body with stainless kickplate at base (z = 0 .. 50)
+    box(0.18, 0.38, 0.82, 0.48, 0, 6, ...STEEL); // protective kickplate
+    box(0.18, 0.38, 0.82, 0.48, 6, 50, ...SLAT);
+
+    // 3. Louvered ventilation slats along upper and lower door panels at 2x density
+    for (let z = 8; z < 22; z += 3) {
+      box(0.24, 0.46, 0.76, 0.50, z, z + 1.5, ...SLAT_DARK);
+    }
+    for (let z = 28; z < 46; z += 3) {
+      box(0.24, 0.46, 0.76, 0.50, z, z + 1.5, ...SLAT_DARK);
+    }
+
+    // 4. Commercial satin lever handle with privacy deadbolt
+    box(0.72, 0.44, 0.80, 0.52, 22, 27, ...STEEL);
+    box(0.70, 0.50, 0.82, 0.54, 25, 27, '#ffffff', '#f1f5f9', '#cbd5e1'); // lever handle
+
+    // 5. Engraved brass room occupancy / number plate
+    box(0.38, 0.46, 0.62, 0.50, 46, 50, ...BRASS);
   });
 }
 
 export function buildSpaPartition(rot = 0) {
   const FRAME = ['#4a3424', '#362418', '#241810'];
-  const GLASS = ['#a4deda', '#7accc6', '#52aba4'];
-  const CHROME = ['#dce6ee', '#b2c0cc', '#7c8c9a'];
+  const CHROME = ['#e4ecf2', '#bcc8d4', '#8898a6'];
+  const CHROME_HI = ['#ffffff', '#eaf2f8', '#c0ccd8'];
+  const GLASS = ['#a8e2de', '#76ccc4', '#4eaaa0'];
+  const BAMBOO = ['#5ca876', '#428856', '#2c663e'];
+
   return isoSprite(1, 1, 52, (box) => {
-    // Corner posts
-    box(0.06, 0.06, 0.22, 0.22, 0, 50, ...FRAME);
-    box(0.78, 0.78, 0.94, 0.94, 0, 50, ...FRAME);
-    // Lower solid plinth
-    box(0.06, 0.06, 0.94, 0.94, 0, 8, ...FRAME);
-    // Frosted glass partition screen
-    box(0.12, 0.12, 0.88, 0.88, 8, 48, ...GLASS);
-    // Top coping trim
-    box(0.04, 0.04, 0.96, 0.96, 48, 52, ...CHROME);
+    // Stainless steel mounting flange plates on floor
+    box(0.04, 0.04, 0.22, 0.22, 0, 3, ...CHROME);
+    box(0.78, 0.78, 0.96, 0.96, 0, 3, ...CHROME);
+
+    // Satin chrome tubular stanchion end posts
+    box(0.07, 0.07, 0.19, 0.19, 3, 50, ...CHROME);
+    box(0.06, 0.06, 0.20, 0.20, 50, 52, ...CHROME_HI); // top finial cap
+    box(0.81, 0.81, 0.93, 0.93, 3, 50, ...CHROME);
+    box(0.80, 0.80, 0.94, 0.94, 50, 52, ...CHROME_HI);
+
+    // Natural teak lower plinth shoe & top capping rail
+    box(0.08, 0.08, 0.92, 0.92, 3, 9, ...FRAME);
+    box(0.06, 0.06, 0.94, 0.94, 47, 51, ...FRAME);
+
+    // Frosted acoustic privacy glass screen
+    box(0.12, 0.12, 0.88, 0.88, 9, 47, ...GLASS);
+
+    // Laser-etched zen bamboo stalks & leaves on glass
+    box(0.32, 0.32, 0.38, 0.38, 12, 44, ...BAMBOO); // left bamboo cane
+    box(0.30, 0.30, 0.40, 0.40, 24, 26, ...FRAME); // node ring
+    box(0.30, 0.30, 0.40, 0.40, 35, 37, ...FRAME);
+
+    box(0.62, 0.62, 0.68, 0.68, 14, 46, ...BAMBOO); // right bamboo cane
+    box(0.60, 0.60, 0.70, 0.70, 22, 24, ...FRAME);
+    box(0.60, 0.60, 0.70, 0.70, 33, 35, ...FRAME);
+
+    // Delicate bamboo leaf shoots
+    box(0.38, 0.38, 0.48, 0.46, 26, 28, ...BAMBOO);
+    box(0.24, 0.26, 0.32, 0.34, 37, 39, ...BAMBOO);
+    box(0.54, 0.54, 0.62, 0.60, 35, 37, ...BAMBOO);
   });
 }
 
 export function buildSpaDoor(rot = 0) {
   const [tw, th] = rot % 2 ? [1, 2] : [2, 1];
   const BRONZE = ['#6e4a2c', '#4e341e', '#322012'];
+  const BRONZE_HI = ['#946842', '#724e30', '#4e341e'];
+  const CHROME = ['#e4ecf4', '#bcc8d4', '#8a9aa8'];
+  const CHROME_HI = ['#ffffff', '#eaf2f8', '#c0ccd8'];
+  const GLASS = ['#a8e4e0', '#74ccc2', '#4eaaa0'];
   const SIGN = ['#103840', '#0a242a', '#06161a'];
   const GOLD = ['#ffd478', '#dca848', '#9e7428'];
+
   return isoSprite(tw, th, 58, (box) => {
     // Two side pillars leaving the center open for walking through
     if (rot % 2 === 0) {
+      // Left door jamb & glass side light
       box(0.04, 0.12, 0.28, th - 0.12, 0, 54, ...BRONZE);
+      box(0.08, 0.14, 0.24, th - 0.14, 6, 46, ...GLASS);
+      // Stainless steel full-height architectural ladder pull handle
+      box(0.26, 0.14, 0.29, 0.20, 18, 38, ...CHROME);
+      box(0.27, 0.15, 0.30, 0.19, 20, 36, ...CHROME_HI);
+
+      // Right door jamb & glass side light
       box(tw - 0.28, 0.12, tw - 0.04, th - 0.12, 0, 54, ...BRONZE);
+      box(tw - 0.24, 0.14, tw - 0.08, th - 0.14, 6, 46, ...GLASS);
+      box(tw - 0.29, 0.14, tw - 0.26, 0.20, 18, 38, ...CHROME);
+      box(tw - 0.30, 0.15, tw - 0.27, 0.19, 20, 36, ...CHROME_HI);
+
       // Arched lintel header beam spanning overhead
-      box(0.04, 0.10, tw - 0.04, th - 0.10, 46, 56, ...BRONZE);
-      box(0.35, 0.08, tw - 0.35, th - 0.08, 48, 54, ...SIGN); // "AZURE SPA" sign
-      box(0.40, 0.06, tw - 0.40, th - 0.06, 49, 53, ...GOLD);
+      box(0.02, 0.10, tw - 0.02, th - 0.10, 46, 56, ...BRONZE);
+      box(0.04, 0.08, tw - 0.04, th - 0.08, 55, 57, ...BRONZE_HI); // top moulding
+      // "AZURE SPA" backlit transom sign
+      box(0.32, 0.08, tw - 0.32, th - 0.08, 48, 54, ...SIGN);
+      box(0.36, 0.06, tw - 0.36, th - 0.06, 49, 53, ...GOLD);
     } else {
+      // Left / rear door jamb
       box(0.12, 0.04, tw - 0.12, 0.28, 0, 54, ...BRONZE);
+      box(0.14, 0.08, tw - 0.14, 0.24, 6, 46, ...GLASS);
+      box(0.14, 0.26, 0.20, 0.29, 18, 38, ...CHROME);
+      box(0.15, 0.27, 0.19, 0.30, 20, 36, ...CHROME_HI);
+
+      // Right / front door jamb
       box(0.12, th - 0.28, tw - 0.12, th - 0.04, 0, 54, ...BRONZE);
-      box(0.10, 0.04, tw - 0.10, th - 0.04, 46, 56, ...BRONZE);
-      box(0.08, 0.35, tw - 0.08, th - 0.35, 48, 54, ...SIGN);
-      box(0.06, 0.40, tw - 0.06, th - 0.40, 49, 53, ...GOLD);
+      box(0.14, th - 0.24, tw - 0.14, th - 0.08, 6, 46, ...GLASS);
+      box(0.14, th - 0.29, 0.20, th - 0.26, 18, 38, ...CHROME);
+      box(0.15, th - 0.30, 0.19, th - 0.27, 20, 36, ...CHROME_HI);
+
+      // Overhead lintel beam
+      box(0.10, 0.02, tw - 0.10, th - 0.02, 46, 56, ...BRONZE);
+      box(0.08, 0.04, tw - 0.08, th - 0.04, 55, 57, ...BRONZE_HI);
+      box(0.08, 0.32, tw - 0.08, th - 0.32, 48, 54, ...SIGN);
+      box(0.06, 0.36, tw - 0.06, th - 0.36, 49, 53, ...GOLD);
     }
   });
 }
@@ -2313,182 +5044,430 @@ export function buildSpaDoor(rot = 0) {
 export function buildPergola(rot = 0) {
   const [tw, th] = rot % 2 ? [1, 2] : [2, 1];
   const CEDAR = ['#9e6438', '#7c4c28', '#58341a'];
-  const VINES = ['#38843c', '#28682c', '#18481c'];
-  const FLOWER = ['#f472b6', '#db2777', '#9d174d'];
-  return isoSprite(tw, th, 54, (box) => {
-    // 4 trellis posts
-    box(0.10, 0.10, 0.22, 0.22, 0, 48, ...CEDAR);
-    box(tw - 0.22, 0.10, tw - 0.10, 0.22, 0, 48, ...CEDAR);
-    box(0.10, th - 0.22, 0.22, th - 0.10, 0, 48, ...CEDAR);
-    box(tw - 0.22, th - 0.22, tw - 0.10, th - 0.10, 0, 48, ...CEDAR);
-    // Roof rafters
-    box(0.04, 0.04, tw - 0.04, th - 0.04, 48, 52, ...CEDAR);
-    // Climbing green vines & pink blossoms
-    box(0.06, 0.06, tw - 0.06, th - 0.06, 51, 54, ...VINES);
-    box(tw * 0.3, th * 0.3, tw * 0.45, th * 0.45, 53, 55, ...FLOWER);
-    box(tw * 0.7, th * 0.6, tw * 0.85, th * 0.75, 53, 55, ...FLOWER);
+  const BRACKET = ['#3a404c', '#282c36', '#1a1c24'];
+
+  return isoSprite(tw, th, 58, (box) => {
+    // 4 sturdy timber posts with galvanized steel footing shoes
+    const postCoords = [
+      [0.08, 0.08, 0.20, 0.20],
+      [tw - 0.20, 0.08, tw - 0.08, 0.20],
+      [0.08, th - 0.20, 0.20, th - 0.08],
+      [tw - 0.20, th - 0.20, tw - 0.08, th - 0.08]
+    ];
+    for (const [u0, v0, u1, v1] of postCoords) {
+      box(u0 - 0.01, v0 - 0.01, u1 + 0.01, v1 + 0.01, 0, 3, ...BRACKET);
+      box(u0, v0, u1, v1, 3, 48, ...CEDAR);
+      // Top post capital bracket
+      box(u0 - 0.02, v0 - 0.02, u1 + 0.02, v1 + 0.02, 46, 48, ...BRACKET);
+    }
+
+    // Overhead primary beams running along the length
+    if (tw >= th) {
+      box(0.04, 0.10, tw - 0.04, 0.18, 48, 51, ...CEDAR);
+      box(0.04, th - 0.18, tw - 0.04, th - 0.10, 48, 51, ...CEDAR);
+      // Cross-rafter slats with gaps
+      planks(box, 0.06, 0.04, tw - 0.06, th - 0.04, 51, 54, {
+        dir: 'u',
+        count: 5,
+        gap: 0.05,
+        wood: CEDAR,
+        grainDetail: true,
+      });
+    } else {
+      box(0.10, 0.04, 0.18, th - 0.04, 48, 51, ...CEDAR);
+      box(tw - 0.18, 0.04, tw - 0.10, th - 0.04, 48, 51, ...CEDAR);
+      planks(box, 0.04, 0.06, tw - 0.04, th - 0.06, 51, 54, {
+        dir: 'v',
+        count: 5,
+        gap: 0.05,
+        wood: CEDAR,
+        grainDetail: true,
+      });
+    }
+
+    // Climbing ivy & wisteria vine clusters draping over rafters and posts
+    leafCluster(box, tw * 0.30, th * 0.35, 53, 0.30, 0.30, 6, {
+      flowers: [{ x: 0, y: 0, z: 0.2, color: '#e879f9' }, { x: 0.1, y: 0.1, z: -0.2, color: '#c084fc' }]
+    });
+    leafCluster(box, tw * 0.70, th * 0.65, 54, 0.32, 0.30, 6, {
+      flowers: [{ x: -0.1, y: 0, z: 0.3, color: '#f472b6' }, { x: 0.1, y: -0.1, z: -0.2, color: '#e879f9' }]
+    });
+
+    // Hanging trailing wisteria flower cluster drops
+    box(tw * 0.28, th * 0.32, tw * 0.34, th * 0.38, 44, 49, '#d946ef', '#c026d3', '#86198f');
+    box(tw * 0.68, th * 0.62, tw * 0.74, th * 0.68, 43, 49, '#ec4899', '#db2777', '#9d174d');
   });
 }
 
 export function buildArcadeReserved(rot = 0) {
   const [tw, th] = [2, 2];
   const DARK = ['#1a1028', '#120a1c', '#0a0610'];
-  const NEON_YEL = ['#fde047', '#eab308', '#ca8a04'];
+  const CHROME = ['#eaf0f6', '#c4d0dc', '#90a0b0'];
+  const CHROME_HI = ['#ffffff', '#eef4f8', '#c8d4e0'];
+  const ROPE = ['#c8243c', '#981628', '#640c1a'];
+  const GOLD = ['#f4c654', '#cb982c', '#926a14'];
   const NEON_CYAN = ['#22d3ee', '#06b6d4', '#0891b2'];
-  return isoSprite(tw, th, 4, (box) => {
+
+  return isoSprite(tw, th, 36, (box) => {
+    // Glossy VIP floor tile deck
     box(0.04, 0.04, tw - 0.04, th - 0.04, 0, 2, ...DARK);
-    // Diagonal neon hazard stripes / marked reserved boundary
-    box(0.10, 0.10, tw - 0.10, 0.25, 1, 3, ...NEON_YEL);
-    box(0.10, th - 0.25, tw - 0.10, th - 0.10, 1, 3, ...NEON_YEL);
-    box(0.10, 0.25, 0.25, th - 0.25, 1, 3, ...NEON_YEL);
-    box(tw - 0.25, 0.25, tw - 0.10, th - 0.25, 1, 3, ...NEON_YEL);
-    // Center glowing badge
-    box(0.60, 0.60, 1.40, 1.40, 2, 4, ...NEON_CYAN);
+    // Gold braided rope border trim around perimeter
+    box(0.10, 0.10, tw - 0.10, 0.18, 1, 2.5, ...GOLD);
+    box(0.10, th - 0.18, tw - 0.10, th - 0.10, 1, 2.5, ...GOLD);
+    box(0.10, 0.18, 0.18, th - 0.18, 1, 2.5, ...GOLD);
+    box(tw - 0.18, 0.18, tw - 0.10, th - 0.18, 1, 2.5, ...GOLD);
+
+    // Center illuminated VIP crown badge
+    box(0.60, 0.60, 1.40, 1.40, 2, 3.5, ...NEON_CYAN);
+    box(0.80, 0.80, 1.20, 1.20, 3.5, 4.5, ...GOLD);
+
+    // 4 corner polished chrome stanchion posts with weighted dome bases
+    const posts = [
+      [0.16, 0.16],
+      [tw - 0.32, 0.16],
+      [0.16, th - 0.32],
+      [tw - 0.32, th - 0.32]
+    ];
+
+    for (const [px, py] of posts) {
+      // Weighted dome base
+      box(px - 0.04, py - 0.04, px + 0.20, py + 0.20, 0, 4, ...CHROME);
+      box(px, py, px + 0.16, py + 0.16, 4, 6, ...CHROME_HI);
+      // Stanchion post shaft
+      box(px + 0.04, py + 0.04, px + 0.12, py + 0.12, 6, 30, ...CHROME);
+      // Top ball finial and collar ring
+      box(px + 0.02, py + 0.02, px + 0.14, py + 0.14, 29, 32, ...GOLD);
+      box(px + 0.03, py + 0.03, px + 0.13, py + 0.13, 32, 35, ...CHROME_HI);
+    }
+
+    // Heavy twisted velvet barrier ropes with catenary droop sag
+    // Back rope (between post 0 and post 1)
+    box(0.32, 0.18, tw - 0.32, 0.24, 22, 26, ...ROPE);
+    box(0.70, 0.19, tw - 0.70, 0.23, 18, 22, ...ROPE); // lower droop center
+
+    // Front rope (between post 2 and post 3)
+    box(0.32, th - 0.24, tw - 0.32, th - 0.18, 22, 26, ...ROPE);
+    box(0.70, th - 0.23, tw - 0.70, th - 0.19, 18, 22, ...ROPE);
+
+    // Left rope (between post 0 and post 2)
+    box(0.18, 0.32, 0.24, th - 0.32, 22, 26, ...ROPE);
+    box(0.19, 0.70, 0.23, th - 0.70, 18, 22, ...ROPE);
+
+    // Right rope (between post 1 and post 3)
+    box(tw - 0.24, 0.32, tw - 0.18, th - 0.32, 22, 26, ...ROPE);
+    box(tw - 0.23, 0.70, tw - 0.19, th - 0.70, 18, 22, ...ROPE);
   });
 }
 
 // v0.8.7 Arcade Cabinets (Noodle Snake, Brick Bash, Block Drop) + Leaderboard
 export function buildArcadeSnake1(rot = 0) {
-  const CHASSIS = ['#1e4228', '#16321e', '#0e2014'];
-  const SCREEN = ['#18382c', '#10261e', '#0a1a14'];
-  return isoSprite(1, 1, 52, (box) => {
-    box(0.14, 0.14, 0.86, 0.86, 0, 18, ...CHASSIS);
-    box(0.32, 0.82, 0.68, 0.88, 4, 15, '#22222a', '#181820', '#101014');
-    box(0.46, 0.84, 0.54, 0.88, 9, 13, '#ffe27a', '#d8a834', '#98721c');
-    box(0.14, 0.44, 0.86, 0.88, 18, 24, '#16281a', '#101e14', '#0a140e');
-    box(0.28, 0.62, 0.36, 0.70, 24, 29, '#ff3850', '#d01c32', '#940e1e');
-    box(0.52, 0.64, 0.60, 0.72, 24, 26, '#ffd600', '#d4b000', '#947a00');
-    box(0.68, 0.60, 0.76, 0.68, 24, 26, '#ffd600', '#d4b000', '#947a00');
-    box(0.18, 0.24, 0.82, 0.70, 24, 42, ...SCREEN);
-    // Noodle snake graphic
-    box(0.30, 0.32, 0.68, 0.38, 28, 32, '#ffea60', '#d4c240', '#94841c');
-    box(0.62, 0.38, 0.68, 0.56, 28, 32, '#ffea60', '#d4c240', '#94841c');
-    box(0.36, 0.50, 0.62, 0.56, 32, 36, '#ffea60', '#d4c240', '#94841c');
+  const CHASSIS = ['#24422c', '#183020', '#102014'];
+  const TMOLD = ['#f59e0b', '#d97706', '#92400e']; // amber gold T-molding
+  const SCREEN_BEZEL = ['#121814', '#0c120e', '#060a08'];
+  const SCREEN = ['#0a1810', '#06100a', '#040a06'];
+  const CHROME = ['#b8c4d2', '#909ea8', '#62707e'];
+
+  return isoSprite(1, 1, 54, (box) => {
+    // 1. Woodgrain green cabinet base & coin door (z = 0 .. 18)
+    box(0.12, 0.14, 0.88, 0.86, 0, 18, ...CHASSIS);
+    box(0.11, 0.13, 0.13, 0.87, 0, 18, ...TMOLD);
+    box(0.87, 0.13, 0.89, 0.87, 0, 18, ...TMOLD);
+
+    // Double coin door with illuminated 25c buttons
+    box(0.28, 0.80, 0.72, 0.87, 3, 16, '#181a20', '#101216', '#080a0c');
+    box(0.34, 0.85, 0.44, 0.88, 8, 12, '#ff9800', '#e65100', '#b23c00');
+    box(0.56, 0.85, 0.66, 0.88, 8, 12, '#ff9800', '#e65100', '#b23c00');
+    box(0.34, 0.84, 0.44, 0.88, 4.5, 7, '#0e1014', '#080a0c', '#040406');
+    box(0.56, 0.84, 0.66, 0.88, 4.5, 7, '#0e1014', '#080a0c', '#040406');
+
+    // 2. Slanted control panel deck (z = 18 .. 25)
+    box(0.12, 0.40, 0.88, 0.88, 18, 25, ...CHASSIS);
+    box(0.11, 0.39, 0.89, 0.89, 23.5, 25.5, ...TMOLD);
+
+    // Ball-top red joystick & action buttons
+    box(0.24, 0.60, 0.32, 0.68, 25, 27, ...CHROME);
+    box(0.22, 0.58, 0.34, 0.70, 27, 31, '#ef4444', '#dc2626', '#991b1b');
+    box(0.52, 0.64, 0.60, 0.72, 25, 26.5, '#eab308', '#ca8a04', '#a16207'); // yellow button
+    box(0.68, 0.60, 0.76, 0.68, 25, 26.5, '#22c55e', '#16a34a', '#15803d'); // green button
+
+    // 3. CRT monitor showing Noodle Snake gameplay (z = 24 .. 43)
+    box(0.14, 0.20, 0.86, 0.65, 24, 43, ...SCREEN_BEZEL);
+    box(0.18, 0.24, 0.82, 0.60, 25, 42, ...SCREEN);
+    // Glass glare
+    box(0.20, 0.52, 0.30, 0.58, 38, 41, '#34d399', '#059669', '#047857');
+
+    // Pixel snake segments curving across CRT grid
+    box(0.30, 0.32, 0.68, 0.38, 28, 32, '#4ade80', '#22c55e', '#16a34a'); // snake body
+    box(0.62, 0.38, 0.68, 0.56, 28, 32, '#4ade80', '#22c55e', '#16a34a');
+    box(0.36, 0.50, 0.62, 0.56, 32, 36, '#4ade80', '#22c55e', '#16a34a'); // head
+    // Glowing red fruit target
     box(0.32, 0.60, 0.40, 0.66, 34, 38, '#ff3344', '#cc1c2c', '#8c0e18');
-    // Marquee
-    box(0.14, 0.20, 0.86, 0.56, 42, 50, '#ffb300', '#cc8f00', '#8c6000');
-    box(0.22, 0.54, 0.78, 0.58, 44, 48, '#fff9c4', '#fff176', '#fbc02d');
+    box(0.34, 0.62, 0.38, 0.64, 38, 39, '#86efac', '#4ade80', '#22c55e'); // fruit stem
+
+    // 4. Backlit "Noodle Snake" marquee (z = 43 .. 54)
+    box(0.12, 0.16, 0.88, 0.52, 43, 54, ...CHASSIS);
+    box(0.11, 0.15, 0.89, 0.53, 51, 54, ...TMOLD);
+    box(0.18, 0.48, 0.82, 0.53, 44, 52, '#fef08a', '#facc15', '#ca8a04'); // glowing amber
+    box(0.22, 0.50, 0.78, 0.535, 46, 50, '#15803d', '#166534', '#14532d'); // title text
   });
 }
 
 export function buildArcadeSnake2(rot = 0) {
-  const CHASSIS = ['#4a1838', '#361028', '#22081a'];
-  const SCREEN = ['#241432', '#1a0e24', '#100818'];
-  return isoSprite(1, 1, 52, (box) => {
-    box(0.14, 0.14, 0.86, 0.86, 0, 18, ...CHASSIS);
-    box(0.32, 0.82, 0.68, 0.88, 4, 15, '#22222a', '#181820', '#101014');
-    box(0.46, 0.84, 0.54, 0.88, 9, 13, '#ffe27a', '#d8a834', '#98721c');
-    box(0.14, 0.44, 0.86, 0.88, 18, 24, '#2e1026', '#200a1a', '#140610');
-    box(0.28, 0.62, 0.36, 0.70, 24, 29, '#00e676', '#00b85c', '#007a3d');
-    box(0.52, 0.64, 0.60, 0.72, 24, 26, '#00e5ff', '#00b4cc', '#007a8a');
-    box(0.68, 0.60, 0.76, 0.68, 24, 26, '#00e5ff', '#00b4cc', '#007a8a');
-    box(0.18, 0.24, 0.82, 0.70, 24, 42, ...SCREEN);
-    // Neon serpent graphic
+  const CHASSIS = ['#421a38', '#2e1026', '#1a0816'];
+  const TMOLD = ['#00e5ff', '#00b4cc', '#007a8a']; // neon cyan T-mold
+  const SCREEN_BEZEL = ['#1a0e1e', '#120816', '#0a040e'];
+  const SCREEN = ['#14081e', '#0c0414', '#06020a'];
+  const CHROME = ['#b8c4d2', '#909ea8', '#62707e'];
+
+  return isoSprite(1, 1, 54, (box) => {
+    // 1. Cyberpunk neon-cyan cabinet base (z = 0 .. 18)
+    box(0.12, 0.14, 0.88, 0.86, 0, 18, ...CHASSIS);
+    box(0.11, 0.13, 0.13, 0.87, 0, 18, ...TMOLD);
+    box(0.87, 0.13, 0.89, 0.87, 0, 18, ...TMOLD);
+
+    // Black light coin door
+    box(0.28, 0.80, 0.72, 0.87, 3, 16, '#181422', '#100c18', '#08060e');
+    box(0.34, 0.85, 0.44, 0.88, 8, 12, '#00e5ff', '#00b4cc', '#007a8a');
+    box(0.56, 0.85, 0.66, 0.88, 8, 12, '#00e5ff', '#00b4cc', '#007a8a');
+    box(0.34, 0.84, 0.44, 0.88, 4.5, 7, '#08060e', '#040208', '#020004');
+    box(0.56, 0.84, 0.66, 0.88, 4.5, 7, '#08060e', '#040208', '#020004');
+
+    // 2. Control deck with illuminated LED joystick (z = 18 .. 25)
+    box(0.12, 0.40, 0.88, 0.88, 18, 25, ...CHASSIS);
+    box(0.11, 0.39, 0.89, 0.89, 23.5, 25.5, ...TMOLD);
+
+    // Illuminated cyan ball-top joystick
+    box(0.24, 0.60, 0.32, 0.68, 25, 27, ...CHROME);
+    box(0.22, 0.58, 0.34, 0.70, 27, 31, '#00e5ff', '#00b4cc', '#007a8a');
+    box(0.52, 0.64, 0.60, 0.72, 25, 26.5, '#ff007f', '#c70063', '#8a0044'); // hot pink button
+    box(0.68, 0.60, 0.76, 0.68, 25, 26.5, '#76ff03', '#5cc702', '#3d8501'); // neon green button
+
+    // 3. CRT display showing high-contrast neon serpent trails (z = 24 .. 43)
+    box(0.14, 0.20, 0.86, 0.65, 24, 43, ...SCREEN_BEZEL);
+    box(0.18, 0.24, 0.82, 0.60, 25, 42, ...SCREEN);
+    // Neon glass glare
+    box(0.20, 0.52, 0.30, 0.58, 38, 41, '#ff007f', '#c70063', '#8a0044');
+
+    // Neon glowing trailing snake
     box(0.28, 0.36, 0.50, 0.42, 28, 32, '#00e676', '#00b85c', '#007a3d');
     box(0.44, 0.42, 0.50, 0.62, 28, 34, '#00e676', '#00b85c', '#007a3d');
     box(0.44, 0.56, 0.72, 0.62, 32, 36, '#00e676', '#00b85c', '#007a3d');
-    box(0.68, 0.36, 0.76, 0.44, 30, 36, '#ffd600', '#c7a700', '#8a7400');
-    // Marquee
-    box(0.14, 0.20, 0.86, 0.56, 42, 50, '#ff007f', '#c70063', '#8a0044');
-    box(0.22, 0.54, 0.78, 0.58, 44, 48, '#80d8ff', '#40c4ff', '#00b0ff');
+    box(0.68, 0.36, 0.76, 0.44, 30, 36, '#ffd600', '#c7a700', '#8a7400'); // glowing orb
+
+    // 4. Holographic "Neon Snake" marquee (z = 43 .. 54)
+    box(0.12, 0.16, 0.88, 0.52, 43, 54, ...CHASSIS);
+    box(0.11, 0.15, 0.89, 0.53, 51, 54, ...TMOLD);
+    box(0.18, 0.48, 0.82, 0.53, 44, 52, '#ff007f', '#c70063', '#8a0044'); // hot magenta
+    box(0.22, 0.50, 0.78, 0.535, 46, 50, '#80d8ff', '#40c4ff', '#00b0ff'); // cyan neon title
   });
 }
 
 export function buildArcadeBreakout1(rot = 0) {
-  const CHASSIS = ['#182a4d', '#12203b', '#0c1426'];
-  const SCREEN = ['#14223d', '#0e182c', '#08101e'];
-  return isoSprite(1, 1, 52, (box) => {
-    box(0.14, 0.14, 0.86, 0.86, 0, 18, ...CHASSIS);
-    box(0.32, 0.82, 0.68, 0.88, 4, 15, '#22222a', '#181820', '#101014');
-    box(0.46, 0.84, 0.54, 0.88, 9, 13, '#ffe27a', '#d8a834', '#98721c');
-    box(0.14, 0.44, 0.86, 0.88, 18, 24, '#121e36', '#0c1626', '#080e18');
-    box(0.28, 0.62, 0.36, 0.70, 24, 29, '#ff9100', '#cc7400', '#8a4e00');
-    box(0.52, 0.64, 0.60, 0.72, 24, 26, '#ff4081', '#d42862', '#941440');
-    box(0.68, 0.60, 0.76, 0.68, 24, 26, '#ff4081', '#d42862', '#941440');
-    box(0.18, 0.24, 0.82, 0.70, 24, 42, ...SCREEN);
-    // Bricks on CRT
-    box(0.26, 0.32, 0.42, 0.36, 36, 40, '#ff1744', '#cc0e34', '#8a0620');
-    box(0.46, 0.32, 0.62, 0.36, 36, 40, '#ffd600', '#c7a700', '#8a7400');
-    box(0.66, 0.32, 0.80, 0.36, 36, 40, '#00e5ff', '#00b4cc', '#007a8a');
-    box(0.34, 0.40, 0.50, 0.44, 33, 37, '#76ff03', '#5cc702', '#3d8501');
-    box(0.54, 0.40, 0.70, 0.44, 33, 37, '#ff9100', '#cc7400', '#8a4e00');
-    // Ball & paddle
-    box(0.48, 0.50, 0.54, 0.54, 30, 33, '#ffffff', '#e0e0e0', '#b0b0b0');
-    box(0.36, 0.60, 0.66, 0.64, 26, 29, '#00e5ff', '#00b4cc', '#007a8a');
-    // Marquee
-    box(0.14, 0.20, 0.86, 0.56, 42, 50, '#ff6d00', '#cc5700', '#8f3d00');
-    box(0.22, 0.54, 0.78, 0.58, 44, 48, '#fff3e0', '#ffe0b2', '#ffb74d');
+  const CHASSIS = ['#c25e1a', '#9e460e', '#6e2e06'];
+  const TMOLD = ['#fef08a', '#facc15', '#ca8a04']; // warm cream T-mold
+  const SCREEN_BEZEL = ['#1a1410', '#120e0a', '#0a0806'];
+  const SCREEN = ['#0e1424', '#080c18', '#040610'];
+  const CHROME = ['#b8c4d2', '#909ea8', '#62707e'];
+
+  return isoSprite(1, 1, 54, (box) => {
+    // 1. Vintage 1970s orange cabinet body (z = 0 .. 18)
+    box(0.12, 0.14, 0.88, 0.86, 0, 18, ...CHASSIS);
+    box(0.11, 0.13, 0.13, 0.87, 0, 18, ...TMOLD);
+    box(0.87, 0.13, 0.89, 0.87, 0, 18, ...TMOLD);
+
+    // Front speaker slots & coin door
+    box(0.28, 0.80, 0.72, 0.87, 3, 16, '#181a20', '#101216', '#080a0c');
+    box(0.34, 0.85, 0.44, 0.88, 8, 12, '#ff9800', '#e65100', '#b23c00');
+    box(0.56, 0.85, 0.66, 0.88, 8, 12, '#ff9800', '#e65100', '#b23c00');
+    box(0.34, 0.84, 0.44, 0.88, 4.5, 7, '#0e1014', '#080a0c', '#040406');
+    box(0.56, 0.84, 0.66, 0.88, 4.5, 7, '#0e1014', '#080a0c', '#040406');
+
+    // 2. Control deck with precision spinner dial (z = 18 .. 25)
+    box(0.12, 0.40, 0.88, 0.88, 18, 25, ...CHASSIS);
+    box(0.11, 0.39, 0.89, 0.89, 23.5, 25.5, ...TMOLD);
+
+    // Precision aluminum rotary paddle spinner knob
+    box(0.24, 0.58, 0.40, 0.74, 25, 29, ...CHROME);
+    box(0.28, 0.62, 0.36, 0.70, 29, 31, '#ffffff', '#e8e8e8', '#cccccc'); // top indicator dimple
+    // Ball launch button
+    box(0.60, 0.60, 0.72, 0.72, 25, 27, '#ef4444', '#dc2626', '#991b1b');
+
+    // 3. CRT display showing multi-color brick wall, paddle, and ball (z = 24 .. 43)
+    box(0.14, 0.20, 0.86, 0.65, 24, 43, ...SCREEN_BEZEL);
+    box(0.18, 0.24, 0.82, 0.60, 25, 42, ...SCREEN);
+    // CRT glass sheen
+    box(0.20, 0.52, 0.30, 0.58, 38, 41, '#38bdf8', '#0284c7', '#0369a1');
+
+    // 4-row brick wall
+    box(0.24, 0.30, 0.40, 0.35, 37, 40, '#ff1744', '#cc0e34', '#8a0620');
+    box(0.44, 0.30, 0.60, 0.35, 37, 40, '#ffd600', '#c7a700', '#8a7400');
+    box(0.64, 0.30, 0.80, 0.35, 37, 40, '#00e5ff', '#00b4cc', '#007a8a');
+    box(0.32, 0.38, 0.48, 0.43, 33, 36, '#76ff03', '#5cc702', '#3d8501');
+    box(0.52, 0.38, 0.68, 0.43, 33, 36, '#ff9100', '#cc7400', '#8a4e00');
+
+    // Ball & reflecting paddle
+    box(0.48, 0.50, 0.54, 0.54, 29, 32, '#ffffff', '#e0e0e0', '#b0b0b0');
+    box(0.36, 0.58, 0.66, 0.62, 26, 29, '#00e5ff', '#00b4cc', '#007a8a');
+
+    // 4. Backlit "Brick Bash" marquee (z = 43 .. 54)
+    box(0.12, 0.16, 0.88, 0.52, 43, 54, ...CHASSIS);
+    box(0.11, 0.15, 0.89, 0.53, 51, 54, ...TMOLD);
+    box(0.18, 0.48, 0.82, 0.53, 44, 52, '#ff6d00', '#cc5700', '#8f3d00'); // warm orange
+    box(0.22, 0.50, 0.78, 0.535, 46, 50, '#fff3e0', '#ffe0b2', '#ffb74d'); // retro lettering
   });
 }
 
 export function buildArcadeBreakout2(rot = 0) {
-  const CHASSIS = ['#2e3038', '#22242a', '#16171b'];
-  const SCREEN = ['#181a20', '#101216', '#0a0b0e'];
-  return isoSprite(1, 1, 52, (box) => {
-    box(0.14, 0.14, 0.86, 0.86, 0, 18, ...CHASSIS);
-    box(0.32, 0.82, 0.68, 0.88, 4, 15, '#22222a', '#181820', '#101014');
-    box(0.46, 0.84, 0.54, 0.88, 9, 13, '#ffe27a', '#d8a834', '#98721c');
-    box(0.14, 0.44, 0.86, 0.88, 18, 24, '#202228', '#16181e', '#0e0f14');
-    box(0.28, 0.62, 0.36, 0.70, 24, 29, '#ff1744', '#cc0e34', '#8a0620');
-    box(0.52, 0.64, 0.60, 0.72, 24, 26, '#ffd600', '#c7a700', '#8a7400');
-    box(0.68, 0.60, 0.76, 0.68, 24, 26, '#ffd600', '#c7a700', '#8a7400');
-    box(0.18, 0.24, 0.82, 0.70, 24, 42, ...SCREEN);
-    // Neon bricks
-    box(0.26, 0.32, 0.44, 0.36, 36, 40, '#ff4081', '#d42862', '#941440');
-    box(0.48, 0.32, 0.66, 0.36, 36, 40, '#76ff03', '#5cc702', '#3d8501');
-    box(0.36, 0.40, 0.54, 0.44, 32, 36, '#ffd600', '#c7a700', '#8a7400');
-    // Ball & metallic paddle
-    box(0.42, 0.50, 0.48, 0.54, 29, 32, '#ffff00', '#d4d400', '#949400');
-    box(0.32, 0.60, 0.68, 0.64, 26, 29, '#eceff1', '#cfd8dc', '#b0bec5');
-    // Marquee
-    box(0.14, 0.20, 0.86, 0.56, 42, 50, '#d50000', '#a00000', '#6b0000');
-    box(0.22, 0.54, 0.78, 0.58, 44, 48, '#ff8a80', '#ff5252', '#ff1744');
+  const CHASSIS = ['#322842', '#221a2e', '#140e1c'];
+  const TMOLD = ['#ff0055', '#cc0044', '#88002e']; // hot red/magenta T-mold
+  const SCREEN_BEZEL = ['#161220', '#0e0a16', '#08060e'];
+  const SCREEN = ['#100a18', '#080410', '#040208'];
+  const CHROME = ['#b8c4d2', '#909ea8', '#62707e'];
+
+  return isoSprite(1, 1, 54, (box) => {
+    // 1. High-octane Turbo cabinet base (z = 0 .. 18)
+    box(0.12, 0.14, 0.88, 0.86, 0, 18, ...CHASSIS);
+    box(0.11, 0.13, 0.13, 0.87, 0, 18, ...TMOLD);
+    box(0.87, 0.13, 0.89, 0.87, 0, 18, ...TMOLD);
+
+    // Coin door with neon return
+    box(0.28, 0.80, 0.72, 0.87, 3, 16, '#181222', '#100a18', '#08040e');
+    box(0.34, 0.85, 0.44, 0.88, 8, 12, '#ff0055', '#cc0044', '#88002e');
+    box(0.56, 0.85, 0.66, 0.88, 8, 12, '#ff0055', '#cc0044', '#88002e');
+    box(0.34, 0.84, 0.44, 0.88, 4.5, 7, '#08040e', '#040208', '#020004');
+    box(0.56, 0.84, 0.66, 0.88, 4.5, 7, '#08040e', '#040208', '#020004');
+
+    // 2. Control deck with heavy spinner & dual turbo launch buttons (z = 18 .. 25)
+    box(0.12, 0.40, 0.88, 0.88, 18, 25, ...CHASSIS);
+    box(0.11, 0.39, 0.89, 0.89, 23.5, 25.5, ...TMOLD);
+
+    box(0.24, 0.58, 0.40, 0.74, 25, 29, ...CHROME);
+    box(0.28, 0.62, 0.36, 0.70, 29, 31, '#ff0055', '#cc0044', '#88002e');
+    box(0.54, 0.62, 0.62, 0.70, 25, 27, '#ffd600', '#c7a700', '#8a7400'); // launch 1
+    box(0.68, 0.62, 0.76, 0.70, 25, 27, '#ff1744', '#cc0e34', '#8a0620'); // launch 2
+
+    // 3. CRT display showing multi-ball powerups & laser beams (z = 24 .. 43)
+    box(0.14, 0.20, 0.86, 0.65, 24, 43, ...SCREEN_BEZEL);
+    box(0.18, 0.24, 0.82, 0.60, 25, 42, ...SCREEN);
+    // CRT glass sheen
+    box(0.20, 0.52, 0.30, 0.58, 38, 41, '#ff4081', '#d42862', '#941440');
+
+    // Turbo neon bricks
+    box(0.24, 0.30, 0.42, 0.35, 37, 40, '#ff4081', '#d42862', '#941440');
+    box(0.46, 0.30, 0.64, 0.35, 37, 40, '#76ff03', '#5cc702', '#3d8501');
+    box(0.36, 0.38, 0.54, 0.43, 33, 36, '#ffd600', '#c7a700', '#8a7400');
+    // Multi-balls
+    box(0.40, 0.48, 0.46, 0.52, 29, 32, '#ffff00', '#d4d400', '#949400');
+    box(0.54, 0.46, 0.60, 0.50, 31, 34, '#00e5ff', '#00b4cc', '#007a8a');
+    // Metallic wide paddle
+    box(0.32, 0.58, 0.68, 0.62, 26, 29, '#eceff1', '#cfd8dc', '#b0bec5');
+
+    // 4. Backlit "Turbo Brick" marquee (z = 43 .. 54)
+    box(0.12, 0.16, 0.88, 0.52, 43, 54, ...CHASSIS);
+    box(0.11, 0.15, 0.89, 0.53, 51, 54, ...TMOLD);
+    box(0.18, 0.48, 0.82, 0.53, 44, 52, '#d50000', '#a00000', '#6b0000');
+    box(0.22, 0.50, 0.78, 0.535, 46, 50, '#ff8a80', '#ff5252', '#ff1744');
   });
 }
 
 export function buildArcadeDrop1(rot = 0) {
-  const CHASSIS = ['#282048', '#1c1634', '#120e22'];
-  const SCREEN = ['#101628', '#0c101e', '#080a14'];
-  return isoSprite(1, 1, 52, (box) => {
-    box(0.14, 0.14, 0.86, 0.86, 0, 18, ...CHASSIS);
-    box(0.32, 0.82, 0.68, 0.88, 4, 15, '#22222a', '#181820', '#101014');
-    box(0.46, 0.84, 0.54, 0.88, 9, 13, '#ffe27a', '#d8a834', '#98721c');
-    box(0.14, 0.44, 0.86, 0.88, 18, 24, '#1c1432', '#140c24', '#0c0818');
-    box(0.28, 0.62, 0.36, 0.70, 24, 29, '#00b0ff', '#008ecc', '#005f8a');
-    box(0.52, 0.64, 0.60, 0.72, 24, 26, '#b388ff', '#8f5fe8', '#633bb8');
-    box(0.68, 0.60, 0.76, 0.68, 24, 26, '#b388ff', '#8f5fe8', '#633bb8');
-    box(0.18, 0.24, 0.82, 0.70, 24, 42, ...SCREEN);
-    // Polyomino blocks on CRT
-    box(0.40, 0.34, 0.56, 0.38, 36, 40, '#00e5ff', '#00b4cc', '#007a8a'); // cyan piece
-    box(0.30, 0.44, 0.46, 0.48, 30, 34, '#ff9100', '#cc7400', '#8a4e00'); // orange
+  const CHASSIS = ['#1e2954', '#141c3c', '#0c1026'];
+  const TMOLD = ['#38bdf8', '#0284c7', '#0369a1']; // cyan T-mold
+  const SCREEN_BEZEL = ['#101424', '#0a0c18', '#060810'];
+  const SCREEN = ['#080c18', '#040610', '#02040a'];
+  const CHROME = ['#b8c4d2', '#909ea8', '#62707e'];
+
+  return isoSprite(1, 1, 54, (box) => {
+    // 1. Deep cobalt blue cabinet base (z = 0 .. 18)
+    box(0.12, 0.14, 0.88, 0.86, 0, 18, ...CHASSIS);
+    box(0.11, 0.13, 0.13, 0.87, 0, 18, ...TMOLD);
+    box(0.87, 0.13, 0.89, 0.87, 0, 18, ...TMOLD);
+
+    // Coin door
+    box(0.28, 0.80, 0.72, 0.87, 3, 16, '#181a24', '#101218', '#080a10');
+    box(0.34, 0.85, 0.44, 0.88, 8, 12, '#ff9800', '#e65100', '#b23c00');
+    box(0.56, 0.85, 0.66, 0.88, 8, 12, '#ff9800', '#e65100', '#b23c00');
+    box(0.34, 0.84, 0.44, 0.88, 4.5, 7, '#0e1016', '#080a0e', '#040408');
+    box(0.56, 0.84, 0.66, 0.88, 4.5, 7, '#0e1016', '#080a0e', '#040408');
+
+    // 2. Control deck with 4-way joystick & rotation buttons (z = 18 .. 25)
+    box(0.12, 0.40, 0.88, 0.88, 18, 25, ...CHASSIS);
+    box(0.11, 0.39, 0.89, 0.89, 23.5, 25.5, ...TMOLD);
+
+    box(0.24, 0.60, 0.32, 0.68, 25, 27, ...CHROME);
+    box(0.22, 0.58, 0.34, 0.70, 27, 31, '#00b0ff', '#008ecc', '#005f8a'); // blue joystick
+    box(0.52, 0.64, 0.60, 0.72, 25, 26.5, '#b388ff', '#8f5fe8', '#633bb8'); // rotate
+    box(0.68, 0.60, 0.76, 0.68, 25, 26.5, '#00e5ff', '#00b4cc', '#007a8a'); // hard drop
+
+    // 3. CRT screen displaying falling polyomino shapes (z = 24 .. 43)
+    box(0.14, 0.20, 0.86, 0.65, 24, 43, ...SCREEN_BEZEL);
+    box(0.18, 0.24, 0.82, 0.60, 25, 42, ...SCREEN);
+    // CRT glass glare
+    box(0.20, 0.52, 0.30, 0.58, 38, 41, '#38bdf8', '#0284c7', '#0369a1');
+
+    // Falling polyomino tetromino pieces
+    box(0.40, 0.34, 0.56, 0.38, 36, 40, '#00e5ff', '#00b4cc', '#007a8a'); // cyan I-piece
+    box(0.30, 0.44, 0.46, 0.48, 30, 34, '#ff9100', '#cc7400', '#8a4e00'); // orange L
     box(0.46, 0.44, 0.62, 0.48, 30, 34, '#b388ff', '#8f5fe8', '#633bb8'); // purple T
-    box(0.36, 0.54, 0.68, 0.58, 26, 29, '#00e676', '#00b85c', '#007a3d'); // base row
-    // Marquee
-    box(0.14, 0.20, 0.86, 0.56, 42, 50, '#00b0ff', '#008ecc', '#005f8a');
-    box(0.22, 0.54, 0.78, 0.58, 44, 48, '#e1f5fe', '#b3e5fc', '#81d4fa');
+    box(0.36, 0.54, 0.68, 0.58, 26, 29, '#00e676', '#00b85c', '#007a3d'); // clearing matrix line
+
+    // 4. Backlit "Block Drop" marquee (z = 43 .. 54)
+    box(0.12, 0.16, 0.88, 0.52, 43, 54, ...CHASSIS);
+    box(0.11, 0.15, 0.89, 0.53, 51, 54, ...TMOLD);
+    box(0.18, 0.48, 0.82, 0.53, 44, 52, '#00b0ff', '#008ecc', '#005f8a');
+    box(0.22, 0.50, 0.78, 0.535, 46, 50, '#e1f5fe', '#b3e5fc', '#81d4fa');
   });
 }
 
 export function buildArcadeDrop2(rot = 0) {
-  const CHASSIS = ['#e0e4ec', '#b0b8c4', '#808894'];
-  const SCREEN = ['#141a24', '#0e121a', '#080a10'];
-  return isoSprite(1, 1, 52, (box) => {
-    box(0.14, 0.14, 0.86, 0.86, 0, 18, ...CHASSIS);
-    box(0.32, 0.82, 0.68, 0.88, 4, 15, '#22222a', '#181820', '#101014');
-    box(0.46, 0.84, 0.54, 0.88, 9, 13, '#ffe27a', '#d8a834', '#98721c');
-    box(0.14, 0.44, 0.86, 0.88, 18, 24, '#242830', '#1a1c22', '#101216');
-    box(0.28, 0.62, 0.36, 0.70, 24, 29, '#ffd600', '#c7a700', '#8a7400');
-    box(0.52, 0.64, 0.60, 0.72, 24, 26, '#00e5ff', '#00b4cc', '#007a8a');
-    box(0.68, 0.60, 0.76, 0.68, 24, 26, '#00e5ff', '#00b4cc', '#007a8a');
-    box(0.18, 0.24, 0.82, 0.70, 24, 42, ...SCREEN);
-    // Cyberpunk blocks on CRT
+  const CHASSIS = ['#282c38', '#1c2028', '#101218'];
+  const TMOLD = ['#ffd700', '#d4af37', '#997a15']; // golden T-mold
+  const SCREEN_BEZEL = ['#14161e', '#0e1016', '#080a0e'];
+  const SCREEN = ['#0a0e18', '#060810', '#04060a'];
+  const CHROME = ['#e0e4ec', '#b0b8c4', '#808894'];
+
+  return isoSprite(1, 1, 54, (box) => {
+    // 1. Deluxe golden edition cabinet base (z = 0 .. 18)
+    box(0.12, 0.14, 0.88, 0.86, 0, 18, ...CHASSIS);
+    box(0.11, 0.13, 0.13, 0.87, 0, 18, ...TMOLD);
+    box(0.87, 0.13, 0.89, 0.87, 0, 18, ...TMOLD);
+
+    // Front stereo sound speakers with gold rings & coin door
+    box(0.18, 0.82, 0.28, 0.86, 6, 14, ...TMOLD); // left gold speaker ring
+    box(0.20, 0.84, 0.26, 0.87, 8, 12, '#181a20', '#101216', '#080a0c');
+    box(0.72, 0.82, 0.82, 0.86, 6, 14, ...TMOLD); // right gold speaker ring
+    box(0.74, 0.84, 0.80, 0.87, 8, 12, '#181a20', '#101216', '#080a0c');
+
+    box(0.36, 0.80, 0.64, 0.87, 3, 16, '#181a24', '#101218', '#080a10');
+    box(0.40, 0.85, 0.48, 0.88, 8, 12, '#ffd700', '#d4af37', '#997a15'); // gold coin slot
+    box(0.52, 0.85, 0.60, 0.88, 8, 12, '#ffd700', '#d4af37', '#997a15');
+
+    // 2. Control deck with gold ball joystick & backlit buttons (z = 18 .. 25)
+    box(0.12, 0.40, 0.88, 0.88, 18, 25, ...CHASSIS);
+    box(0.11, 0.39, 0.89, 0.89, 23.5, 25.5, ...TMOLD);
+
+    box(0.24, 0.60, 0.32, 0.68, 25, 27, ...CHROME);
+    box(0.22, 0.58, 0.34, 0.70, 27, 31, '#ffd700', '#d4af37', '#997a15'); // gold joystick
+    box(0.52, 0.64, 0.60, 0.72, 25, 26.5, '#00e5ff', '#00b4cc', '#007a8a');
+    box(0.68, 0.60, 0.76, 0.68, 25, 26.5, '#ff4081', '#d42862', '#941440');
+
+    // 3. CRT display showing deluxe action & multipliers (z = 24 .. 43)
+    box(0.14, 0.20, 0.86, 0.65, 24, 43, ...SCREEN_BEZEL);
+    box(0.18, 0.24, 0.82, 0.60, 25, 42, ...SCREEN);
+    // CRT glass sheen
+    box(0.20, 0.52, 0.30, 0.58, 38, 41, '#ffd700', '#d4af37', '#997a15');
+
+    // Cyberpunk blocks & x4 multiplier badge
     box(0.32, 0.34, 0.48, 0.38, 36, 40, '#ffd600', '#c7a700', '#8a7400');
     box(0.50, 0.34, 0.66, 0.38, 36, 40, '#ff1744', '#cc0e34', '#8a0620');
     box(0.38, 0.44, 0.60, 0.48, 31, 35, '#00e5ff', '#00b4cc', '#007a8a');
     box(0.28, 0.56, 0.72, 0.60, 26, 29, '#76ff03', '#5cc702', '#3d8501');
-    // Marquee
-    box(0.14, 0.20, 0.86, 0.56, 42, 50, '#ffd600', '#c7a700', '#8a7400');
-    box(0.22, 0.54, 0.78, 0.58, 44, 48, '#263238', '#1a2226', '#101417');
+
+    // 4. Backlit "Block Drop Deluxe" gold marquee (z = 43 .. 54)
+    box(0.12, 0.16, 0.88, 0.52, 43, 54, ...CHASSIS);
+    box(0.11, 0.15, 0.89, 0.53, 51, 54, ...TMOLD);
+    box(0.18, 0.48, 0.82, 0.53, 44, 52, '#ffd600', '#c7a700', '#8a7400'); // gold marquee
+    box(0.22, 0.50, 0.78, 0.535, 46, 50, '#1a1c24', '#101218', '#080a10'); // deluxe lettering
   });
 }
 
@@ -2497,45 +5476,109 @@ export function buildArcadeLeaderboard(rot = 0) {
   const FRAME = ['#1e1c2e', '#161422', '#0e0c16'];
   const DISPLAY = ['#0a0e1c', '#060812', '#04050c'];
   const GOLD = ['#ffd700', '#d4af37', '#997a15'];
+  const SILVER = ['#e2e8f0', '#cbd5e1', '#94a3b8'];
+  const BRONZE = ['#f97316', '#ea580c', '#c2410c'];
   const NEON_CYAN = ['#00e5ff', '#00b4cc', '#007a8a'];
   const NEON_GREEN = ['#00e676', '#00b85c', '#007a3d'];
+  const NEON_PINK = ['#ff007f', '#c70063', '#8a0044'];
 
-  return isoSprite(tw, th, 54, (box) => {
-    // Twin sturdy metal pedestal legs on floor
-    box(0.15 * tw, 0.20 * th, 0.35 * tw, 0.80 * th, 0, 14, ...FRAME);
-    box(0.65 * tw, 0.20 * th, 0.85 * tw, 0.80 * th, 0, 14, ...FRAME);
-    // Base crossbar
+  return isoSprite(tw, th, 56, (box) => {
+    // 1. Heavy tubular steel pedestal support uprights (z = 0 .. 14)
+    box(0.12 * tw, 0.20 * th, 0.32 * tw, 0.80 * th, 0, 14, ...FRAME);
+    box(0.68 * tw, 0.20 * th, 0.88 * tw, 0.80 * th, 0, 14, ...FRAME);
     box(0.10 * tw, 0.35 * th, 0.90 * tw, 0.65 * th, 4, 8, '#2c2842', '#201c30', '#161222');
-    // Digital monitor housing
+
+    // 2. Scoreboard monitor enclosure (z = 14 .. 46)
     box(0.06 * tw, 0.12 * th, tw - 0.06 * tw, th - 0.12 * th, 14, 46, ...FRAME);
-    // Glowing LED display screen face
+
+    // Flanking illuminated vertical neon pillar lights
+    box(0.04 * tw, 0.14 * th, 0.08 * tw, th - 0.14 * th, 15, 45, ...NEON_CYAN);
+    box(tw - 0.08 * tw, 0.14 * th, tw - 0.04 * tw, th - 0.14 * th, 15, 45, ...NEON_PINK);
+
+    // Deep black LED display screen face (z = 16 .. 44)
     box(0.10 * tw, 0.18 * th, tw - 0.10 * tw, th - 0.18 * th, 16, 44, ...DISPLAY);
-    // Gold trophy crown at top (#1 Rank indicator)
-    box(0.44 * tw, 0.22 * th, 0.56 * tw, 0.34 * th, 36, 42, ...GOLD);
-    // Digital LED score lines (cyan, green, gold rows)
-    box(0.18 * tw, 0.26 * th, 0.40 * tw, 0.32 * th, 30, 33, ...GOLD);
-    box(0.60 * tw, 0.26 * th, 0.82 * tw, 0.32 * th, 30, 33, ...GOLD);
-    box(0.18 * tw, 0.34 * th, 0.44 * tw, 0.40 * th, 24, 27, ...NEON_CYAN);
-    box(0.56 * tw, 0.34 * th, 0.82 * tw, 0.40 * th, 24, 27, ...NEON_CYAN);
-    box(0.18 * tw, 0.42 * th, 0.46 * tw, 0.48 * th, 18, 21, ...NEON_GREEN);
-    box(0.54 * tw, 0.42 * th, 0.82 * tw, 0.48 * th, 18, 21, ...NEON_GREEN);
-    // Marquee top banner: "HALL OF FAME"
-    box(0.06 * tw, 0.10 * th, tw - 0.06 * tw, 0.45 * th, 46, 54, '#ff007f', '#c70063', '#8a0044');
-    box(0.16 * tw, 0.40 * th, tw - 0.16 * tw, 0.48 * th, 48, 52, '#fff9c4', '#ffd54f', '#ffb300');
+
+    // 3. Multi-line high score matrix with medals & rank indicators
+    // Rank #1: Gold trophy & gold LED score row
+    box(0.16 * tw, 0.22 * th, 0.22 * tw, 0.28 * th, 36, 41, ...GOLD); // #1 Gold trophy medal
+    box(0.24 * tw, 0.24 * th, 0.50 * tw, 0.28 * th, 37, 40, ...GOLD); // player 1 name
+    box(0.60 * tw, 0.24 * th, 0.84 * tw, 0.28 * th, 37, 40, ...GOLD); // score 999,990
+
+    // Rank #2: Silver medal & cyan LED score row
+    box(0.16 * tw, 0.30 * th, 0.22 * tw, 0.36 * th, 29, 34, ...SILVER); // #2 Silver medal
+    box(0.24 * tw, 0.32 * th, 0.48 * tw, 0.36 * th, 30, 33, ...NEON_CYAN);
+    box(0.62 * tw, 0.32 * th, 0.84 * tw, 0.36 * th, 30, 33, ...NEON_CYAN);
+
+    // Rank #3: Bronze medal & green LED score row
+    box(0.16 * tw, 0.38 * th, 0.22 * tw, 0.44 * th, 22, 27, ...BRONZE); // #3 Bronze medal
+    box(0.24 * tw, 0.40 * th, 0.46 * tw, 0.44 * th, 23, 26, ...NEON_GREEN);
+    box(0.64 * tw, 0.40 * th, 0.84 * tw, 0.44 * th, 23, 26, ...NEON_GREEN);
+
+    // 4. Crown ornament on top of scoreboard
+    box(0.44 * tw, 0.20 * th, 0.56 * tw, 0.32 * th, 46, 52, ...GOLD);
+
+    // 5. Marquee top banner: "HALL OF FAME" (z = 46 .. 56)
+    box(0.06 * tw, 0.10 * th, tw - 0.06 * tw, 0.45 * th, 46, 54, ...NEON_PINK);
+    box(0.14 * tw, 0.38 * th, tw - 0.14 * tw, 0.46 * th, 48, 52, '#fff9c4', '#ffd54f', '#ffb300');
   });
 }
 
 export function buildGumballTrophySprite(rot = 0) {
-  const GOLD = ['#ffd84a', '#e0a818', '#a4760c'];
-  const BASE = ['#3a2c54', '#2a1e40', '#1c1430'];
-  return isoSprite(1, 1, 36, (box) => {
-    box(0.26, 0.26, 0.74, 0.74, 0, 6, ...BASE);
-    box(0.34, 0.34, 0.66, 0.66, 6, 10, ...GOLD);
-    box(0.42, 0.42, 0.58, 0.58, 10, 20, ...GOLD);
-    box(0.28, 0.28, 0.72, 0.72, 20, 30, ...GOLD);
-    box(0.20, 0.40, 0.28, 0.52, 20, 26, ...GOLD);
-    box(0.72, 0.40, 0.80, 0.52, 20, 26, ...GOLD);
-    box(0.40, 0.30, 0.60, 0.42, 30, 33, '#fff6d2', '#ffe9a0', '#e0b848');
+  const WALNUT = ['#4e2816', '#381c0e', '#221008'];
+  const WALNUT_HI = ['#723e24', '#562e1a', '#3a1e10'];
+  const BRASS = ['#f6c667', '#d8a442', '#a07424'];
+  const BRASS_HI = ['#ffe898', '#e2b040', '#a87818'];
+  const VELVET = ['#b81832', '#8c1024', '#580816'];
+  const GOLD = ['#ffe066', '#f6b820', '#b87e10'];
+  const GOLD_HI = ['#ffffff', '#fffde0', '#ffea70'];
+  const GLASS = ['#e6f6fc', '#bce2f2', '#84bed4'];
+  const GLASS_HI = ['#ffffff', '#f2fbff', '#d4eff8'];
+
+  return isoSprite(1, 1, 42, (box) => {
+    // 1. Stepped dark walnut plinth base (z = 0 .. 9)
+    box(0.18, 0.18, 0.82, 0.82, 0, 4, ...WALNUT);
+    box(0.22, 0.22, 0.78, 0.78, 4, 7, ...WALNUT_HI);
+    box(0.24, 0.24, 0.76, 0.76, 7, 9, ...WALNUT);
+
+    // Engraved polished brass plaque on front face
+    box(0.32, 0.80, 0.68, 0.84, 1.5, 5.5, ...BRASS);
+    box(0.34, 0.83, 0.66, 0.85, 2.5, 4.5, ...BRASS_HI); // engraved face
+    box(0.38, 0.84, 0.62, 0.855, 3.2, 3.8, '#3a2008', '#2a1604', '#1a0c02'); // inscription line
+
+    // 2. Tufted crimson velvet presentation cushion with indent (z = 9 .. 13)
+    box(0.26, 0.26, 0.74, 0.74, 9, 12.5, ...VELVET);
+    box(0.28, 0.28, 0.72, 0.72, 12, 13, shade(VELVET[0], 0.15), shade(VELVET[1], 0.1), shade(VELVET[2], 0.1));
+    box(0.44, 0.44, 0.56, 0.56, 11.5, 12.2, '#640816', '#480410', '#30020a'); // center button dimple
+
+    // 3. Clear hand-blown glass bell jar cloche base rim (z = 12 .. 14)
+    box(0.25, 0.25, 0.75, 0.75, 12, 14, ...GLASS);
+
+    // 4. Legendary floating Golden Gumball (z = 15 .. 27)
+    // Spherical volume layers
+    box(0.38, 0.38, 0.62, 0.62, 15, 27, ...GOLD);
+    box(0.35, 0.35, 0.65, 0.65, 17, 25, ...GOLD);
+    box(0.33, 0.33, 0.67, 0.67, 19, 23, ...GOLD);
+    // Brilliant warm specular highlight and star glint
+    box(0.35, 0.35, 0.45, 0.45, 22, 26, ...GOLD_HI);
+    box(0.33, 0.39, 0.47, 0.41, 23.5, 24.5, ...GOLD_HI); // horizontal sparkle bar
+    box(0.39, 0.33, 0.41, 0.47, 23.5, 24.5, ...GOLD_HI); // vertical sparkle bar
+    // Secondary ambient floor reflection on underside
+    box(0.42, 0.42, 0.58, 0.58, 15, 16.5, '#ffd240', '#d89814', '#946608');
+
+    // 5. Transparent bell jar glass body (z = 14 .. 32)
+    // Diagonal specular sheen reflections on glass surface
+    box(0.26, 0.26, 0.30, 0.74, 14, 30, ...GLASS_HI); // west glass wall reflection
+    box(0.26, 0.26, 0.74, 0.30, 14, 30, ...GLASS_HI); // north glass wall reflection
+    box(0.28, 0.68, 0.36, 0.72, 16, 28, ...GLASS); // front specular glint
+    box(0.68, 0.28, 0.72, 0.36, 16, 28, ...GLASS); // right specular glint
+
+    // Curved bell jar glass dome top (z = 30 .. 34)
+    box(0.28, 0.28, 0.72, 0.72, 30, 32.5, ...GLASS);
+    box(0.32, 0.32, 0.68, 0.68, 32, 34, ...GLASS_HI);
+
+    // Turned multifaceted crystal finial handle on top (z = 34 .. 39)
+    box(0.44, 0.44, 0.56, 0.56, 34, 36.5, ...GLASS);
+    box(0.42, 0.42, 0.58, 0.58, 36.5, 39, ...GLASS_HI);
   });
 }
 
@@ -2546,49 +5589,88 @@ export function buildGumballTrophySprite(rot = 0) {
 // 2 up/north, 3 left/west) so it can be aimed outward on any railing edge.
 export function buildSkyViewerSprite(rot = 0) {
   const r = ((rot % 4) + 4) % 4;
-  const STONE = ['#9199a6', '#727886', '#525864'];
-  const STONE_LT = ['#b2b8c4', '#9199a6', '#727886'];
-  const RED = ['#d94a56', '#ad3440', '#7c222a'];
-  const RED_DK = ['#ad3440', '#7c222a', '#551017'];
+  const STONE = ['#8c94a2', '#6e7482', '#4e5460'];
+  const STONE_LT = ['#a8b0be', '#8c94a2', '#6c7280'];
+  const RUBBER_PAD = ['#282c34', '#1c2026', '#101216'];
+  const RED = ['#c83c48', '#a02834', '#701822'];
+  const RED_DK = ['#8e1e28', '#68121c', '#460a12'];
   const CHROME = ['#e4eaf2', '#b4c0cc', '#7e8a98'];
-  const LENS = ['#303b46', '#1c232c', '#0e1216'];
+  const CHROME_HI = ['#ffffff', '#f4f8fc', '#d0dae6'];
+  const LENS_COATING = ['#1e3a5f', '#102238', '#081220'];
+  const LENS_GLINT = ['#38bdf8', '#0284c7', '#0369a1'];
+  const RUBBER_HOOD = ['#1a1c22', '#121418', '#080a0c'];
   const BRASS = ['#f6c667', '#d8a442', '#a07424'];
+  const BRASS_HI = ['#ffe898', '#e2b040', '#a87818'];
 
-  return isoSprite(1, 1, 54, (box) => {
-    // Small 2-step raised platform/dais
-    box(0.02, 0.02, 0.98, 0.98, 0, 3, ...STONE);
-    box(0.13, 0.13, 0.87, 0.87, 3, 6, ...STONE_LT);
+  return isoSprite(1, 1, 56, (box) => {
+    // 1. Heavy stepped circular dais platform (z = 0 .. 6)
+    box(0.04, 0.04, 0.96, 0.96, 0, 3, ...STONE);
+    box(0.12, 0.12, 0.88, 0.88, 3, 6, ...STONE_LT);
+    // Diamond-plate non-slip rubber tourist footpad
+    box(0.18, 0.18, 0.82, 0.82, 6, 6.8, ...RUBBER_PAD);
 
-    // Coin-op cabinet column
-    box(0.34, 0.34, 0.66, 0.66, 6, 10, ...RED_DK);
+    // 2. Cast-iron pedestal base flange with bolt studs (z = 6 .. 10)
+    box(0.30, 0.30, 0.70, 0.70, 6.8, 10, ...RED_DK);
+    box(0.31, 0.31, 0.37, 0.37, 9.5, 11, ...CHROME); // bolt
+    box(0.63, 0.31, 0.69, 0.37, 9.5, 11, ...CHROME);
+    box(0.31, 0.63, 0.37, 0.69, 9.5, 11, ...CHROME);
+    box(0.63, 0.63, 0.69, 0.69, 9.5, 11, ...CHROME);
+
+    // 3. Powder-coated red coin-op column (z = 10 .. 30)
     box(0.34, 0.34, 0.66, 0.66, 10, 30, ...RED);
-    // Brass coin-slot plaque
-    box(0.40, 0.33, 0.60, 0.40, 16, 22, ...BRASS);
-    box(0.47, 0.345, 0.53, 0.355, 17, 20, '#2a1d14', '#2a1d14', '#2a1d14');
 
-    // Swivel mount
-    box(0.30, 0.30, 0.70, 0.70, 30, 36, ...CHROME);
+    // Solid brass coin-meter box & timer mechanism
+    box(0.38, 0.31, 0.62, 0.36, 15, 23, ...BRASS);
+    box(0.40, 0.30, 0.60, 0.33, 16, 22, ...BRASS_HI); // faceplate
+    box(0.47, 0.29, 0.53, 0.31, 19, 21.5, '#121418', '#0a0c0e', '#040608'); // coin slot
+    box(0.45, 0.29, 0.55, 0.31, 16.5, 18, '#121418', '#0a0c0e', '#040608'); // coin return cup
 
-    const barrel = (u0, v0, u1, v1) => box(u0, v0, u1, v1, 36, 48, ...CHROME);
-    const lens = (u0, v0, u1, v1) => box(u0, v0, u1, v1, 40, 48, ...LENS);
-    const eyepiece = (u0, v0, u1, v1) => box(u0, v0, u1, v1, 38, 44, ...BRASS);
+    // 4. Heavy cast steel swiveling yoke mount (z = 30 .. 36)
+    box(0.28, 0.28, 0.72, 0.72, 30, 34, ...CHROME);
+    box(0.32, 0.32, 0.68, 0.68, 34, 37, ...CHROME_HI);
+    // Swivel locking knob
+    box(0.70, 0.44, 0.76, 0.56, 33, 36, ...BRASS);
+
+    // 5. Twin optical binocular barrels with lenses, rubber hoods, and focus wheel
+    const barrel = (u0, v0, u1, v1) => {
+      box(u0, v0, u1, v1, 37, 48, ...CHROME);
+      box(u0 + 0.02, v0 + 0.02, u1 - 0.02, v1 - 0.02, 47, 48.5, ...CHROME_HI);
+    };
+    const sunshield = (u0, v0, u1, v1) => box(u0, v0, u1, v1, 36, 49, ...RED);
+    const lens = (u0, v0, u1, v1) => {
+      box(u0, v0, u1, v1, 41, 47, ...LENS_COATING);
+      box(u0 + 0.02, v0 + 0.02, u1 - 0.02, v1 - 0.02, 46, 47.5, ...LENS_GLINT); // blue reflection
+    };
+    const eyepiece = (u0, v0, u1, v1) => {
+      box(u0, v0, u1, v1, 38, 44, ...BRASS);
+      box(u0 - 0.01, v0 - 0.01, u1 + 0.01, v1 + 0.01, 39, 43.5, ...RUBBER_HOOD); // rubber hood
+    };
+    const focusWheel = (u0, v0, u1, v1) => box(u0, v0, u1, v1, 43, 47, ...BRASS_HI);
 
     if (r === 0) { // facing south (+v): objective south, eyepiece north
-      barrel(0.32, 0.36, 0.46, 0.90); barrel(0.54, 0.36, 0.68, 0.90);
-      lens(0.32, 0.84, 0.46, 0.98); lens(0.54, 0.84, 0.68, 0.98);
-      eyepiece(0.32, 0.02, 0.46, 0.14); eyepiece(0.54, 0.02, 0.68, 0.14);
+      barrel(0.30, 0.36, 0.46, 0.88); barrel(0.54, 0.36, 0.70, 0.88);
+      sunshield(0.28, 0.80, 0.48, 0.94); sunshield(0.52, 0.80, 0.72, 0.94);
+      lens(0.30, 0.86, 0.46, 0.96); lens(0.54, 0.86, 0.70, 0.96);
+      focusWheel(0.45, 0.46, 0.55, 0.58);
+      eyepiece(0.31, 0.04, 0.45, 0.16); eyepiece(0.55, 0.04, 0.69, 0.16);
     } else if (r === 2) { // facing north (-v)
-      barrel(0.32, 0.10, 0.46, 0.64); barrel(0.54, 0.10, 0.68, 0.64);
-      lens(0.32, 0.02, 0.46, 0.16); lens(0.54, 0.02, 0.68, 0.16);
-      eyepiece(0.32, 0.86, 0.46, 0.98); eyepiece(0.54, 0.86, 0.68, 0.98);
+      barrel(0.30, 0.12, 0.46, 0.64); barrel(0.54, 0.12, 0.70, 0.64);
+      sunshield(0.28, 0.06, 0.48, 0.20); sunshield(0.52, 0.06, 0.72, 0.20);
+      lens(0.30, 0.04, 0.46, 0.14); lens(0.54, 0.04, 0.70, 0.14);
+      focusWheel(0.45, 0.42, 0.55, 0.54);
+      eyepiece(0.31, 0.84, 0.45, 0.96); eyepiece(0.55, 0.84, 0.69, 0.96);
     } else if (r === 1) { // facing east (+u)
-      barrel(0.36, 0.32, 0.90, 0.46); barrel(0.36, 0.54, 0.90, 0.68);
-      lens(0.84, 0.32, 0.98, 0.46); lens(0.84, 0.54, 0.98, 0.68);
-      eyepiece(0.02, 0.32, 0.14, 0.46); eyepiece(0.02, 0.54, 0.14, 0.68);
+      barrel(0.36, 0.30, 0.88, 0.46); barrel(0.36, 0.54, 0.88, 0.70);
+      sunshield(0.80, 0.28, 0.94, 0.48); sunshield(0.80, 0.52, 0.94, 0.72);
+      lens(0.86, 0.30, 0.96, 0.46); lens(0.86, 0.54, 0.96, 0.70);
+      focusWheel(0.46, 0.45, 0.58, 0.55);
+      eyepiece(0.04, 0.31, 0.16, 0.45); eyepiece(0.04, 0.55, 0.16, 0.69);
     } else { // facing west (-u)
-      barrel(0.10, 0.32, 0.64, 0.46); barrel(0.10, 0.54, 0.64, 0.68);
-      lens(0.02, 0.32, 0.16, 0.46); lens(0.02, 0.54, 0.16, 0.68);
-      eyepiece(0.86, 0.32, 0.98, 0.46); eyepiece(0.86, 0.54, 0.98, 0.68);
+      barrel(0.12, 0.30, 0.64, 0.46); barrel(0.12, 0.54, 0.64, 0.70);
+      sunshield(0.06, 0.28, 0.20, 0.48); sunshield(0.06, 0.52, 0.20, 0.72);
+      lens(0.04, 0.30, 0.14, 0.46); lens(0.04, 0.54, 0.14, 0.70);
+      focusWheel(0.42, 0.45, 0.54, 0.55);
+      eyepiece(0.84, 0.31, 0.96, 0.45); eyepiece(0.84, 0.55, 0.96, 0.69);
     }
   });
 }
@@ -2716,17 +5798,76 @@ export const FURNITURE_BUILDERS = {
 
 export function buildWardrobeSprite(rot = 0) {
   const WOOD = ['#9e6030', '#7e4820', '#5c3214'];
+  const WOOD_DARK = ['#723a18', '#54280e', '#3a1806'];
   const TRIM = ['#b8743c', '#985828', '#703e18'];
+  const TRIM_HI = ['#cca068', '#b08048', '#865a2e'];
   const BRASS = ['#f6c667', '#d89b34', '#a06e1e'];
+  const BRASS_HI = ['#ffe898', '#e2b040', '#a87818'];
   const PLINTH = ['#7c441c', '#623414', '#48240c'];
-  return isoSprite(1, 1, 56, (box) => {
-    box(0.08, 0.08, 0.92, 0.92, 0, 4, ...PLINTH);
-    box(0.10, 0.10, 0.90, 0.90, 4, 52, ...WOOD);
-    box(0.06, 0.06, 0.94, 0.94, 52, 56, ...TRIM);
-    box(0.14, 0.14, 0.48, 0.86, 6, 50, ...TRIM);
-    box(0.52, 0.14, 0.86, 0.86, 6, 50, ...TRIM);
-    box(0.44, 0.87, 0.47, 0.92, 26, 32, ...BRASS);
-    box(0.53, 0.87, 0.56, 0.92, 26, 32, ...BRASS);
+
+  return isoSprite(1, 1, 58, (box) => {
+    // 4 turned wooden bun feet
+    box(0.12, 0.12, 0.24, 0.24, 0, 3, ...WOOD_DARK);
+    box(0.76, 0.12, 0.88, 0.24, 0, 3, ...WOOD_DARK);
+    box(0.12, 0.76, 0.24, 0.88, 0, 3, ...WOOD_DARK);
+    box(0.76, 0.76, 0.88, 0.88, 0, 3, ...WOOD_DARK);
+
+    // Stepped plinth base with moulding
+    box(0.06, 0.06, 0.94, 0.94, 3, 6, ...PLINTH);
+    box(0.08, 0.08, 0.92, 0.92, 6, 8, ...TRIM);
+
+    // Main wardrobe carcass body
+    box(0.10, 0.10, 0.90, 0.90, 8, 52, ...WOOD);
+
+    // Dual doors with recessed panels on front face
+    if (rot % 2 === 0) {
+      // Front is south-west face (v = 0.90)
+      // Left door stile & recessed panel
+      box(0.14, 0.86, 0.48, 0.91, 10, 50, ...TRIM);
+      box(0.18, 0.88, 0.44, 0.92, 14, 46, ...WOOD_DARK); // inner recessed panel
+      box(0.20, 0.89, 0.42, 0.93, 16, 44, ...WOOD); // raised center field
+
+      // Right door stile & recessed panel
+      box(0.52, 0.86, 0.86, 0.91, 10, 50, ...TRIM);
+      box(0.56, 0.88, 0.82, 0.92, 14, 46, ...WOOD_DARK);
+      box(0.58, 0.89, 0.80, 0.93, 16, 44, ...WOOD);
+
+      // Center vertical meeting stile seam
+      box(0.48, 0.86, 0.52, 0.91, 8, 52, ...WOOD_DARK);
+
+      // Ornate brass teardrop pull handles & keyholes
+      box(0.44, 0.89, 0.47, 0.93, 26, 32, ...BRASS);
+      box(0.44, 0.91, 0.46, 0.94, 27, 30, ...BRASS_HI);
+      box(0.53, 0.89, 0.56, 0.93, 26, 32, ...BRASS);
+      box(0.54, 0.91, 0.56, 0.94, 27, 30, ...BRASS_HI);
+
+      // Exposed side panel recessed moulding
+      box(0.86, 0.14, 0.91, 0.86, 10, 50, ...TRIM);
+      box(0.88, 0.18, 0.92, 0.82, 14, 46, ...WOOD_DARK);
+    } else {
+      // Front is south-east face (u = 0.90)
+      box(0.86, 0.14, 0.91, 0.48, 10, 50, ...TRIM);
+      box(0.88, 0.18, 0.92, 0.44, 14, 46, ...WOOD_DARK);
+      box(0.89, 0.20, 0.93, 0.42, 16, 44, ...WOOD);
+
+      box(0.86, 0.52, 0.91, 0.86, 10, 50, ...TRIM);
+      box(0.88, 0.56, 0.92, 0.82, 14, 46, ...WOOD_DARK);
+      box(0.89, 0.58, 0.93, 0.80, 16, 44, ...WOOD);
+
+      box(0.86, 0.48, 0.91, 0.52, 8, 52, ...WOOD_DARK);
+
+      box(0.89, 0.44, 0.93, 0.47, 26, 32, ...BRASS);
+      box(0.91, 0.44, 0.94, 0.46, 27, 30, ...BRASS_HI);
+      box(0.89, 0.53, 0.93, 0.56, 26, 32, ...BRASS);
+      box(0.91, 0.54, 0.94, 0.56, 27, 30, ...BRASS_HI);
+
+      box(0.14, 0.86, 0.86, 0.91, 10, 50, ...TRIM);
+      box(0.18, 0.88, 0.82, 0.92, 14, 46, ...WOOD_DARK);
+    }
+
+    // Classical carved top cornice with crown moulding overhang
+    box(0.06, 0.06, 0.94, 0.94, 52, 55, ...TRIM);
+    box(0.04, 0.04, 0.96, 0.96, 55, 58, ...TRIM_HI);
   });
 }
 

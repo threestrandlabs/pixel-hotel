@@ -11,7 +11,7 @@ import http from 'node:http';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
-const PORT = 8734;
+const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 8735;
 const BASE_URL = `http://localhost:${PORT}`;
 const SCREENSHOT_DIR = path.join(__dirname, 'screenshots');
 

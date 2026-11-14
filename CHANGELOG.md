@@ -5,6 +5,47 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 
+## [0.12.4] - 2026-11-14
+
+### Added
+
+- **Art Detail Pass & Full Item Redesign (`js/sprites.js`, `shots/v0124/`)**:
+  - Full item-by-item redesign across all 91 items in the hotel catalogue at 2x pixel density, illuminated from the top-left with consistent dark outlines (`#2a1d2e`), warm highlights, and cool shadow hue-shifts following `shots/v0124/STYLE.md`.
+  - Reusable texture helpers applied systematically across all furniture, decor, and props:
+    - `planks()`: Individual wood slats with plank seams, bevel highlights, end-grain cut edges, and gap spacing.
+    - `grain()`: Subtle linear wood grain flecks and organic variations.
+    - `leafCluster()`: Dense volumetric organic cloud/pillow leaf clumps with 4-5 green tone ramps, deep crevice undercuts, and delicate petal dot clusters.
+    - `stoneBlocks()`: Ashlar masonry stone courses with recessed mortar joints and bevelled coping lips.
+    - `stitching()`: Upholstery perimeter piping, welt cord seams, and button tufting with diagonal crease shading.
+  - **Garden & Planters Overhaul**:
+    - `flower_planter`: Completely redrawn from flat geometric blocks into authentic raised botanical flower beds — ashlar stone planter box with mortar lines and coping ledge, dark potting soil, dense billowing hedge masses in 4 green shades, vibrant hydrangea blue and marigold orange petal clusters, and trailing ivy cascading over the stone rim.
+    - `plant` & `sky_tree`: Flared terracotta pots with incised decorative bands, rich soil, arching tiered fern fronds, sakura cherry blossom clouds with falling petals.
+    - `pergola`: Slatted cedar rafters with climbing wisteria floral drops.
+  - **Fitness Facility Redesign**:
+    - `exercise_bike`: Replaced generic block with authentic 2:1 angled tubular steel chassis, cylindrical flywheel with metallic sheen reflection, pedal cranks with toe-cage pedals, adjustable racing saddle, curved bullhorn handlebars, and glowing digital workout console.
+    - `rowing_machine`: Replaced flat slab with long extruded dual aluminum monorail runner beam, contoured sliding seat on runner wheels, front air/water turbine flywheel housing, chain handle, and angled footplates with heel cups and straps.
+    - `treadmill`, `squat_rack`, `weight_bench`, `dumbbell_rack`, `water_cooler`, `gym_lockers`, `gym_mirror`: Laser-cut upright peg holes, knurled Olympic barbells with cast-iron weight plates, tiered hex dumbbells, inverted blue polycarbonate 5-gallon water bottle with bubble highlight, louvered steel lockers, bevelled gym mirrors.
+  - **Entertainment, Lighting & Games Overhaul**:
+    - `pool_table`: Solid mahogany cabinet with turned fluted legs and brass toe boots, cast brass corner pocket irons, leather drop pocket nets, tournament green worsted wool baize with head string baulk line, racked 15-ball triangle cluster (solids and stripes), white cue ball, and side-mounted ash wood cue sticks.
+    - `grand_piano`: Glossy ebony lacquer rim with authentic bentside curve, 3 classical legs with brass casters, 3-pedal lyre assembly, spruce soundboard with gold cast-iron harp plate and silver strings, 88-key ivory/ebony keybed with fallboard brand emblem, sheet music score on desk, and propped lid on wooden stick.
+    - `jukebox`: Arched retro mahogany cabinet with illuminated liquid bubble tubes on chrome pilasters, horizontal chrome speaker louvers over backlit acoustic amber fabric, illuminated song title strip rack, turntable with vinyl record, and rainbow neon crown.
+    - `arcade_snake_1/2`, `arcade_breakout_1/2`, `arcade_drop_1/2`, `mini_arcade`: Upright arcade cabinets with colored T-molding edge trim, double coin doors with illuminated 25c reject buttons, control decks with joysticks/paddle spinners and microswitch buttons, tilted CRT monitors with scanline curvature and game graphics, backlit marquee titles.
+    - `arcade_leaderboard`: Floor-standing Hall of Fame scoreboard with gold trophy crown, rank 1/2/3 medals, multi-color LED score rows, and flanking neon pillar tubes.
+    - `gumball_trophy`: Stepped dark walnut pedestal with engraved brass nameplate, crimson velvet cushion with indent, floating legendary Golden Gumball with brilliant star glints, under a hand-blown clear glass bell jar cloche with crystal finial.
+    - `sky_viewer` platforms: Raised stone dais with non-slip tourist footpad, red coin-op column with brass timer mechanism, 360-degree swiveling yoke, dual binocular barrels with coated lenses, rubber-hooded eyepieces, and center brass focus wheel.
+    - `chandelier`, `wall_sconce`, `neon_sign`, `string_lights`, `lamp`: Tiered crystal pendants with candelabra flame bulbs, fluted brass wall sconce with tulip shade, hand-bent neon glass tubing, Edison bulb festoons, brushed chrome lava lamp.
+  - **Floors & Walls Refinement**:
+    - Subtle, calm lawn grass and flagstone paver textures with 2x dew blade highlights and continuous mortar lines, toning down busy outlines so furniture stands out clearly.
+  - **Visual Verification & Artifacts**:
+    - Before and after contact sheets saved to `shots/v0124/before_contact_sheet.png` and `shots/v0124/after_contact_sheet.png` (8x12 grid at 2x pixel density).
+    - Room comparison captures saved to `shots/v0124/` for Sky Garden, Library, Grand Lobby, and Restaurant.
+    - Comprehensive master item checklist generated in `shots/v0124/checklist.md` with defining features, status, and before/after thumbnails for all 91 items.
+
+### Performance
+
+- All item sprites remain 100% baked and cached in the offscreen sprite cache (`isoSprite`), resulting in zero per-frame draw call overhead and preserving 60 FPS across all floors.
+
+
 ## [0.12.2] - 2026-11-14
 
 ### Added
