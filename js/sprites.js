@@ -936,6 +936,168 @@ export function stitching(box, u0, v0, u1, v1, z, opts = {}) {
 
 const WOOD = ['#c98f55', '#a8703d', '#8a5a30']; // top, left, right
 
+export const SEAT_CONFIGS = {
+  armchair: {
+    seatHeight: 12,
+    layerOrder: {
+      0: ['back', 'avatar', 'front'],
+      1: ['back', 'avatar', 'front'],
+      2: ['base', 'avatar', 'back'],
+      3: ['base', 'avatar', 'back'],
+    },
+  },
+  sofa: {
+    seatHeight: 13,
+    layerOrder: {
+      0: ['back', 'avatar', 'front'],
+      1: ['back', 'avatar', 'front'],
+      2: ['base', 'avatar', 'back'],
+      3: ['base', 'avatar', 'back'],
+    },
+  },
+  rooftop_sofa: {
+    seatHeight: 13,
+    layerOrder: {
+      0: ['back', 'avatar', 'front'],
+      1: ['back', 'avatar', 'front'],
+      2: ['base', 'avatar', 'back'],
+      3: ['base', 'avatar', 'back'],
+    },
+  },
+  stool: {
+    seatHeight: 14,
+    layerOrder: {
+      0: ['base', 'avatar'],
+      1: ['base', 'avatar'],
+      2: ['base', 'avatar'],
+      3: ['base', 'avatar'],
+    },
+  },
+  dining_chair: {
+    seatHeight: 14,
+    layerOrder: {
+      0: ['back', 'avatar', 'front'],
+      1: ['back', 'avatar', 'front'],
+      2: ['base', 'avatar', 'back'],
+      3: ['base', 'avatar', 'back'],
+    },
+  },
+  dining_booth: {
+    seatHeight: 16,
+    layerOrder: {
+      0: ['back', 'avatar', 'front'],
+      1: ['back', 'avatar', 'front'],
+      2: ['base', 'avatar', 'back'],
+      3: ['base', 'avatar', 'back'],
+    },
+  },
+  deckchair: {
+    seatHeight: 10,
+    layerOrder: {
+      0: ['back', 'avatar', 'front'],
+      1: ['back', 'avatar', 'front'],
+      2: ['base', 'avatar', 'back'],
+      3: ['base', 'avatar', 'back'],
+    },
+  },
+  pool_lounger: {
+    seatHeight: 12,
+    layerOrder: {
+      0: ['back', 'avatar', 'front'],
+      1: ['back', 'avatar', 'front'],
+      2: ['base', 'avatar', 'back'],
+      3: ['base', 'avatar', 'back'],
+    },
+  },
+  salon_chair: {
+    seatHeight: 18,
+    layerOrder: {
+      0: ['back', 'avatar', 'front'],
+      1: ['back', 'avatar', 'front'],
+      2: ['base', 'avatar', 'back'],
+      3: ['base', 'avatar', 'back'],
+    },
+  },
+  garden_bench: {
+    seatHeight: 14,
+    layerOrder: {
+      0: ['back', 'avatar', 'front'],
+      1: ['back', 'avatar', 'front'],
+      2: ['base', 'avatar', 'back'],
+      3: ['base', 'avatar', 'back'],
+    },
+  },
+  suite_bed: {
+    seatHeight: 14,
+    layerOrder: {
+      0: ['base', 'avatar'],
+      1: ['base', 'avatar'],
+      2: ['base', 'avatar'],
+      3: ['base', 'avatar'],
+    },
+  },
+  massage_bed: {
+    seatHeight: 14,
+    layerOrder: {
+      0: ['base', 'avatar'],
+      1: ['base', 'avatar'],
+      2: ['base', 'avatar'],
+      3: ['base', 'avatar'],
+    },
+  },
+  weight_bench: {
+    seatHeight: 12,
+    layerOrder: {
+      0: ['base', 'avatar'],
+      1: ['base', 'avatar'],
+      2: ['base', 'avatar'],
+      3: ['base', 'avatar'],
+    },
+  },
+  exercise_bike: {
+    seatHeight: 18,
+    layerOrder: {
+      0: ['base', 'avatar'],
+      1: ['base', 'avatar'],
+      2: ['base', 'avatar'],
+      3: ['base', 'avatar'],
+    },
+  },
+  rowing_machine: {
+    seatHeight: 8,
+    layerOrder: {
+      0: ['base', 'avatar'],
+      1: ['base', 'avatar'],
+      2: ['base', 'avatar'],
+      3: ['base', 'avatar'],
+    },
+  },
+  grand_piano: {
+    seatHeight: 14,
+    layerOrder: {
+      0: ['base', 'avatar'],
+      1: ['base', 'avatar'],
+      2: ['base', 'avatar'],
+      3: ['base', 'avatar'],
+    },
+  },
+};
+
+export function getSeatConfig(itemId, rot = 0) {
+  const r = ((rot % 4) + 4) % 4;
+  const cfg = SEAT_CONFIGS[itemId] || {
+    seatHeight: 12,
+    layerOrder: { 0: ['base', 'avatar'], 1: ['base', 'avatar'], 2: ['base', 'avatar'], 3: ['base', 'avatar'] },
+  };
+  const order = cfg.layerOrder[r] || ['base', 'avatar'];
+  return {
+    seatHeight: cfg.seatHeight,
+    yOffset: -cfg.seatHeight,
+    layerOrder: order,
+  };
+}
+
+// Stool: compact turned wooden stool
 export function buildStoolSprite() {
   return isoSprite(1, 1, 26, (box) => {
     // 4 sturdy wooden legs touching floor (z = 0 .. 10)
@@ -967,7 +1129,7 @@ export function buildStoolSprite() {
 }
 
 // Sofa: 4-way volumetric orientation, coherent contact plane, plush cushions with piping
-export function buildSofaSprite(color = '#e2607a', rot = 0) {
+export function buildSofaSprite(color = '#e2607a', rot = 0, layer = 'all') {
   const r = ((rot % 4) + 4) % 4;
   const [tw, th] = r % 2 ? [1, 2] : [2, 1];
   const col = [shade(color, 0.14), color, shade(color, -0.22)];
@@ -978,81 +1140,102 @@ export function buildSofaSprite(color = '#e2607a', rot = 0) {
   const BRASS = ['#f4c862', '#d4a034', '#986c1c'];
 
   return isoSprite(tw, th, 38, (box) => {
-    // 4 turned wooden bun feet with brass accent collars (z = 0 .. 4)
-    const feet = [
-      [0.08, 0.08, 0.20, 0.20],
-      [tw - 0.20, 0.08, tw - 0.08, 0.20],
-      [0.08, th - 0.20, 0.20, th - 0.08],
-      [tw - 0.20, th - 0.20, tw - 0.08, th - 0.08]
-    ];
-    for (const [u0, v0, u1, v1] of feet) {
-      box(u0, v0, u1, v1, 0, 3, ...BUN_FOOT);
-      box(u0 - 0.01, v0 - 0.01, u1 + 0.01, v1 + 0.01, 3, 4, ...BRASS);
+    const drawBack = layer === 'all' || layer === 'back';
+    const drawFront = layer === 'all' || layer === 'front';
+
+    if (drawBack) {
+      // 4 turned wooden bun feet with brass accent collars (z = 0 .. 4)
+      const feet = [
+        [0.08, 0.08, 0.20, 0.20],
+        [tw - 0.20, 0.08, tw - 0.08, 0.20],
+        [0.08, th - 0.20, 0.20, th - 0.08],
+        [tw - 0.20, th - 0.20, tw - 0.08, th - 0.08]
+      ];
+      for (const [u0, v0, u1, v1] of feet) {
+        box(u0, v0, u1, v1, 0, 3, ...BUN_FOOT);
+        box(u0 - 0.01, v0 - 0.01, u1 + 0.01, v1 + 0.01, 3, 4, ...BRASS);
+      }
     }
 
     if (r === 0) {
       // 2x1 facing down (+v): backrest on north edge, arms on west/east
-      box(0.04, 0.04, 1.96, 0.96, 4, 9, ...dk); // lower plinth frame
-      // Button-tufted high backrest with vertical channel fluting
-      box(0.04, 0.06, 1.96, 0.34, 9, 36, ...col);
-      // Crown roll with piping
-      box(0.04, 0.04, 1.96, 0.12, 34, 37, ...PIPING);
-      // Padded roll armrests on left and right
-      box(0.04, 0.34, 0.26, 0.96, 9, 23, ...col);
-      box(1.74, 0.34, 1.96, 0.96, 9, 23, ...col);
-      stitching(box, 0.04, 0.34, 0.26, 0.96, 22.5, { piping: PIPING, pipingHeight: 0.8 });
-      stitching(box, 1.74, 0.34, 1.96, 0.96, 22.5, { piping: PIPING, pipingHeight: 0.8 });
+      if (drawBack) {
+        box(0.04, 0.04, 1.96, 0.96, 4, 9, ...dk); // lower plinth frame
+        // Button-tufted high backrest with vertical channel fluting
+        box(0.04, 0.06, 1.96, 0.34, 9, 36, ...col);
+        // Crown roll with piping
+        box(0.04, 0.04, 1.96, 0.12, 34, 37, ...PIPING);
 
-      // Two plush seat cushions with welted piping seams and button tufting
-      box(0.28, 0.34, 0.98, 0.94, 9, 14, ...lt);
-      stitching(box, 0.28, 0.34, 0.98, 0.94, 13.5, { piping: PIPING, tufts: [[0.5, 0.55]], tuftDark: dk[2], tuftLight: lt[0] });
+        // Two plush seat cushions with welted piping seams and button tufting
+        box(0.28, 0.34, 0.98, 0.94, 9, 14, ...lt);
+        stitching(box, 0.28, 0.34, 0.98, 0.94, 13.5, { piping: PIPING, tufts: [[0.5, 0.55]], tuftDark: dk[2], tuftLight: lt[0] });
 
-      box(1.02, 0.34, 1.72, 0.94, 9, 14, ...lt);
-      stitching(box, 1.02, 0.34, 1.72, 0.94, 13.5, { piping: PIPING, tufts: [[0.5, 0.55]], tuftDark: dk[2], tuftLight: lt[0] });
+        box(1.02, 0.34, 1.72, 0.94, 9, 14, ...lt);
+        stitching(box, 1.02, 0.34, 1.72, 0.94, 13.5, { piping: PIPING, tufts: [[0.5, 0.55]], tuftDark: dk[2], tuftLight: lt[0] });
 
-      // Backrest button tufting rows
-      stitching(box, 0.28, 0.26, 1.72, 0.34, 25, { piping: false, tufts: [[0.25, 0.5], [0.75, 0.5]], tuftDark: dk[2], tuftLight: lt[0] });
+        // Backrest button tufting rows
+        stitching(box, 0.28, 0.26, 1.72, 0.34, 25, { piping: false, tufts: [[0.25, 0.5], [0.75, 0.5]], tuftDark: dk[2], tuftLight: lt[0] });
+      }
+      if (drawFront) {
+        // Padded roll armrests on left and right
+        box(0.04, 0.34, 0.26, 0.96, 9, 23, ...col);
+        box(1.74, 0.34, 1.96, 0.96, 9, 23, ...col);
+        stitching(box, 0.04, 0.34, 0.26, 0.96, 22.5, { piping: PIPING, pipingHeight: 0.8 });
+        stitching(box, 1.74, 0.34, 1.96, 0.96, 22.5, { piping: PIPING, pipingHeight: 0.8 });
+      }
     } else if (r === 1) {
       // 1x2 facing right (+u): backrest on west edge
-      box(0.04, 0.04, 0.96, 1.96, 4, 9, ...dk);
-      box(0.06, 0.04, 0.34, 1.96, 9, 36, ...col);
-      box(0.04, 0.04, 0.12, 1.96, 34, 37, ...PIPING);
-      box(0.34, 0.04, 0.96, 0.26, 9, 23, ...col);
-      box(0.34, 1.74, 0.96, 1.96, 9, 23, ...col);
-      stitching(box, 0.34, 0.04, 0.96, 0.26, 22.5, { piping: PIPING, pipingHeight: 0.8 });
-      stitching(box, 0.34, 1.74, 0.96, 1.96, 22.5, { piping: PIPING, pipingHeight: 0.8 });
+      if (drawBack) {
+        box(0.04, 0.04, 0.96, 1.96, 4, 9, ...dk);
+        box(0.06, 0.04, 0.34, 1.96, 9, 36, ...col);
+        box(0.04, 0.04, 0.12, 1.96, 34, 37, ...PIPING);
+        box(0.34, 0.04, 0.96, 0.26, 9, 23, ...col);
+        stitching(box, 0.34, 0.04, 0.96, 0.26, 22.5, { piping: PIPING, pipingHeight: 0.8 });
 
-      box(0.34, 0.28, 0.94, 0.98, 9, 14, ...lt);
-      stitching(box, 0.34, 0.28, 0.94, 0.98, 13.5, { piping: PIPING, tufts: [[0.55, 0.5]], tuftDark: dk[2], tuftLight: lt[0] });
+        box(0.34, 0.28, 0.94, 0.98, 9, 14, ...lt);
+        stitching(box, 0.34, 0.28, 0.94, 0.98, 13.5, { piping: PIPING, tufts: [[0.55, 0.5]], tuftDark: dk[2], tuftLight: lt[0] });
 
-      box(0.34, 1.02, 0.94, 1.72, 9, 14, ...lt);
-      stitching(box, 0.34, 1.02, 0.94, 1.72, 13.5, { piping: PIPING, tufts: [[0.55, 0.5]], tuftDark: dk[2], tuftLight: lt[0] });
+        box(0.34, 1.02, 0.94, 1.72, 9, 14, ...lt);
+        stitching(box, 0.34, 1.02, 0.94, 1.72, 13.5, { piping: PIPING, tufts: [[0.55, 0.5]], tuftDark: dk[2], tuftLight: lt[0] });
+      }
+      if (drawFront) {
+        box(0.34, 1.74, 0.96, 1.96, 9, 23, ...col);
+        stitching(box, 0.34, 1.74, 0.96, 1.96, 22.5, { piping: PIPING, pipingHeight: 0.8 });
+      }
     } else if (r === 2) {
       // 2x1 facing up (-v): backrest on south edge
-      box(0.04, 0.04, 1.96, 0.96, 4, 9, ...dk);
-      box(0.28, 0.06, 0.98, 0.66, 9, 14, ...lt);
-      stitching(box, 0.28, 0.06, 0.98, 0.66, 13.5, { piping: PIPING, tufts: [[0.5, 0.45]], tuftDark: dk[2], tuftLight: lt[0] });
+      if (drawBack) {
+        box(0.04, 0.04, 1.96, 0.96, 4, 9, ...dk);
+        box(0.28, 0.06, 0.98, 0.66, 9, 14, ...lt);
+        stitching(box, 0.28, 0.06, 0.98, 0.66, 13.5, { piping: PIPING, tufts: [[0.5, 0.45]], tuftDark: dk[2], tuftLight: lt[0] });
 
-      box(1.02, 0.06, 1.72, 0.66, 9, 14, ...lt);
-      stitching(box, 1.02, 0.06, 1.72, 0.66, 13.5, { piping: PIPING, tufts: [[0.5, 0.45]], tuftDark: dk[2], tuftLight: lt[0] });
+        box(1.02, 0.06, 1.72, 0.66, 9, 14, ...lt);
+        stitching(box, 1.02, 0.06, 1.72, 0.66, 13.5, { piping: PIPING, tufts: [[0.5, 0.45]], tuftDark: dk[2], tuftLight: lt[0] });
 
-      box(0.04, 0.04, 0.26, 0.66, 9, 23, ...col);
-      box(1.74, 0.04, 1.96, 0.66, 9, 23, ...col);
-      box(0.04, 0.66, 1.96, 0.94, 9, 36, ...col);
-      box(0.04, 0.88, 1.96, 0.96, 34, 37, ...PIPING);
+        box(0.04, 0.04, 0.26, 0.66, 9, 23, ...col);
+        box(1.74, 0.04, 1.96, 0.66, 9, 23, ...col);
+      }
+      if (drawFront) {
+        box(0.04, 0.66, 1.96, 0.94, 9, 36, ...col);
+        box(0.04, 0.88, 1.96, 0.96, 34, 37, ...PIPING);
+      }
     } else {
       // 1x2 facing left (-u): backrest on east edge
-      box(0.04, 0.04, 0.96, 1.96, 4, 9, ...dk);
-      box(0.06, 0.28, 0.66, 0.98, 9, 14, ...lt);
-      stitching(box, 0.06, 0.28, 0.66, 0.98, 13.5, { piping: PIPING, tufts: [[0.45, 0.5]], tuftDark: dk[2], tuftLight: lt[0] });
+      if (drawBack) {
+        box(0.04, 0.04, 0.96, 1.96, 4, 9, ...dk);
+        box(0.06, 0.28, 0.66, 0.98, 9, 14, ...lt);
+        stitching(box, 0.06, 0.28, 0.66, 0.98, 13.5, { piping: PIPING, tufts: [[0.45, 0.5]], tuftDark: dk[2], tuftLight: lt[0] });
 
-      box(0.06, 1.02, 0.66, 1.72, 9, 14, ...lt);
-      stitching(box, 0.06, 1.02, 0.66, 1.72, 13.5, { piping: PIPING, tufts: [[0.45, 0.5]], tuftDark: dk[2], tuftLight: lt[0] });
+        box(0.06, 1.02, 0.66, 1.72, 9, 14, ...lt);
+        stitching(box, 0.06, 1.02, 0.66, 1.72, 13.5, { piping: PIPING, tufts: [[0.45, 0.5]], tuftDark: dk[2], tuftLight: lt[0] });
 
-      box(0.04, 0.04, 0.66, 0.26, 9, 23, ...col);
-      box(0.04, 1.74, 0.66, 1.96, 9, 23, ...col);
-      box(0.66, 0.04, 0.94, 1.96, 9, 36, ...col);
-      box(0.88, 0.04, 0.96, 1.96, 34, 37, ...PIPING);
+        box(0.04, 0.04, 0.66, 0.26, 9, 23, ...col);
+      }
+      if (drawFront) {
+        box(0.66, 0.04, 0.94, 1.96, 9, 36, ...col);
+        box(0.88, 0.04, 0.96, 1.96, 34, 37, ...PIPING);
+        box(0.04, 1.74, 0.66, 1.96, 9, 23, ...col);
+      }
     }
   });
 }
@@ -1262,7 +1445,7 @@ export function buildJukeboxSprite() {
   });
 }
 
-export function buildArmchairSprite(rot = 0) {
+export function buildArmchairSprite(rot = 0, layer = 'all') {
   const r = ((rot % 4) + 4) % 4;
   const AMBER = ['#e89e44', '#cf8432', '#9c5c1c'];
   const AMBER_LT = ['#f8b65e', '#e89e44', '#b87224'];
@@ -1271,61 +1454,84 @@ export function buildArmchairSprite(rot = 0) {
   const BRASS = ['#f4c862', '#d4a034', '#986c1c'];
 
   return isoSprite(1, 1, 38, (box) => {
-    // 4 sturdy turned wooden legs with brass ferrules (z = 0 .. 6)
-    const legCoords = [
-      [0.16, 0.16, 0.28, 0.28],
-      [0.72, 0.16, 0.84, 0.28],
-      [0.16, 0.72, 0.28, 0.84],
-      [0.72, 0.72, 0.84, 0.84]
-    ];
-    for (const [u0, v0, u1, v1] of legCoords) {
-      box(u0, v0, u1, v1, 0, 5, ...WOOD);
-      box(u0 - 0.01, v0 - 0.01, u1 + 0.01, v1 + 0.01, 0, 1.6, ...BRASS);
-    }
+    const drawBack = layer === 'all' || layer === 'back';
+    const drawFront = layer === 'all' || layer === 'front';
 
-    // Base apron frame (z = 5 .. 8)
-    box(0.12, 0.12, 0.88, 0.88, 5, 8, ...AMBER_DK);
+    if (drawBack) {
+      // 4 sturdy turned wooden legs with brass ferrules (z = 0 .. 6)
+      const legCoords = [
+        [0.16, 0.16, 0.28, 0.28],
+        [0.72, 0.16, 0.84, 0.28],
+        [0.16, 0.72, 0.28, 0.84],
+        [0.72, 0.72, 0.84, 0.84]
+      ];
+      for (const [u0, v0, u1, v1] of legCoords) {
+        box(u0, v0, u1, v1, 0, 5, ...WOOD);
+        box(u0 - 0.01, v0 - 0.01, u1 + 0.01, v1 + 0.01, 0, 1.6, ...BRASS);
+      }
+
+      // Base apron frame (z = 5 .. 8)
+      box(0.12, 0.12, 0.88, 0.88, 5, 8, ...AMBER_DK);
+    }
 
     if (r === 0) {
       // Facing down (+v): backrest on north edge, arms on west/east
-      box(0.10, 0.10, 0.90, 0.34, 8, 36, ...AMBER);
-      box(0.10, 0.08, 0.90, 0.14, 34, 37, ...PIPING); // crown roll
-      // Button tufting on backrest
-      stitching(box, 0.16, 0.28, 0.84, 0.34, 25, { piping: false, tufts: [[0.28, 0.5], [0.72, 0.5]], tuftDark: AMBER_DK[2], tuftLight: AMBER_LT[0] });
+      if (drawBack) {
+        box(0.10, 0.10, 0.90, 0.34, 8, 36, ...AMBER);
+        box(0.10, 0.08, 0.90, 0.14, 34, 37, ...PIPING); // crown roll
+        // Button tufting on backrest
+        stitching(box, 0.16, 0.28, 0.84, 0.34, 25, { piping: false, tufts: [[0.28, 0.5], [0.72, 0.5]], tuftDark: AMBER_DK[2], tuftLight: AMBER_LT[0] });
 
-      // Roll armrests on left and right
-      box(0.08, 0.34, 0.28, 0.90, 8, 23, ...AMBER);
-      box(0.72, 0.34, 0.92, 0.90, 8, 23, ...AMBER);
-      stitching(box, 0.08, 0.34, 0.28, 0.90, 22.5, { piping: PIPING, pipingHeight: 0.8 });
-      stitching(box, 0.72, 0.34, 0.92, 0.90, 22.5, { piping: PIPING, pipingHeight: 0.8 });
-
-      // Plush seat cushion with welted piping
-      box(0.28, 0.34, 0.72, 0.88, 8, 14, ...AMBER_LT);
-      stitching(box, 0.28, 0.34, 0.72, 0.88, 13.5, { piping: PIPING, tufts: [[0.5, 0.55]], tuftDark: AMBER_DK[2], tuftLight: AMBER_LT[0] });
+        // Plush seat cushion with welted piping
+        box(0.28, 0.34, 0.72, 0.88, 8, 14, ...AMBER_LT);
+        stitching(box, 0.28, 0.34, 0.72, 0.88, 13.5, { piping: PIPING, tufts: [[0.5, 0.55]], tuftDark: AMBER_DK[2], tuftLight: AMBER_LT[0] });
+      }
+      if (drawFront) {
+        // Roll armrests on left and right
+        box(0.08, 0.34, 0.28, 0.90, 8, 23, ...AMBER);
+        box(0.72, 0.34, 0.92, 0.90, 8, 23, ...AMBER);
+        stitching(box, 0.08, 0.34, 0.28, 0.90, 22.5, { piping: PIPING, pipingHeight: 0.8 });
+        stitching(box, 0.72, 0.34, 0.92, 0.90, 22.5, { piping: PIPING, pipingHeight: 0.8 });
+      }
     } else if (r === 1) {
-      box(0.10, 0.10, 0.34, 0.90, 8, 36, ...AMBER);
-      box(0.08, 0.10, 0.14, 0.90, 34, 37, ...PIPING);
-      box(0.34, 0.08, 0.90, 0.28, 8, 23, ...AMBER);
-      box(0.34, 0.72, 0.90, 0.92, 8, 23, ...AMBER);
-      stitching(box, 0.34, 0.08, 0.90, 0.28, 22.5, { piping: PIPING, pipingHeight: 0.8 });
-      stitching(box, 0.34, 0.72, 0.90, 0.92, 22.5, { piping: PIPING, pipingHeight: 0.8 });
+      // Facing right (+u): backrest on west edge, arms on north/south
+      if (drawBack) {
+        box(0.10, 0.10, 0.34, 0.90, 8, 36, ...AMBER);
+        box(0.08, 0.10, 0.14, 0.90, 34, 37, ...PIPING);
+        box(0.34, 0.08, 0.90, 0.28, 8, 23, ...AMBER);
+        stitching(box, 0.34, 0.08, 0.90, 0.28, 22.5, { piping: PIPING, pipingHeight: 0.8 });
 
-      box(0.34, 0.28, 0.88, 0.72, 8, 14, ...AMBER_LT);
-      stitching(box, 0.34, 0.28, 0.88, 0.72, 13.5, { piping: PIPING, tufts: [[0.55, 0.5]], tuftDark: AMBER_DK[2], tuftLight: AMBER_LT[0] });
+        box(0.34, 0.28, 0.88, 0.72, 8, 14, ...AMBER_LT);
+        stitching(box, 0.34, 0.28, 0.88, 0.72, 13.5, { piping: PIPING, tufts: [[0.55, 0.5]], tuftDark: AMBER_DK[2], tuftLight: AMBER_LT[0] });
+      }
+      if (drawFront) {
+        box(0.34, 0.72, 0.90, 0.92, 8, 23, ...AMBER);
+        stitching(box, 0.34, 0.72, 0.90, 0.92, 22.5, { piping: PIPING, pipingHeight: 0.8 });
+      }
     } else if (r === 2) {
-      box(0.28, 0.12, 0.72, 0.66, 8, 14, ...AMBER_LT);
-      stitching(box, 0.28, 0.12, 0.72, 0.66, 13.5, { piping: PIPING, tufts: [[0.5, 0.45]], tuftDark: AMBER_DK[2], tuftLight: AMBER_LT[0] });
-      box(0.08, 0.10, 0.28, 0.66, 8, 23, ...AMBER);
-      box(0.72, 0.10, 0.92, 0.66, 8, 23, ...AMBER);
-      box(0.10, 0.66, 0.90, 0.90, 8, 36, ...AMBER);
-      box(0.10, 0.86, 0.90, 0.92, 34, 37, ...PIPING);
+      // Facing up (-v): backrest on south edge
+      if (drawBack) {
+        box(0.28, 0.12, 0.72, 0.66, 8, 14, ...AMBER_LT);
+        stitching(box, 0.28, 0.12, 0.72, 0.66, 13.5, { piping: PIPING, tufts: [[0.5, 0.45]], tuftDark: AMBER_DK[2], tuftLight: AMBER_LT[0] });
+        box(0.08, 0.10, 0.28, 0.66, 8, 23, ...AMBER);
+        box(0.72, 0.10, 0.92, 0.66, 8, 23, ...AMBER);
+      }
+      if (drawFront) {
+        box(0.10, 0.66, 0.90, 0.90, 8, 36, ...AMBER);
+        box(0.10, 0.86, 0.90, 0.92, 34, 37, ...PIPING);
+      }
     } else {
-      box(0.12, 0.28, 0.66, 0.72, 8, 14, ...AMBER_LT);
-      stitching(box, 0.12, 0.28, 0.66, 0.72, 13.5, { piping: PIPING, tufts: [[0.45, 0.5]], tuftDark: AMBER_DK[2], tuftLight: AMBER_LT[0] });
-      box(0.10, 0.08, 0.66, 0.28, 8, 23, ...AMBER);
-      box(0.10, 0.72, 0.66, 0.92, 8, 23, ...AMBER);
-      box(0.66, 0.10, 0.90, 0.90, 8, 36, ...AMBER);
-      box(0.86, 0.10, 0.92, 0.90, 34, 37, ...PIPING);
+      // Facing left (-u): backrest on east edge
+      if (drawBack) {
+        box(0.12, 0.28, 0.66, 0.72, 8, 14, ...AMBER_LT);
+        stitching(box, 0.12, 0.28, 0.66, 0.72, 13.5, { piping: PIPING, tufts: [[0.45, 0.5]], tuftDark: AMBER_DK[2], tuftLight: AMBER_LT[0] });
+        box(0.10, 0.08, 0.66, 0.28, 8, 23, ...AMBER);
+      }
+      if (drawFront) {
+        box(0.66, 0.10, 0.90, 0.90, 8, 36, ...AMBER);
+        box(0.86, 0.10, 0.92, 0.90, 34, 37, ...PIPING);
+        box(0.10, 0.72, 0.66, 0.92, 8, 23, ...AMBER);
+      }
     }
   });
 }
@@ -1438,17 +1644,13 @@ export function buildBookshelf(rot = 0) {
 
     if (rot % 2 === 0) {
       // 2x1: front face is south-west (v = th - 0.06), side face is south-east (u = tw - 0.04)
-      // Solid back panel
+      // Solid back panel, behind every book
       box(0.06, 0.08, tw - 0.06, 0.22, 4, 70, ...BACK);
-      // Left side upright panel
-      box(0.04, 0.06, 0.16, th - 0.06, 4, 70, ...FRAME);
-      // Right side upright panel (fully encloses the side face from back to front)
-      box(tw - 0.16, 0.06, tw - 0.04, th - 0.06, 4, 70, ...FRAME);
-      // Decorative recessed side panel moulding on exposed side
-      box(tw - 0.14, 0.12, tw - 0.06, th - 0.12, 8, 66, '#824e22', '#6c3e18', '#502a10');
-      box(tw - 0.13, 0.14, tw - 0.07, th - 0.14, 10, 64, '#ba7840', '#9c5e2a', '#744018');
 
-      // 3 shelves with books
+      // 3 shelves with books, drawn before the side panels (which are full
+      // height, 4..70) so the panels fully wrap the shelf/book edges instead
+      // of the books' own faces painting over them (the painter's-algorithm
+      // order bug that left the right side looking sawed off).
       for (let row = 0; row < 3; row++) {
         const shelfZ = 4 + row * 22;
         if (shelfZ > 4) {
@@ -1467,19 +1669,21 @@ export function buildBookshelf(rot = 0) {
           }
         }
       }
+
+      // Left side upright panel
+      box(0.04, 0.06, 0.16, th - 0.06, 4, 70, ...FRAME);
+      // Right side upright panel (fully encloses the side face from back to front)
+      box(tw - 0.16, 0.06, tw - 0.04, th - 0.06, 4, 70, ...FRAME);
+      // Decorative recessed side panel moulding on exposed side
+      box(tw - 0.14, 0.12, tw - 0.06, th - 0.12, 8, 66, '#824e22', '#6c3e18', '#502a10');
+      box(tw - 0.13, 0.14, tw - 0.07, th - 0.14, 10, 64, '#ba7840', '#9c5e2a', '#744018');
     } else {
       // 1x2: front face is south-east (u = tw - 0.06), side face is south-west (v = th - 0.04)
-      // Solid back panel
+      // Solid back panel, behind every book
       box(0.08, 0.06, 0.22, th - 0.06, 4, 70, ...BACK);
-      // Rear side upright panel
-      box(0.06, 0.04, tw - 0.06, 0.16, 4, 70, ...FRAME);
-      // Front side upright panel (fully encloses the side face from back to front)
-      box(0.06, th - 0.16, tw - 0.06, th - 0.04, 4, 70, ...FRAME);
-      // Decorative recessed side panel moulding on exposed side
-      box(0.12, th - 0.14, tw - 0.12, th - 0.06, 8, 66, '#824e22', '#6c3e18', '#502a10');
-      box(0.14, th - 0.13, tw - 0.14, th - 0.07, 10, 64, '#ba7840', '#9c5e2a', '#744018');
 
-      // 3 shelves with books
+      // 3 shelves with books, drawn before the side panels for the same
+      // reason as the 2x1 branch above.
       for (let row = 0; row < 3; row++) {
         const shelfZ = 4 + row * 22;
         if (shelfZ > 4) {
@@ -1498,6 +1702,14 @@ export function buildBookshelf(rot = 0) {
           }
         }
       }
+
+      // Rear side upright panel
+      box(0.06, 0.04, tw - 0.06, 0.16, 4, 70, ...FRAME);
+      // Front side upright panel (fully encloses the side face from back to front)
+      box(0.06, th - 0.16, tw - 0.06, th - 0.04, 4, 70, ...FRAME);
+      // Decorative recessed side panel moulding on exposed side
+      box(0.12, th - 0.14, tw - 0.12, th - 0.06, 8, 66, '#824e22', '#6c3e18', '#502a10');
+      box(0.14, th - 0.13, tw - 0.14, th - 0.07, 10, 64, '#ba7840', '#9c5e2a', '#744018');
     }
 
     // Top molded cornice / capping slab (z = 70 .. 74) with subtle overhang
@@ -2429,7 +2641,7 @@ export function buildDiningTableSprite(rot = 0) {
   });
 }
 
-export function buildDiningChairSprite(rot = 0) {
+export function buildDiningChairSprite(rot = 0, layer = 'all') {
   const r = ((rot % 4) + 4) % 4;
   const VELVET = ['#c83e58', '#a22840', '#721428'];
   const PIPING = ['#f4c862', '#d2a03c', '#986c1c'];
@@ -2437,37 +2649,46 @@ export function buildDiningChairSprite(rot = 0) {
   const GOLD = ['#f4c862', '#d4a034', '#986c1c'];
 
   return isoSprite(1, 1, 36, (box) => {
-    // 4 slender tapered legs with polished gold ferrules (z = 0 .. 10)
-    const legCoords = [
-      [0.20, 0.20, 0.30, 0.30],
-      [0.70, 0.20, 0.80, 0.30],
-      [0.20, 0.70, 0.30, 0.80],
-      [0.70, 0.70, 0.80, 0.80]
-    ];
-    for (const [u0, v0, u1, v1] of legCoords) {
-      box(u0, v0, u1, v1, 0, 10, ...WALNUT);
-      box(u0 - 0.01, v0 - 0.01, u1 + 0.01, v1 + 0.01, 0, 2.5, ...GOLD);
+    const drawBack = layer === 'all' || layer === 'back';
+    const drawFront = layer === 'all' || layer === 'front';
+
+    if (drawBack) {
+      // 4 slender tapered legs with polished gold ferrules (z = 0 .. 10)
+      const legCoords = [
+        [0.20, 0.20, 0.30, 0.30],
+        [0.70, 0.20, 0.80, 0.30],
+        [0.20, 0.70, 0.30, 0.80],
+        [0.70, 0.70, 0.80, 0.80]
+      ];
+      for (const [u0, v0, u1, v1] of legCoords) {
+        box(u0, v0, u1, v1, 0, 10, ...WALNUT);
+        box(u0 - 0.01, v0 - 0.01, u1 + 0.01, v1 + 0.01, 0, 2.5, ...GOLD);
+      }
+
+      // Plush velvet seat cushion with gold piping rim
+      box(0.18, 0.18, 0.82, 0.82, 10, 15, ...VELVET);
+      stitching(box, 0.18, 0.18, 0.82, 0.82, 14.5, { piping: PIPING, pipingHeight: 0.8 });
+
+      // Curved upholstered backrest with gold piping frame
+      if (r === 0) {
+        box(0.18, 0.16, 0.82, 0.30, 15, 34, ...VELVET);
+        box(0.18, 0.14, 0.82, 0.20, 32, 35, ...PIPING);
+        box(0.48, 0.28, 0.52, 0.32, 16, 32, ...PIPING); // vertical center flute seam
+      } else if (r === 1) {
+        box(0.16, 0.18, 0.30, 0.82, 15, 34, ...VELVET);
+        box(0.14, 0.18, 0.20, 0.82, 32, 35, ...PIPING);
+        box(0.28, 0.48, 0.32, 0.52, 16, 32, ...PIPING);
+      }
     }
 
-    // Plush velvet seat cushion with gold piping rim
-    box(0.18, 0.18, 0.82, 0.82, 10, 15, ...VELVET);
-    stitching(box, 0.18, 0.18, 0.82, 0.82, 14.5, { piping: PIPING, pipingHeight: 0.8 });
-
-    // Curved upholstered backrest with gold piping frame
-    if (r === 0) {
-      box(0.18, 0.16, 0.82, 0.30, 15, 34, ...VELVET);
-      box(0.18, 0.14, 0.82, 0.20, 32, 35, ...PIPING);
-      box(0.48, 0.28, 0.52, 0.32, 16, 32, ...PIPING); // vertical center flute seam
-    } else if (r === 1) {
-      box(0.16, 0.18, 0.30, 0.82, 15, 34, ...VELVET);
-      box(0.14, 0.18, 0.20, 0.82, 32, 35, ...PIPING);
-      box(0.28, 0.48, 0.32, 0.52, 16, 32, ...PIPING);
-    } else if (r === 2) {
-      box(0.18, 0.70, 0.82, 0.84, 15, 34, ...VELVET);
-      box(0.18, 0.80, 0.82, 0.86, 32, 35, ...PIPING);
-    } else {
-      box(0.70, 0.18, 0.84, 0.82, 15, 34, ...VELVET);
-      box(0.80, 0.18, 0.86, 0.82, 32, 35, ...PIPING);
+    if (drawFront) {
+      if (r === 2) {
+        box(0.18, 0.70, 0.82, 0.84, 15, 34, ...VELVET);
+        box(0.18, 0.80, 0.82, 0.86, 32, 35, ...PIPING);
+      } else if (r === 3) {
+        box(0.70, 0.18, 0.84, 0.82, 15, 34, ...VELVET);
+        box(0.80, 0.18, 0.86, 0.82, 32, 35, ...PIPING);
+      }
     }
   });
 }
@@ -4021,58 +4242,95 @@ export function buildRoundDiningTable(rot = 0) {
   });
 }
 
-export function buildDiningBooth(rot = 0) {
-  const [tw, th] = rot % 2 ? [1, 2] : [2, 1];
+export function buildDiningBooth(rot = 0, layer = 'all') {
+  const r = ((rot % 4) + 4) % 4;
+  const [tw, th] = r % 2 ? [1, 2] : [2, 1];
   const VELVET = ['#c82442', '#a01830', '#740c20'];
   const VELVET_LT = ['#e03856', '#c82442', '#901228'];
   const WALNUT = ['#381c14', '#26120c', '#160804'];
   const PIPING = ['#f4c862', '#d4a034', '#986c1c'];
 
   return isoSprite(tw, th, 40, (box) => {
-    // Solid dark walnut kickplate plinth (z = 0 .. 8)
-    box(0.06, 0.08, tw - 0.06, th - 0.08, 0, 8, ...WALNUT);
-    grain(box, 0.06, 0.08, tw - 0.06, th - 0.08, 8, { wood: WALNUT[0] });
+    const drawBack = layer === 'all' || layer === 'back';
+    const drawFront = layer === 'all' || layer === 'front';
 
-    // Deep cushioned velvet bench seat (z = 8 .. 16) with gold piping welt
-    box(0.08, 0.10, tw - 0.08, th - 0.10, 8, 16, ...VELVET);
-    stitching(box, 0.08, 0.10, tw - 0.08, th - 0.10, 15.5, { piping: PIPING, pipingHeight: 0.8 });
+    if (drawBack) {
+      // Solid dark walnut kickplate plinth (z = 0 .. 8)
+      box(0.06, 0.08, tw - 0.06, th - 0.08, 0, 8, ...WALNUT);
+      grain(box, 0.06, 0.08, tw - 0.06, th - 0.08, 8, { wood: WALNUT[0] });
 
-    // High-backed booth backrest with vertical channel tufting
-    if (tw >= th) {
-      // 2x1 configuration: backrest along north edge
-      box(0.06, 0.08, tw - 0.06, 0.34, 16, 38, ...VELVET);
-      // Vertical channel tufting flutes
-      const flutes = 5;
-      const fW = (tw - 0.16) / flutes;
-      for (let i = 0; i < flutes; i++) {
-        const fu0 = 0.08 + i * fW + 0.015;
-        const fu1 = fu0 + fW - 0.03;
-        box(fu0, 0.28, fu1, 0.35, 17, 37, ...VELVET_LT);
+      // Deep cushioned velvet bench seat (z = 8 .. 16) with gold piping welt
+      box(0.08, 0.10, tw - 0.08, th - 0.10, 8, 16, ...VELVET);
+      stitching(box, 0.08, 0.10, tw - 0.08, th - 0.10, 15.5, { piping: PIPING, pipingHeight: 0.8 });
+
+      // High-backed booth backrest with vertical channel tufting
+      if (r === 0) {
+        // 2x1 configuration: backrest along north edge
+        box(0.06, 0.08, tw - 0.06, 0.34, 16, 38, ...VELVET);
+        // Vertical channel tufting flutes
+        const flutes = 5;
+        const fW = (tw - 0.16) / flutes;
+        for (let i = 0; i < flutes; i++) {
+          const fu0 = 0.08 + i * fW + 0.015;
+          const fu1 = fu0 + fW - 0.03;
+          box(fu0, 0.28, fu1, 0.35, 17, 37, ...VELVET_LT);
+        }
+        // Top crown roll with gold piping
+        box(0.06, 0.06, tw - 0.06, 0.14, 37, 40, ...PIPING);
+        // End gable wings
+        box(0.06, 0.08, 0.14, th - 0.08, 8, 30, ...WALNUT);
+        box(tw - 0.14, 0.08, tw - 0.06, th - 0.08, 8, 30, ...WALNUT);
+      } else if (r === 1) {
+        // 1x2 configuration: backrest along west edge
+        box(0.08, 0.06, 0.34, th - 0.06, 16, 38, ...VELVET);
+        const flutes = 5;
+        const fD = (th - 0.16) / flutes;
+        for (let i = 0; i < flutes; i++) {
+          const fv0 = 0.08 + i * fD + 0.015;
+          const fv1 = fv0 + fD - 0.03;
+          box(0.28, fv0, 0.35, fv1, 17, 37, ...VELVET_LT);
+        }
+        box(0.06, 0.06, 0.14, th - 0.06, 37, 40, ...PIPING);
+        box(0.08, 0.06, tw - 0.08, 0.14, 8, 30, ...WALNUT);
+        box(0.08, th - 0.14, tw - 0.08, th - 0.06, 8, 30, ...WALNUT);
       }
-      // Top crown roll with gold piping
-      box(0.06, 0.06, tw - 0.06, 0.14, 37, 40, ...PIPING);
-      // End gable wings
-      box(0.06, 0.08, 0.14, th - 0.08, 8, 30, ...WALNUT);
-      box(tw - 0.14, 0.08, tw - 0.06, th - 0.08, 8, 30, ...WALNUT);
-    } else {
-      // 1x2 configuration: backrest along west edge
-      box(0.08, 0.06, 0.34, th - 0.06, 16, 38, ...VELVET);
-      const flutes = 5;
-      const fD = (th - 0.16) / flutes;
-      for (let i = 0; i < flutes; i++) {
-        const fv0 = 0.08 + i * fD + 0.015;
-        const fv1 = fv0 + fD - 0.03;
-        box(0.28, fv0, 0.35, fv1, 17, 37, ...VELVET_LT);
+    }
+
+    if (drawFront) {
+      if (r === 2) {
+        // 2x1 configuration: backrest along south edge
+        box(0.06, 0.66, tw - 0.06, 0.92, 16, 38, ...VELVET);
+        const flutes = 5;
+        const fW = (tw - 0.16) / flutes;
+        for (let i = 0; i < flutes; i++) {
+          const fu0 = 0.08 + i * fW + 0.015;
+          const fu1 = fu0 + fW - 0.03;
+          box(fu0, 0.65, fu1, 0.72, 17, 37, ...VELVET_LT);
+        }
+        box(0.06, 0.86, tw - 0.06, 0.94, 37, 40, ...PIPING);
+        box(0.06, 0.08, 0.14, th - 0.08, 8, 30, ...WALNUT);
+        box(tw - 0.14, 0.08, tw - 0.06, th - 0.08, 8, 30, ...WALNUT);
+      } else if (r === 3) {
+        // 1x2 configuration: backrest along east edge
+        box(0.66, 0.08, 0.92, th - 0.06, 16, 38, ...VELVET);
+        const flutes = 5;
+        const fD = (th - 0.16) / flutes;
+        for (let i = 0; i < flutes; i++) {
+          const fv0 = 0.08 + i * fD + 0.015;
+          const fv1 = fv0 + fD - 0.03;
+          box(0.65, fv0, 0.72, fv1, 17, 37, ...VELVET_LT);
+        }
+        box(0.86, 0.06, 0.94, th - 0.06, 37, 40, ...PIPING);
+        box(0.08, 0.06, tw - 0.08, 0.14, 8, 30, ...WALNUT);
+        box(0.08, th - 0.14, tw - 0.08, th - 0.06, 8, 30, ...WALNUT);
       }
-      box(0.06, 0.06, 0.14, th - 0.06, 37, 40, ...PIPING);
-      box(0.08, 0.06, tw - 0.08, 0.14, 8, 30, ...WALNUT);
-      box(0.08, th - 0.14, tw - 0.08, th - 0.06, 8, 30, ...WALNUT);
     }
   });
 }
 
 export function buildWineWall(rot = 0) {
-  const [tw, th] = rot % 2 ? [1, 3] : [3, 1];
+  const r = ((rot % 4) + 4) % 4;
+  const [tw, th] = r % 2 ? [1, 3] : [3, 1];
   const OAK_DARK = ['#28140c', '#1a0c06', '#0e0602'];
   const OAK = ['#3e2014', '#2c140a', '#1a0a04'];
   const OAK_TRIM = ['#5c3422', '#442214', '#2e140a'];
@@ -4085,15 +4343,8 @@ export function buildWineWall(rot = 0) {
   const FOIL_SILVER = ['#f0f4f8', '#c8d4e0', '#94a0b0'];
 
   return isoSprite(tw, th, 64, (box) => {
-    // Solid dark oak base plinth & top cornice
+    // Solid dark oak base plinth (z = 0 .. 4)
     box(0.04, 0.06, tw - 0.04, th - 0.06, 0, 4, ...OAK_DARK);
-    box(0.02, 0.04, tw - 0.02, th - 0.04, 60, 64, ...OAK_TRIM);
-
-    // Carcass framing & back panel
-    box(0.06, 0.08, tw - 0.06, th - 0.08, 4, 60, ...OAK);
-
-    // Backlit illuminated interior cavity
-    box(0.10, 0.12, tw - 0.10, th - 0.12, 6, 58, ...GLOW);
 
     // 4 tiers of wine racks with individual bottles & foil capsules
     const bottles = [
@@ -4103,13 +4354,17 @@ export function buildWineWall(rot = 0) {
       { col: BOTTLE_GREEN, foil: FOIL_SILVER }
     ];
 
-    if (tw > th) {
-      // 3x1 configuration
-      for (let r = 0; r < 4; r++) {
-        const z0 = 8 + r * 13;
+    if (r % 2 === 0) {
+      // 3x1 configuration: back panel on north edge
+      box(0.06, 0.08, tw - 0.06, 0.22, 4, 60, ...OAK);
+      // Backlit illuminated interior cavity
+      box(0.14, 0.20, tw - 0.14, th - 0.12, 6, 56, ...GLOW);
+
+      for (let row = 0; row < 4; row++) {
+        const z0 = 8 + row * 13;
         // Wood shelf beam
         box(0.10, 0.10, tw - 0.10, th - 0.10, z0, z0 + 2, ...OAK_TRIM);
-        const { col, foil } = bottles[r % bottles.length];
+        const { col, foil } = bottles[row % bottles.length];
         const numCols = 7;
         const span = tw - 0.32;
         for (let c = 0; c < numCols; c++) {
@@ -4123,17 +4378,23 @@ export function buildWineWall(rot = 0) {
           box((x0 + x1) / 2 - 0.02, 0.18, (x0 + x1) / 2 + 0.02, th - 0.12, z0 + 9, z0 + 12, ...foil);
         }
       }
+      // Left and right side upright panels fully enclosing the shelf ends
+      box(0.04, 0.06, 0.14, th - 0.06, 4, 60, ...OAK_TRIM);
+      box(tw - 0.14, 0.06, tw - 0.04, th - 0.06, 4, 60, ...OAK_TRIM);
       // Glass door mullions & chrome handles
       box(tw / 3 - 0.02, 0.07, tw / 3 + 0.02, 0.09, 4, 60, ...OAK_DARK);
       box((2 * tw) / 3 - 0.02, 0.07, (2 * tw) / 3 + 0.02, 0.09, 4, 60, ...OAK_DARK);
       box(tw / 3 - 0.05, 0.05, tw / 3 - 0.03, 0.08, 28, 36, ...CHROME);
       box((2 * tw) / 3 + 0.03, 0.05, (2 * tw) / 3 + 0.05, 0.08, 28, 36, ...CHROME);
     } else {
-      // 1x3 configuration
-      for (let r = 0; r < 4; r++) {
-        const z0 = 8 + r * 13;
+      // 1x3 configuration: back panel on west edge
+      box(0.08, 0.06, 0.22, th - 0.06, 4, 60, ...OAK);
+      box(0.20, 0.14, tw - 0.12, th - 0.14, 6, 56, ...GLOW);
+
+      for (let row = 0; row < 4; row++) {
+        const z0 = 8 + row * 13;
         box(0.10, 0.10, tw - 0.10, th - 0.10, z0, z0 + 2, ...OAK_TRIM);
-        const { col, foil } = bottles[r % bottles.length];
+        const { col, foil } = bottles[row % bottles.length];
         const numCols = 7;
         const span = th - 0.32;
         for (let c = 0; c < numCols; c++) {
@@ -4144,11 +4405,16 @@ export function buildWineWall(rot = 0) {
           box(0.18, (y0 + y1) / 2 - 0.02, tw - 0.12, (y0 + y1) / 2 + 0.02, z0 + 9, z0 + 12, ...foil);
         }
       }
+      // Side upright panels fully enclosing the shelf ends
+      box(0.06, 0.04, tw - 0.06, 0.14, 4, 60, ...OAK_TRIM);
+      box(0.06, th - 0.14, tw - 0.06, th - 0.04, 4, 60, ...OAK_TRIM);
       box(0.07, th / 3 - 0.02, 0.09, th / 3 + 0.02, 4, 60, ...OAK_DARK);
       box(0.07, (2 * th) / 3 - 0.02, 0.09, (2 * th) / 3 + 0.02, 4, 60, ...OAK_DARK);
       box(0.05, th / 3 - 0.05, 0.08, th / 3 - 0.03, 28, 36, ...CHROME);
       box(0.05, (2 * th) / 3 + 0.03, 0.08, (2 * th) / 3 + 0.05, 28, 36, ...CHROME);
     }
+    // Top molded cornice / capping slab (z = 60 .. 64)
+    box(0.02, 0.04, tw - 0.02, th - 0.04, 60, 64, ...OAK_TRIM);
   });
 }
 
@@ -5699,15 +5965,15 @@ export function buildEdgeRailSegment(edge = 'south') {
 }
 
 export const FURNITURE_BUILDERS = {
-  stool: (rot) => buildStoolSprite(rot),
-  sofa: (rot) => buildSofaSprite('#e2607a', rot),
-  rooftopSofa: (rot) => buildSofaSprite('#5aa0e2', rot),
+  stool: (rot, layer) => buildStoolSprite(rot),
+  sofa: (rot, layer) => buildSofaSprite('#e2607a', rot, layer),
+  rooftopSofa: (rot, layer) => buildSofaSprite('#5aa0e2', rot, layer),
   lamp: (rot) => buildLampSprite(rot),
   plant: (rot) => buildPlantSprite(rot),
   rug: (rot) => buildRugSprite(rot),
   neonSign: (rot) => buildNeonSignSprite(rot),
   jukebox: (rot) => buildJukeboxSprite(rot),
-  armchair: (rot) => buildArmchairSprite(rot),
+  armchair: (rot, layer) => buildArmchairSprite(rot, layer),
   deckchair: (rot) => buildDeckchairSprite(rot),
   receptionDesk: (rot) => buildReceptionDesk(rot),
   bookshelf: (rot) => buildBookshelf(rot),
@@ -5729,7 +5995,7 @@ export const FURNITURE_BUILDERS = {
   dumbbellRack: (rot) => buildDumbbellRackSprite(rot),
   yogaMat: (rot) => buildYogaMatSprite(rot),
   diningTable: (rot) => buildDiningTableSprite(rot),
-  diningChair: (rot) => buildDiningChairSprite(rot),
+  diningChair: (rot, layer) => buildDiningChairSprite(rot, layer),
   buffetCounter: (rot) => buildBuffetCounterSprite(rot),
   chefStation: (rot) => buildChefStationSprite(rot),
   poolWater: (rot) => buildPoolWaterSprite(rot),
@@ -5758,7 +6024,7 @@ export const FURNITURE_BUILDERS = {
   gymLockers: (rot) => buildGymLockers(rot),
   waterCooler: (rot) => buildWaterCooler(rot),
   roundDiningTable: (rot) => buildRoundDiningTable(rot),
-  diningBooth: (rot) => buildDiningBooth(rot),
+  diningBooth: (rot, layer) => buildDiningBooth(rot, layer),
   wineWall: (rot) => buildWineWall(rot),
   maitreDPodium: (rot) => buildMaitreDPodium(rot),
   grandPiano: (rot) => buildGrandPiano(rot),

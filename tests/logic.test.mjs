@@ -8,7 +8,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 import {
-  findPath, retargetMover, advanceMover, createMoverState, canStep, smoothPath,
+  findPath, retargetMover, advanceMover, createMoverState, canStep, smoothPath, nextWalkTarget,
 } from '../js/pathfinding.js';
 import {
   buyItem, placeItem, pickupItem, moveItem, canPlaceAt, footprintCells, rotatedFootprint,
@@ -28,6 +28,7 @@ import {
   projectIsoCityPoint, buildIsoCityLayout, computeCityVehicles, drawBackground,
   clampZoom, zoomAtPoint, centerCameraOnTile, screenToTile, worldToScreen,
   DEFAULT_ZOOM, MIN_ZOOM, MAX_ZOOM, deviceScale, deadzoneCameraTarget, CAMERA_DEADZONE_MARGIN,
+  nearCityLayerTransform, getCachedIsoCityLayout, renderSkylineToCanvas, getSeatConfig,
 } from '../js/render.js';
 import { ChiptuneAudio, MOOD_PROFILES, MUSIC_FILES, PLAYLIST, TRACK_ORDER, moodForRoom, formatTime } from '../js/audio.js';
 
@@ -89,6 +90,67 @@ test('pathfinding: returns null for an out-of-bounds goal', () => {
 test('pathfinding: start === goal returns a single-tile path', () => {
   const path = findPath(5, 5, () => false, { x: 2, y: 2 }, { x: 2, y: 2 });
   assert.deepEqual(path, [{ x: 2, y: 2 }]);
+});
+
+// ======================= v0.12.3 walk-destination marker state =======================
+
+test('v0.12.3 walk target: a click sets the marker at the clicked tile', () => {
+  const mover = createMoverState(0, 0);
+  const now = 1000;
+  const result = retargetMover(mover, 3, 0, now, { width: 5, height: 5, isBlocked: () => false });
+  const target = nextWalkTarget(null, result, 3, 0, now);
+  assert.deepEqual(target, { x: 3, y: 0, bornAt: now, blocked: false });
+});
+
+test('v0.12.3 walk target: clicking a blocked, fully-enclosed tile flashes red at the clicked tile instead of moving the marker', () => {
+  const mover = createMoverState(0, 0);
+  const enclosed = ['1,2', '3,2', '2,1', '2,3'];
+  const isBlocked = (x, y) => enclosed.includes(`${x},${y}`);
+  const now = 2000;
+  const result = retargetMover(mover, 2, 2, now, { width: 5, height: 5, isBlocked, nearestFallback: false });
+  assert.equal(result.ok, false);
+  const prior = { x: 9, y: 9, bornAt: 0, blocked: false };
+  const target = nextWalkTarget(prior, result, 2, 2, now);
+  assert.deepEqual(target, { x: 2, y: 2, bornAt: now, blocked: true });
+});
+
+test('v0.12.3 walk target: clicking the tile the avatar already stands on clears the marker instead of flashing red', () => {
+  const mover = createMoverState(2, 2);
+  const now = 3000;
+  const result = retargetMover(mover, 2, 2, now, { width: 5, height: 5, isBlocked: () => false });
+  assert.equal(result.ok, false);
+  assert.equal(result.alreadyAtGoal, true);
+  const target = nextWalkTarget({ x: 1, y: 1, bornAt: 0, blocked: false }, result, 2, 2, now);
+  assert.equal(target, null);
+});
+
+test('v0.12.3 walk target: a new click while already walking replaces the marker with the newly resolved goal', () => {
+  const mover = createMoverState(0, 0);
+  const t0 = 4000;
+  const first = retargetMover(mover, 4, 0, t0, { width: 5, height: 5, isBlocked: () => false });
+  const firstTarget = nextWalkTarget(null, first, 4, 0, t0);
+  assert.deepEqual(firstTarget, { x: 4, y: 0, bornAt: t0, blocked: false });
+
+  // Still mid-step toward the first goal; click a different tile before arriving.
+  const t1 = 4050;
+  const second = retargetMover(mover, 0, 4, t1, { width: 5, height: 5, isBlocked: () => false });
+  assert.equal(second.ok, true);
+  assert.equal(second.ignoredDuplicate, undefined);
+  const secondTarget = nextWalkTarget(firstTarget, second, 0, 4, t1);
+  assert.deepEqual(secondTarget, { x: 0, y: 4, bornAt: t1, blocked: false });
+});
+
+test('v0.12.3 walk target: a duplicate click on the same in-progress target leaves the marker untouched', () => {
+  const mover = createMoverState(0, 0);
+  const t0 = 5000;
+  const first = retargetMover(mover, 4, 0, t0, { width: 5, height: 5, isBlocked: () => false });
+  const firstTarget = nextWalkTarget(null, first, 4, 0, t0);
+
+  const t1 = 5050;
+  const dup = retargetMover(mover, 4, 0, t1, { width: 5, height: 5, isBlocked: () => false });
+  assert.equal(dup.ignoredDuplicate, true);
+  const target = nextWalkTarget(firstTarget, dup, 4, 0, t1);
+  assert.deepEqual(target, firstTarget, 'duplicate click keeps the existing marker (same tile, same bornAt)');
 });
 
 // ======================= inventory =======================
@@ -1710,14 +1772,17 @@ test('v0.8.1 furniture: no two non-walkable preset furniture footprints overlap,
 
 function makeFakeCanvasCtx({ record = false } = {}) {
   const calls = [];
+  const rects = [];
   let transform = { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
   const push = (type) => { if (record) calls.push(type); };
   return {
     _calls: calls,
+    _rects: rects,
     canvas: { width: 0, height: 0 },
     fillStyle: '#000', strokeStyle: '#000', lineWidth: 1, imageSmoothingEnabled: true,
     save() { push('save'); }, restore() { push('restore'); },
-    beginPath() { push('beginPath'); }, closePath() { push('closePath'); }, clip() { push('clip'); }, rect() { push('rect'); },
+    beginPath() { push('beginPath'); }, closePath() { push('closePath'); }, clip() { push('clip'); },
+    rect(x, y, w, h) { push('rect'); if (record) rects.push([x, y, w, h]); },
     moveTo() { push('moveTo'); }, lineTo() { push('lineTo'); }, arc() { push('arc'); }, ellipse() { push('ellipse'); },
     fill() { push('fill'); }, stroke() { push('stroke'); },
     fillRect() { push('fillRect'); }, strokeRect() { push('strokeRect'); }, clearRect() { push('clearRect'); },
@@ -2630,4 +2695,164 @@ test('v0.9.0 migration: v9 save migrates forward to v10, keeping existing player
   assert.equal(loaded.player.look.outfit, 'tee', 'defaults outfit to tee');
   assert.equal(loaded.player.look.pants, '#2c3e63', 'defaults pants to denim');
   assert.equal(loaded.player.look.accessory, 'none', 'defaults accessory to none');
+});
+
+// ======================= v0.12.3 city background grounding & alignment =======================
+
+test('v0.12.3 city background: the ground/road/crossing pass clips to y >= horizonY, so nothing paints above the street even though road corridors geometrically extend behind the hotel', () => {
+  // Road & crossing polygons intentionally span the full corridor (including
+  // the stretch behind/north of the hotel, used as an off-screen vehicle
+  // queue), so asserting raw geometry never crosses the horizon would be
+  // wrong. What must hold is that the ground/road/crossing pass clips its
+  // paint region to the visible street band before drawing anything.
+  const room = ROOMS.lobby;
+  const width = 960;
+  const height = 600;
+  const layout = buildIsoCityLayout(room, width, height, 0.5, 400, 320, true);
+  const liveCtx = makeFakeCanvasCtx({ record: true });
+  renderSkylineToCanvas(liveCtx, width, height, 0.5, room.floor || 1, room, 400, 320, 'ground');
+
+  const clipIdx = liveCtx._calls.indexOf('clip');
+  assert.ok(clipIdx > -1, 'the ground/road/crossing pass establishes a clip before painting');
+  assert.ok(liveCtx._rects.length > 0, 'the clip is defined by a rect() call');
+  const [, clipY] = liveCtx._rects[liveCtx._rects.length - 1];
+  assert.ok(Math.abs(clipY - layout.horizonY) < 1, `clip region starts at the horizon (y=${layout.horizonY}), got y=${clipY}`);
+  const restoreIdx = liveCtx._calls.indexOf('restore', clipIdx);
+  assert.ok(restoreIdx > clipIdx, 'ground/roads/crossings are painted inside the horizon clip and restored afterward');
+
+  // Vehicles share the same contract: the caller (main.js's updateVehiclesAndBeacons,
+  // and drawBackground below) must clip to the same horizon band before drawing them.
+  const vehicles = computeCityVehicles(layout, 3000, 0.5);
+  assert.ok(vehicles.length > 0, 'at least one vehicle is active');
+});
+
+test('v0.12.3 city background: drawBackground clips the animated vehicle pass to the same horizon band as the ground/road layer', () => {
+  const realDocument = global.document;
+  global.document = {
+    createElement(tag) {
+      assert.equal(tag, 'canvas');
+      const canvas = { width: 0, height: 0 };
+      canvas.getContext = () => makeFakeCanvasCtx({ record: false });
+      return canvas;
+    },
+  };
+  try {
+    const room = ROOMS.lobby;
+    const width = 960;
+    const height = 600;
+    const layout = buildIsoCityLayout(room, width, height, 0.5, 400, 320, true);
+    const liveCtx = makeFakeCanvasCtx({ record: true });
+    drawBackground(liveCtx, width, height, 0.5, room.floor || 1, 1, 3000, room, 1, null);
+    const clipIdx = liveCtx._calls.indexOf('clip');
+    assert.ok(clipIdx > -1, 'drawBackground clips before drawing the animated vehicle layer');
+    const [, clipY] = liveCtx._rects[liveCtx._rects.length - 1];
+    assert.ok(Math.abs(clipY - layout.horizonY) < 1, `vehicle clip starts at the horizon (y=${layout.horizonY}), got y=${clipY}`);
+  } finally {
+    global.document = realDocument;
+  }
+});
+
+test('v0.12.3 city background: the near layer (ground/roads/buildings/vehicles) uses EXACTLY the camera pan/zoom, never a damped parallax', () => {
+  // Guards against the v0.12.1 regression where the whole baked city layer
+  // (including roads & cars) rode a parallax/zoom-damped CSS transform meant
+  // only for a distant skyline, floating the street above the ground plane.
+  const cameras = [
+    { panX: 0, panY: 0, zoom: 1 },
+    { panX: 140, panY: -90, zoom: DEFAULT_ZOOM },
+    { panX: -260, panY: 310, zoom: MAX_ZOOM },
+  ];
+  for (const camera of cameras) {
+    const near = nearCityLayerTransform(camera);
+    assert.equal(near.panX, camera.panX, 'near layer panX must equal the camera panX exactly');
+    assert.equal(near.panY, camera.panY, 'near layer panY must equal the camera panY exactly');
+    assert.equal(near.zoom, camera.zoom, 'near layer zoom must equal the camera zoom exactly');
+  }
+});
+
+test('v0.12.3 city background: a world point projects to the same screen position through the game camera and through the background CSS transform, within 1 CSS px, at 3 zooms x 3 pans', () => {
+  const width = 960;
+  const height = 600;
+  const room = ROOMS.lobby;
+  const { originX, originY } = computeOrigin(room, width, height);
+  // Known world points: the lobby's front-right (south-east) tile corner, and a
+  // road centreline point just south of the hotel block.
+  const lobbyCorner = tileToScreen(room.width - 1, room.height - 1, originX, originY);
+  const layout = getCachedIsoCityLayout(room, width, height, 0.5, 400, 320);
+  const roadPt = layout.roads[0].pts[0];
+  const worldPoints = [
+    [lobbyCorner.sx, lobbyCorner.sy],
+    [roadPt[0], roadPt[1]],
+  ];
+
+  const zooms = [MIN_ZOOM, DEFAULT_ZOOM, MAX_ZOOM];
+  const pans = [[0, 0], [180, -120], [-340, 260]];
+
+  // Mirrors how performBackgroundBake positions the near-layer canvas inside
+  // #bgLayer (style.left/top = -ox/-oy) — a world point at local (dx, dy) ends
+  // up at bgLayer-local (dx, dy) regardless of the bake margin ox/oy, then the
+  // CSS transform (translate3d + scale, transform-origin: center center) maps
+  // it to the screen exactly like worldToScreen does for the game canvas.
+  const ox = Math.max(380, Math.round(width * 0.45));
+  const oy = Math.max(260, Math.round(height * 0.45));
+  const cssLayerToScreen = (dx, dy, panX, panY, zoom) => {
+    const canvasLocalX = dx + ox; // canvas-internal coordinate
+    const canvasLocalY = dy + oy;
+    const bgLayerLocalX = -ox + canvasLocalX; // canvas.style.left = -ox
+    const bgLayerLocalY = -oy + canvasLocalY;
+    const cx = width / 2;
+    const cy = height / 2;
+    return {
+      sx: cx + (bgLayerLocalX - cx) * zoom + panX,
+      sy: cy + (bgLayerLocalY - cy) * zoom + panY,
+    };
+  };
+
+  for (const zoom of zooms) {
+    for (const [panX, panY] of pans) {
+      const camera = { panX, panY, zoom };
+      const near = nearCityLayerTransform(camera);
+      for (const [wx, wy] of worldPoints) {
+        const viaGameCamera = worldToScreen(wx, wy, camera, width, height);
+        const viaBackground = cssLayerToScreen(wx, wy, near.panX, near.panY, near.zoom);
+        assert.ok(
+          Math.abs(viaGameCamera.sx - viaBackground.sx) <= 1,
+          `x mismatch at zoom=${zoom} pan=(${panX},${panY}): game=${viaGameCamera.sx} bg=${viaBackground.sx}`,
+        );
+        assert.ok(
+          Math.abs(viaGameCamera.sy - viaBackground.sy) <= 1,
+          `y mismatch at zoom=${zoom} pan=(${panX},${panY}): game=${viaGameCamera.sy} bg=${viaBackground.sy}`,
+        );
+      }
+    }
+  }
+});
+
+test('v0.12.3 furniture: seat offset and layer order defined for every seat type and facing', () => {
+  const seatItems = CATALOGUE.filter((c) => c.seat);
+  assert.ok(seatItems.length >= 10, 'catalogue contains seat items');
+  for (const item of seatItems) {
+    for (let rot = 0; rot < 4; rot++) {
+      const cfg = getSeatConfig(item.id, rot);
+      assert.ok(cfg, `seat config exists for ${item.id} rot ${rot}`);
+      assert.ok(typeof cfg.seatHeight === 'number' && cfg.seatHeight > 0, `${item.id} rot ${rot} has positive seatHeight`);
+      assert.equal(cfg.yOffset, -cfg.seatHeight, `${item.id} rot ${rot} yOffset matches -seatHeight`);
+      assert.ok(Array.isArray(cfg.layerOrder) && cfg.layerOrder.includes('avatar'), `${item.id} rot ${rot} layerOrder includes avatar`);
+    }
+  }
+});
+
+test('v0.12.3 city background: road and vehicle y positions lie on or below the horizon/ground plane', () => {
+  const layout = buildIsoCityLayout({ id: 'lobby', width: 12, height: 9, floor: 1 }, 960, 600, 0.5);
+  assert.ok(layout.roads.length > 0, 'layout has roads');
+  for (const r of layout.roads) {
+    for (const pt of r.pts) {
+      assert.ok(pt[1] >= layout.horizonY - 1, `road point y (${pt[1]}) must lie on or below horizonY (${layout.horizonY})`);
+    }
+  }
+  for (let t = 0; t < 12000; t += 400) {
+    const vehicles = computeCityVehicles(layout, t, 0.5);
+    for (const v of vehicles) {
+      assert.ok(v.screenY >= layout.horizonY - 1, `vehicle ${v.id} screenY (${v.screenY}) must lie on or below horizonY (${layout.horizonY})`);
+    }
+  }
 });

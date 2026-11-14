@@ -45,6 +45,46 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - All item sprites remain 100% baked and cached in the offscreen sprite cache (`isoSprite`), resulting in zero per-frame draw call overhead and preserving 60 FPS across all floors.
 
+## [0.12.3] - 2026-11-14
+
+### Fixed
+
+- **City Roads, Crossings, and Vehicles Alignment (`js/render.js`, `js/main.js`)**:
+  - Clamped road generation and vehicle bounding boxes to the ground plane (`screenY >= horizonY`), preventing roads, vehicles, and crossings from floating across facades or drifting into the sky.
+  - Vehicles drive strictly along street-level roads on or below the horizon.
+- **Hotel Tower Base Grounding (`js/render.js`)**:
+  - Extended hotel tower facade down to street level across all floors and zoom levels.
+  - Ground-floor entrance plinth, front doors, and ambient contact shadow now render at street level on every floor, eliminating mid-air tower floating.
+- **Locked Near City Layer Camera Transform (`js/render.js`, `js/main.js`, `index.html`, `css/style.css`)**:
+  - Split background into `#bgLayer` (near ground, roads, sidewalks, buildings, trees, vehicles, tower base) and `#skyLayer` (far skyline, clouds, celestial bodies).
+  - Near layer is locked 1:1 to the game canvas transform (`panX, panY, zoom`), eliminating parallax drift between the room walls and the street. Far skyline retains gentle parallax and atmospheric blur.
+- **Walk Target Destination Highlight (`js/pathfinding.js`, `js/render.js`, `js/main.js`)**:
+  - Highlight destination tile on click/tap with contrasting double outline (bright inner diamond, dark outer edge), soft translucent fill, gentle pulse, and click drop-in ripple.
+  - Blocked tiles briefly flash red. Target is cleared on arrival or room change.
+- **Bookshelf & Cabinet Sprites Audit (`js/sprites.js`)**:
+  - Redrew bookshelf and wine wall as complete isometric boxes with full left and right side panels, top cornice, back panel, and shelf boards spanning the full width. Books and wine bottles are neatly inset within the frame.
+- **Armchair & Seating Clipping Audit (`js/sprites.js`, `js/render.js`)**:
+  - Fixed armchair seat cushion z-fighting and overlapping faces.
+  - Added seat configuration matrix (`SEAT_CONFIGS`) defining seat heights and draw orders for all seat types across all 4 facings.
+  - Split occupied seats into back and front drawable layers so avatars sit squarely on the cushion without clipping through backrests or armrests.
+
+### Performance Benchmarks
+
+#### Mobile Profile (390x844, DPR 3, CPU 4x throttle, 4s walk per floor)
+
+| Floor | Baseline FPS | Optimized FPS | Baseline Frame Time | Optimized Frame Time | p95 Frame Time |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| Restaurant | 11.5 fps | 33.7 fps | 86.78 ms | 29.66 ms | 50.10 ms |
+| F5 Pool & Spa | 14.8 fps | 43.3 fps | 67.57 ms | 23.08 ms | 33.40 ms |
+| Rooftop | 14.2 fps | 41.3 fps | 70.51 ms | 24.20 ms | 50.00 ms |
+
+#### Desktop Profile (1200x800, DPR 1, 2s walk per floor)
+
+| Floor | Avg FPS | Avg Frame Time | p95 Frame Time | p99 Frame Time |
+| :--- | :---: | :---: | :---: | :---: |
+| Restaurant | 34.7 fps | 28.81 ms | 33.40 ms | 33.50 ms |
+| F5 Pool & Spa | 34.9 fps | 28.64 ms | 33.40 ms | 99.90 ms |
+| Rooftop | 35.0 fps | 28.57 ms | 33.40 ms | 50.10 ms |
 
 ## [0.12.2] - 2026-11-14
 
