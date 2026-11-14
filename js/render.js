@@ -39,6 +39,23 @@ export function deviceScale(dpr = 1, zoom = 1) {
 // Baked sprite canvases are rasterised at `dpr` density in room/world space. The
 // caller may be drawing under a camera transform (device-pixel-ratio * zoom, plus
 let activeCamMatrix = null;
+let activeTransformMode = 'camera';
+
+export function ensureDeviceTransform(ctx) {
+  if (activeTransformMode !== 'device') {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    activeTransformMode = 'device';
+  }
+}
+
+export function ensureCameraTransform(ctx) {
+  if (activeTransformMode !== 'camera') {
+    if (activeCamMatrix) {
+      ctx.setTransform(activeCamMatrix.a, 0, 0, activeCamMatrix.d, activeCamMatrix.e, activeCamMatrix.f);
+    }
+    activeTransformMode = 'camera';
+  }
+}
 
 // pan) — we must honour that same transform here too, or sprites drift out of sync
 // with vector-drawn content (shadows, vehicles, buildings) that already respects it.
@@ -63,9 +80,9 @@ function blitDeviceAligned(ctx, sourceCanvas, cssX, cssY, dpr) {
   const zoomScale = t.a / dpr;
   const dw = Math.round(sourceCanvas.width * zoomScale);
   const dh = Math.round(sourceCanvas.height * zoomScale);
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
+
+  ensureDeviceTransform(ctx);
   ctx.drawImage(sourceCanvas, dx, dy, dw, dh);
-  ctx.setTransform(t.a, 0, 0, t.d, t.e, t.f);
 }
 
 // `spriteOrFactory` may be a pre-built sprite object or a zero-arg factory
@@ -1444,18 +1461,26 @@ export function renderSkylineToCanvas(g, width, height, phase, floor, room = nul
 
 function drawTowerCutawayUnderCached(ctx, room, originX, originY, width, height, phase, dpr = 1) {
   const phaseBucket = Math.round(phase * 48) % 48;
-  const key = `cutaway:${room.id}:${width}x${height}@${dpr}:p${phaseBucket}`;
+  const floorNo = (room.floor === 'R' || room.floor === 42 || room.floor === '42') ? 42 : (Number(room.floor) || 1);
+  const groundDy = computeGroundDy(floorNo);
+  const minX = Math.floor(originX - (room.height - 1) * (TILE_W / 2) - TILE_W / 2 - 48);
+  const maxX = Math.ceil(originX + (room.width - 1) * (TILE_W / 2) + TILE_W / 2 + 48);
+  const minY = Math.floor(originY - WALL_ANCHOR_Y - 96);
+  const maxY = Math.ceil(originY + (room.width + room.height - 2) * (TILE_H / 2) + TILE_H / 2 + groundDy + 64);
+  const w = maxX - minX;
+  const h = maxY - minY;
+  const key = `cutaway:${room.id}:${minX},${minY}:${w}x${h}@${dpr}:p${phaseBucket}`;
   if (cutawayCache.key !== key) {
     const off = cutawayCache.canvas || document.createElement('canvas');
-    off.width = Math.max(1, Math.round(width * dpr));
-    off.height = Math.max(1, Math.round(height * dpr));
+    off.width = Math.max(1, Math.round(w * dpr));
+    off.height = Math.max(1, Math.round(h * dpr));
     const g = off.getContext('2d');
-    g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    g.clearRect(0, 0, width, height);
+    g.setTransform(dpr, 0, 0, dpr, -minX * dpr, -minY * dpr);
+    g.clearRect(minX, minY, w, h);
     drawTowerCutawayUnder(g, room, originX, originY, height, phaseBucket / 48);
-    cutawayCache = { key, canvas: off };
+    cutawayCache = { key, canvas: off, minX, minY };
   }
-  blitDeviceAligned(ctx, cutawayCache.canvas, 0, 0, dpr);
+  blitDeviceAligned(ctx, cutawayCache.canvas, cutawayCache.minX, cutawayCache.minY, dpr);
 }
 
 function drawTowerCutawayUnder(ctx, room, originX, originY, height, phase) {
@@ -1485,21 +1510,21 @@ function drawTowerCutawayUnder(ctx, room, originX, originY, height, phase) {
   const storyH = STORY_H;
   const floorNo = (room.floor === 'R' || room.floor === 42 || room.floor === '42') ? 42 : (Number(room.floor) || 1);
   const groundDy = computeGroundDy(floorNo);
-  const gL = (pt) => pt[1] + groundDy;
+  const gL = (pt) => [pt[0], pt[1] + groundDy];
 
   // Outer left & right structural corner columns
   const colTopOffset = room.isRooftop ? 0 : WALL_H;
   fillPoly(ctx, [
     [westPt[0] - 8, westPt[1] - colTopOffset],
     [westPt[0], westPt[1] - colTopOffset],
-    [westPt[0], gL(westPt)],
-    [westPt[0] - 8, gL(westPt)],
+    gL(westPt),
+    [westPt[0] - 8, gL(westPt)[1]],
   ], colLeft);
   fillPoly(ctx, [
     [eastPt[0], eastPt[1] - colTopOffset],
     [eastPt[0] + 8, eastPt[1] - colTopOffset],
-    [eastPt[0] + 8, gL(eastPt)],
-    [eastPt[0], gL(eastPt)],
+    [eastPt[0] + 8, gL(eastPt)[1]],
+    gL(eastPt),
   ], colRight);
 
   // Cut-away Upper Story hint above the back walls (only for non-rooftop floors)
@@ -1539,7 +1564,6 @@ function drawTowerCutawayUnder(ctx, room, originX, originY, height, phase) {
   }
 
   // Silhouette-accurate lower tower shaft, neighbouring floor windows, and concrete slab per non-VOID boundary tile
-  const underSlabCol = shadeColor(floorBaseColor(room), -0.25);
   const storiesBelow = storiesBelowFloor(floorNo);
   const roomMidX = (room.width - 1) / 2;
   const roomMidY = (room.height - 1) / 2;
@@ -1548,18 +1572,20 @@ function drawTowerCutawayUnder(ctx, room, originX, originY, height, phase) {
   for (let y = 1; y < room.height; y++) {
     for (let x = 1; x < room.width; x++) {
       if (!isFloorTile(x, y)) continue;
+      const leftBoundary = !isFloorTile(x, y + 1);
+      const rightBoundary = !isFloorTile(x + 1, y);
+      if (!leftBoundary && !rightBoundary) continue;
+
       const { sx, sy } = tileToScreen(x, y, originX, originY);
-      const nPt = [sx, sy - TILE_H / 2];
       const ePt = [sx + TILE_W / 2, sy];
       const sPt = [sx, sy + TILE_H / 2];
       const wPt = [sx - TILE_W / 2, sy];
-      fillPoly(ctx, [nPt, ePt, sPt, wPt], underSlabCol);
 
       // Left-facing exterior boundary (+y edge where y+1 is void or outside room)
-      if (!isFloorTile(x, y + 1)) {
+      if (leftBoundary) {
         const d = Math.abs(x - roomMidX) + Math.abs(y - roomMidY) * 0.1;
         if (d < entranceDist) { entranceDist = d; entranceTile = { wPt, sPt }; }
-        fillPoly(ctx, [wPt, sPt, [sPt[0], gL(sPt)], [wPt[0], gL(wPt)]], facadeLeft);
+        fillPoly(ctx, [wPt, sPt, gL(sPt), gL(wPt)], facadeLeft);
         for (let story = 0; story < storiesBelow; story++) {
           const dy0 = SLAB_H + 8 + story * storyH;
           if (dy0 + 26 > groundDy) break;
@@ -1580,8 +1606,8 @@ function drawTowerCutawayUnder(ctx, room, originX, originY, height, phase) {
       }
 
       // Right-facing exterior boundary (+x edge where x+1 is void or outside room)
-      if (!isFloorTile(x + 1, y)) {
-        fillPoly(ctx, [sPt, ePt, [ePt[0], gL(ePt)], [sPt[0], gL(sPt)]], facadeRight);
+      if (rightBoundary) {
+        fillPoly(ctx, [sPt, ePt, gL(ePt), gL(sPt)], facadeRight);
         for (let story = 0; story < storiesBelow; story++) {
           const dy0 = SLAB_H + 8 + story * storyH;
           if (dy0 + 26 > groundDy) break;
@@ -1615,9 +1641,7 @@ function drawTowerCutawayUnder(ctx, room, originX, originY, height, phase) {
     }
   }
 
-  // Ground-floor plinth, lobby entrance and contact shadow at street level.
-  // Meets the city ground plane on every floor, grounding the tower base with
-  // the street instead of hovering.
+  // Ground-floor plinth and lobby entrance at street level.
   if (entranceTile) {
     const { wPt, sPt } = entranceTile;
     const doorTop = groundDy - 32;
@@ -1625,27 +1649,17 @@ function drawTowerCutawayUnder(ctx, room, originX, originY, height, phase) {
     const glassCol = day > 0.55 ? '#5c4428' : '#ffdd8e';
     fillPoly(ctx, [
       [wPt[0] + 3, wPt[1] + doorTop], [sPt[0] - 3, sPt[1] + doorTop],
-      [sPt[0] - 3, gL(sPt) - 1], [wPt[0] + 3, gL(wPt) - 1],
+      [sPt[0] - 3, gL(sPt)[1] - 1], [wPt[0] + 3, gL(wPt)[1] - 1],
     ], frameCol);
     fillPoly(ctx, [
       [wPt[0] + 7, wPt[1] + doorTop + 4], [sPt[0] - 7, sPt[1] + doorTop + 4],
-      [sPt[0] - 7, gL(sPt) - 1], [wPt[0] + 7, gL(wPt) - 1],
+      [sPt[0] - 7, gL(sPt)[1] - 1], [wPt[0] + 7, gL(wPt)[1] - 1],
     ], glassCol);
     ctx.strokeStyle = 'rgba(0,0,0,0.3)'; ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo((wPt[0] + sPt[0]) / 2, (wPt[1] + sPt[1]) / 2 + doorTop + 4);
-    ctx.lineTo((wPt[0] + sPt[0]) / 2, gL(sPt) - 1);
+    ctx.lineTo((wPt[0] + sPt[0]) / 2, gL(sPt)[1] - 1);
     ctx.stroke();
-    const shX0 = westPt[0] - 14;
-    const shX1 = eastPt[0] + 14;
-    const shY = gL(southPt);
-    ctx.save();
-    ctx.globalAlpha = 0.3;
-    ctx.fillStyle = '#000000';
-    ctx.beginPath();
-    ctx.ellipse((shX0 + shX1) / 2, shY + 2, Math.max(1, (shX1 - shX0) / 2), 6, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
   }
 }
 
@@ -1654,18 +1668,24 @@ function drawTowerCutawayUnder(ctx, room, originX, originY, height, phase) {
 // bake once per room/zoom/origin and blit thereafter instead of re-walking
 // every polygon every frame.
 function drawTowerCutawayOverCached(ctx, room, originX, originY, width, height, dpr = 1) {
-  const key = `cutawayOver:${room.id}:${width}x${height}@${dpr}:${originX},${originY}`;
+  const minX = Math.floor(originX - (room.height - 1) * (TILE_W / 2) - TILE_W / 2 - 32);
+  const maxX = Math.ceil(originX + (room.width - 1) * (TILE_W / 2) + TILE_W / 2 + 32);
+  const minY = Math.floor(originY - WALL_ANCHOR_Y - 64);
+  const maxY = Math.ceil(originY + (room.width + room.height) * (TILE_H / 2) + 32);
+  const w = maxX - minX;
+  const h = maxY - minY;
+  const key = `cutawayOver:${room.id}:${minX},${minY}:${w}x${h}@${dpr}:${originX},${originY}`;
   if (cutawayOverCache.key !== key) {
     const off = cutawayOverCache.canvas || document.createElement('canvas');
-    off.width = Math.max(1, Math.round(width * dpr));
-    off.height = Math.max(1, Math.round(height * dpr));
+    off.width = Math.max(1, Math.round(w * dpr));
+    off.height = Math.max(1, Math.round(h * dpr));
     const g = off.getContext('2d');
-    g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    g.clearRect(0, 0, width, height);
+    g.setTransform(dpr, 0, 0, dpr, -minX * dpr, -minY * dpr);
+    g.clearRect(minX, minY, w, h);
     drawTowerCutawayOver(g, room, originX, originY);
-    cutawayOverCache = { key, canvas: off };
+    cutawayOverCache = { key, canvas: off, minX, minY };
   }
-  blitDeviceAligned(ctx, cutawayOverCache.canvas, 0, 0, dpr);
+  blitDeviceAligned(ctx, cutawayOverCache.canvas, cutawayOverCache.minX, cutawayOverCache.minY, dpr);
 }
 
 function drawTowerCutawayOver(ctx, room, originX, originY) {
@@ -1831,11 +1851,27 @@ function drawCharacter(ctx, e, screenX, screenY, dpr = 1, room = null) {
     }
     ctx.restore();
   } else if (!e.sitting && !pose.lie && e.action !== 'swim') {
-    ctx.fillStyle = 'rgba(24, 12, 36, 0.24)';
-    for (const [rx, ry] of [[19, 9.5], [14, 7]]) {
-      ctx.beginPath();
-      ctx.ellipse(screenX + 2, screenY + 1, rx, ry, 0, 0, Math.PI * 2);
-      ctx.fill();
+    const t = activeCamMatrix;
+    if (t) {
+      ensureDeviceTransform(ctx);
+      ctx.fillStyle = 'rgba(24, 12, 36, 0.24)';
+      for (const [rx, ry] of [[19, 9.5], [14, 7]]) {
+        const ex = Math.round(t.a * (screenX + 2) + t.e);
+        const ey = Math.round(t.d * (screenY + 1) + t.f);
+        const erx = rx * (t.a / (dpr || 1));
+        const ery = ry * (t.d / (dpr || 1));
+        ctx.beginPath();
+        ctx.ellipse(ex, ey, erx, ery, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    } else {
+      ensureCameraTransform(ctx);
+      ctx.fillStyle = 'rgba(24, 12, 36, 0.24)';
+      for (const [rx, ry] of [[19, 9.5], [14, 7]]) {
+        ctx.beginPath();
+        ctx.ellipse(screenX + 2, screenY + 1, rx, ry, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
   }
 
@@ -1924,7 +1960,25 @@ function drawNameTag(ctx, x, y, name) {
   ctx.restore();
 }
 
-function furnitureCanvas(itemId, rot = 0, dpr = 1, off = false, layer = 'all') {
+export function warmUpRoomSprites(room, placedFurniture, dpr = 1) {
+  if (placedFurniture) {
+    const ds = deviceScale(Math.max(1, Math.min(2, dpr)), 1);
+    for (const f of placedFurniture) {
+      furnitureCanvas(f.itemId, f.rot, ds, false, 'all');
+    }
+  }
+  const scale = deviceScale(Math.max(1, Math.min(2, dpr)), 1);
+  const baseLook = LOOKS.player;
+  for (const dir of ['down', 'up', 'left', 'right']) {
+    for (const stride of [0, 1, -1]) {
+      const pose = { stride, sit: false, lie: false, blink: false, breathe: 0 };
+      const key = `player:${baseLook.shirt || '#2b7fff'}:norm:${JSON.stringify(baseLook)}::0`;
+      getCharacterCanvas(key, baseLook, dir, pose, scale);
+    }
+  }
+}
+
+export function furnitureCanvas(itemId, rot = 0, dpr = 1, off = false, layer = 'all') {
   const r = ((rot % 4) + 4) % 4;
   const key = `furn:${itemId}:${r}:${layer}`;
   const builder = FURNITURE_BUILDERS[toSpriteKey(itemId)];
@@ -1976,10 +2030,24 @@ function drawFurniture(ctx, f, originX, originY, dpr = 1, off = false, layer = '
     const th = f.footprint.h;
     const rx = (tw + th) * 11;
     const ry = (tw + th) * 5.5;
-    ctx.fillStyle = 'rgba(24, 12, 36, 0.22)';
-    ctx.beginPath();
-    ctx.ellipse(sx + 2, sy + 1, rx, ry, 0, 0, Math.PI * 2);
-    ctx.fill();
+    const t = activeCamMatrix;
+    if (t) {
+      ensureDeviceTransform(ctx);
+      const ex = Math.round(t.a * (sx + 2) + t.e);
+      const ey = Math.round(t.d * (sy + 1) + t.f);
+      const erx = rx * (t.a / (dpr || 1));
+      const ery = ry * (t.d / (dpr || 1));
+      ctx.fillStyle = 'rgba(24, 12, 36, 0.22)';
+      ctx.beginPath();
+      ctx.ellipse(ex, ey, erx, ery, 0, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      ensureCameraTransform(ctx);
+      ctx.fillStyle = 'rgba(24, 12, 36, 0.22)';
+      ctx.beginPath();
+      ctx.ellipse(sx + 2, sy + 1, rx, ry, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
 
   const canvas = furnitureCanvas(f.itemId, f.rot, dpr, off, layer);
@@ -2421,6 +2489,7 @@ export function renderRoom(ctx, opts) {
   ctx.translate(-width / 2, -height / 2);
   const curT = ctx.getTransform();
   activeCamMatrix = { a: curT.a, b: curT.b, c: curT.c, d: curT.d, e: curT.e, f: curT.f };
+  activeTransformMode = 'camera';
 
   const { originX, originY } = computeOrigin(room, width, height);
   const lightsTag = lightsOn ? 'L' : 'D';
@@ -2618,11 +2687,16 @@ export function renderRoom(ctx, opts) {
 
   // Draw overhead items (e.g. chandelier) above characters and furniture
   for (const f of overheadDrawables) {
+    const anchorX = f.x + f.footprint.w / 2 - 0.5;
+    const anchorY = f.y + f.footprint.h / 2 - 0.5;
+    const { sx, sy } = tileToScreen(anchorX, anchorY, originX, originY);
+    if (camera && (sx < viewMinX - 80 || sx > viewMaxX + 80 || sy < viewMinY - 180 || sy > viewMaxY + 80)) continue;
     const oItem = getCatalogueItem(f.itemId);
     drawFurniture(ctx, f, originX, originY, ds, Boolean(oItem?.lightSource) && !lightsOn);
   }
 
   // Ambient lighting & localized warm emissive light pools (both night-time and per-room ambient lighting)
+  ensureCameraTransform(ctx);
   const roomAmbient = room.ambientLighting;
   const effectiveTintAlpha = Math.max(tintAlpha, roomAmbient ? (roomAmbient.darkness || 0.3) : 0);
   const effectiveTintColor = (tintAlpha > 0.02)
@@ -2654,7 +2728,9 @@ export function renderRoom(ctx, opts) {
   }
 
   // Restore camera transform so UI text, speech bubbles and dialog overlays render in native screen pixels
+  ensureCameraTransform(ctx);
   activeCamMatrix = null;
+  activeTransformMode = 'camera';
   ctx.restore();
 
   for (const n of nameTargets) drawNameTag(ctx, n.x, n.y, n.name);

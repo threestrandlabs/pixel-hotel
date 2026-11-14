@@ -13,7 +13,7 @@ import {
   renderRoom, computeOrigin, screenToTile, tileToScreen, worldToScreen, hitTestNpc, getItemIconDataUrl,
   DEFAULT_ZOOM, MIN_ZOOM, MAX_ZOOM, clampZoom, zoomAtPoint, centerCameraOnTile, deadzoneCameraTarget,
   renderSkylineToCanvas, getCachedIsoCityLayout, computeCityVehicles, drawCityVehicles,
-  nearCityLayerTransform,
+  nearCityLayerTransform, warmUpRoomSprites,
 } from './render.js';
 import { FpsMonitor, resolveBackgroundDetail } from './adaptiveQuality.js';
 import { audio, formatTime, trackForRoom } from './audio.js';
@@ -54,6 +54,8 @@ const skyCanvas = document.getElementById('skyCanvas');
 const bgLayer = document.getElementById('bgLayer');
 const bgCanvas = document.getElementById('bgCanvas');
 const vehicleCanvas = document.getElementById('vehicleCanvas');
+const buildingsCanvas = document.getElementById('buildingsCanvas');
+const beaconCanvas = document.getElementById('beaconCanvas');
 
 const bgState = {
   floor: null,
@@ -114,10 +116,43 @@ function performBackgroundBake(room, width, height, phase, ox, oy) {
     vehicleCanvas.style.height = `${height + 2 * oy}px`;
   }
 
+  if (buildingsCanvas) {
+    if (buildingsCanvas.width !== bgW || buildingsCanvas.height !== bgH) {
+      buildingsCanvas.width = bgW;
+      buildingsCanvas.height = bgH;
+    }
+    buildingsCanvas.style.left = `${-ox}px`;
+    buildingsCanvas.style.top = `${-oy}px`;
+    buildingsCanvas.style.width = `${width + 2 * ox}px`;
+    buildingsCanvas.style.height = `${height + 2 * oy}px`;
+  }
+
+  if (beaconCanvas) {
+    if (beaconCanvas.width !== bgW || beaconCanvas.height !== bgH) {
+      beaconCanvas.width = bgW;
+      beaconCanvas.height = bgH;
+    }
+    beaconCanvas.style.left = `${-ox}px`;
+    beaconCanvas.style.top = `${-oy}px`;
+    beaconCanvas.style.width = `${width + 2 * ox}px`;
+    beaconCanvas.style.height = `${height + 2 * oy}px`;
+  }
+
   const g = bgCanvas.getContext('2d');
   g.setTransform(BG_SCALE, 0, 0, BG_SCALE, ox * BG_SCALE, oy * BG_SCALE);
   g.imageSmoothingEnabled = true;
-  const beacons = renderSkylineToCanvas(g, width, height, phase, floor, room, ox, oy, 'near');
+  renderSkylineToCanvas(g, width, height, phase, floor, room, ox, oy, 'ground');
+
+  let beacons = [];
+  if (buildingsCanvas) {
+    const bCtx = buildingsCanvas.getContext('2d');
+    bCtx.setTransform(1, 0, 0, 1, 0, 0);
+    bCtx.clearRect(0, 0, buildingsCanvas.width, buildingsCanvas.height);
+    bCtx.setTransform(BG_SCALE, 0, 0, BG_SCALE, ox * BG_SCALE, oy * BG_SCALE);
+    bCtx.imageSmoothingEnabled = true;
+    beacons = renderSkylineToCanvas(bCtx, width, height, phase, floor, room, ox, oy, 'buildings');
+  }
+  bgState.beacons = beacons;
 
   // Far layer (sky, stars, sun/moon, distant skyline silhouette, hills): has no
   // world (u,v) coordinates, so it is the only part allowed to parallax.
@@ -194,18 +229,29 @@ function updateVehiclesAndBeacons(now, room, width, height, phase, ox, oy, quali
     if (vehicleCanvas.style.display !== 'none') {
       vehicleCanvas.style.display = 'none';
       const vCtx = vehicleCanvas.getContext('2d');
+      vCtx.setTransform(1, 0, 0, 1, 0, 0);
       vCtx.clearRect(0, 0, vehicleCanvas.width, vehicleCanvas.height);
+    }
+    if (beaconCanvas && beaconCanvas.style.display !== 'none') {
+      beaconCanvas.style.display = 'none';
+      const bCtx = beaconCanvas.getContext('2d');
+      bCtx.setTransform(1, 0, 0, 1, 0, 0);
+      bCtx.clearRect(0, 0, beaconCanvas.width, beaconCanvas.height);
     }
     return;
   }
   if (vehicleCanvas.style.display === 'none') {
     vehicleCanvas.style.display = 'block';
   }
+  if (beaconCanvas && beaconCanvas.style.display === 'none') {
+    beaconCanvas.style.display = 'block';
+  }
   if (now - bgState.lastVehicleUpdateAt < VEHICLE_UPDATE_INTERVAL) {
     return;
   }
   bgState.lastVehicleUpdateAt = now;
   const vCtx = vehicleCanvas.getContext('2d');
+  vCtx.setTransform(1, 0, 0, 1, 0, 0);
   vCtx.clearRect(0, 0, vehicleCanvas.width, vehicleCanvas.height);
   vCtx.setTransform(BG_SCALE, 0, 0, BG_SCALE, ox * BG_SCALE, oy * BG_SCALE);
 
@@ -219,17 +265,23 @@ function updateVehiclesAndBeacons(now, room, width, height, phase, ox, oy, quali
   drawCityVehicles(vCtx, layout, vehicles, phase, 1);
   vCtx.restore();
 
-  const blinkOn = Math.floor(now / 650) % 2 === 0;
-  for (const b of (bgState.beacons || [])) {
-    vCtx.fillStyle = blinkOn ? '#ff3b4e' : '#6e1c28';
-    vCtx.beginPath();
-    vCtx.arc(b.x, b.y, blinkOn ? 2.2 : 1.5, 0, Math.PI * 2);
-    vCtx.fill();
-    if (blinkOn) {
-      vCtx.fillStyle = 'rgba(255, 70, 90, 0.28)';
-      vCtx.beginPath();
-      vCtx.arc(b.x, b.y, 5.5, 0, Math.PI * 2);
-      vCtx.fill();
+  if (beaconCanvas) {
+    const bCtx = beaconCanvas.getContext('2d');
+    bCtx.setTransform(1, 0, 0, 1, 0, 0);
+    bCtx.clearRect(0, 0, beaconCanvas.width, beaconCanvas.height);
+    bCtx.setTransform(BG_SCALE, 0, 0, BG_SCALE, ox * BG_SCALE, oy * BG_SCALE);
+    const blinkOn = Math.floor(now / 650) % 2 === 0;
+    for (const b of (bgState.beacons || [])) {
+      bCtx.fillStyle = blinkOn ? '#ff3b4e' : '#6e1c28';
+      bCtx.beginPath();
+      bCtx.arc(b.x, b.y, blinkOn ? 2.2 : 1.5, 0, Math.PI * 2);
+      bCtx.fill();
+      if (blinkOn) {
+        bCtx.fillStyle = 'rgba(255, 70, 90, 0.28)';
+        bCtx.beginPath();
+        bCtx.arc(b.x, b.y, 5.5, 0, Math.PI * 2);
+        bCtx.fill();
+      }
     }
   }
 }
@@ -242,8 +294,8 @@ const MARGIN_BUCKET = 160;
 // MIN_ZOOM as the worst case so later zoom-outs never need a fresh rebake —
 // and only pay for a (idle-scheduled) rebake when the existing bake falls short.
 function requiredCityMargin(cssDim, pan, zoomNow) {
-  const worstZoom = Math.min(zoomNow, MIN_ZOOM);
-  const halfVisible = (cssDim / 2 + Math.abs(pan)) / worstZoom;
+  const effZoom = Math.max(MIN_ZOOM, Math.min(1.0, zoomNow || 1));
+  const halfVisible = (cssDim / 2 + Math.abs(pan)) / effZoom;
   const needed = Math.max(0, halfVisible - cssDim / 2) + cssDim * 0.12;
   return Math.ceil(needed / MARGIN_BUCKET) * MARGIN_BUCKET;
 }
@@ -384,7 +436,15 @@ function updateZoomLabel() {
   if (el) el.textContent = `${Math.round(ui.camera.zoom * 100)}%`;
 }
 
-function syncCanvasSize() {
+let canvasSizeDirty = true;
+
+function markCanvasDirty() {
+  canvasSizeDirty = true;
+}
+
+function syncCanvasSize(force = false) {
+  if (!canvasSizeDirty && !force) return;
+  canvasSizeDirty = false;
   const rect = canvas.getBoundingClientRect();
   // Capped so 3x phones don't pay for a backing buffer with 2.25x the pixels
   // of a 2x phone — indistinguishable on a small screen, but much cheaper to fill.
@@ -404,11 +464,12 @@ function syncCanvasSize() {
 }
 
 if (typeof ResizeObserver !== 'undefined') {
-  new ResizeObserver(() => syncCanvasSize()).observe(canvas);
+  new ResizeObserver(() => { markCanvasDirty(); syncCanvasSize(); }).observe(canvas);
 }
-window.addEventListener('resize', syncCanvasSize);
+window.addEventListener('resize', () => { markCanvasDirty(); syncCanvasSize(); });
 window.addEventListener('orientationchange', () => {
   setTimeout(() => {
+    markCanvasDirty();
     syncCanvasSize();
     recenterCamera(player.x, player.y);
   }, 120);
@@ -416,6 +477,7 @@ window.addEventListener('orientationchange', () => {
 if (typeof screen !== 'undefined' && screen.orientation?.addEventListener) {
   screen.orientation.addEventListener('change', () => {
     setTimeout(() => {
+      markCanvasDirty();
       syncCanvasSize();
       recenterCamera(player.x, player.y);
     }, 120);
@@ -1227,6 +1289,7 @@ function switchRoom(roomId, toTile) {
   }
   updateRoomLabel();
   recenterCamera(player.x, player.y, ui.camera.zoom);
+  warmUpRoomSprites(targetDef, currentRoomRuntime().placed, ui.dpr || 1);
   audio.setRoomMood(roomId, ui.phase, targetDef.floor || 1);
   refreshAudioUi();
   refreshRoomTab();
@@ -1598,7 +1661,7 @@ function placedFurnitureWithFootprint(roomRuntime) {
 // and we don't burn battery/CPU re-rendering faster than the game needs.
 // Set to 12ms (~75-80Hz threshold) so 90/120/144Hz displays cap to 60fps,
 // while natural 60Hz timer jitter (14-18ms) never accidentally drops a frame.
-const MIN_FRAME_INTERVAL_MS = 12;
+const MIN_FRAME_INTERVAL_MS = 0;
 let lastFrameAt = 0;
 let cachedWeatherState = null;
 let cachedWeatherAt = 0;
@@ -1659,7 +1722,7 @@ function frame(now) {
 
   const isMobile = (typeof window !== 'undefined') && (
     ('ontouchstart' in window) ||
-    (navigator.maxTouchPoints > 0) ||
+    ('navigator' in window && navigator.maxTouchPoints > 0) ||
     (ui.cssW <= 600 && (window.devicePixelRatio || 1) > 1)
   );
   const lowQualityTriggered = fpsMonitor.recordFrame(now);
@@ -2892,7 +2955,7 @@ window.__pixelHotel = Object.assign(window.__pixelHotel || {}, {
     performBackgroundBake(currentRoomDef(), ui.cssW, ui.cssH, ui.phase, ox, oy);
   }, // 0.5 noon, 0 midnight
   getSaveVersion: () => SAVE_VERSION,
-  getVersion: () => '0.12.4',
+  getVersion: () => '0.12.5',
   getBackgroundDetail: () => state.settings.backgroundDetail || 'auto',
   setBackgroundDetail: (mode) => {
     state.settings.backgroundDetail = mode;

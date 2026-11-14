@@ -92,7 +92,7 @@ html, body {
   height: 100%;
   pointer-events: none;
   overflow: visible;
-  filter: blur(3.5px) brightness(0.92) saturate(0.88);
+  /* filter: blur(3.5px) brightness(0.92) saturate(0.88); */
   image-rendering: auto;
   image-rendering: smooth;
   transform-origin: center center;
@@ -119,7 +119,7 @@ html, body {
   height: 100%;
   pointer-events: none;
   overflow: visible;
-  filter: blur(1.5px) brightness(0.92) saturate(0.88);
+  /* filter: blur(1.5px) brightness(0.92) saturate(0.88); */
   image-rendering: auto;
   image-rendering: smooth;
   transform-origin: center center;
@@ -127,7 +127,9 @@ html, body {
   z-index: 0;
 }
 #bgCanvas,
-#vehicleCanvas {
+#vehicleCanvas,
+#buildingsCanvas,
+#beaconCanvas {
   position: absolute;
   top: 0;
   left: 0;

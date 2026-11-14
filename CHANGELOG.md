@@ -5,6 +5,50 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 
+## [0.12.5] - 2026-11-14
+
+### Fixed
+
+- **Perspective, Depth & Occlusion Fixes (`js/sprites.js`, `shots/v0125/audit.md`)**:
+  - Full catalog audit across all 91 items, rendering each alone at 4x resolution against real-world physical references and isometric depth conventions:
+    - `grand_piano`: Restored missing 3rd leg under the spine cheek (`u = 0.22, v = 0.52, z = 0..16`); all 3 legs (bentside rear, keybed left, spine right) and the 3-pedal lyre are cleanly visible with correct back-to-front occlusion.
+    - `gym_mirror`: Completely redrawn as an authentic 1x1 wall-mounted mirror panel aligned to the 2:1 isometric wall plane, with brushed aluminum safety frame and diagonal specular glass streaks.
+    - `pool_ladder`: Redrawn with sweeping marine-grade stainless tubular handrails arching up from deck anchor escutcheons over the coping rim and dropping down into the water; far rail drawn first, 3 non-skid step treads drawn next, and near rail drawn last.
+    - `pool_umbrella`: Added radial eucalyptus stretcher ribs supporting the underside of the octagonal canvas canopy, properly occluding behind and in front of the center mast hub.
+    - `spa_partition`: Redrawn from a solid diagonal block into a clean 1x1 partition wall panel strictly aligned along 2:1 isometric wall lines (U for rot 0, V for rot 1) with chrome stanchions and etched bamboo glass.
+    - `telescope`: Tripod legs and alt-azimuth mount reordered strictly back-to-front (far West/East legs -> accessory spreader tray -> mount -> barrel -> near South leg).
+    - `string_lights`: Festoon bulb sockets and warm glowing filaments spaced cleanly without clipping the center cast-iron column or bracket arms.
+    - Arcade cabinets (`arcade_snake_1/2`, `arcade_breakout_1/2`, `arcade_drop_1/2`, `mini_arcade`): Carcass and marquee drawn first, CRT monitor and gameplay graphics drawn next, followed by slanted control decks, joysticks, buttons, and lower coin doors.
+    - `sky_viewer` platforms: Connected continuous optical binocular barrels without the floating 0.20-unit gap between eyepieces and objective lenses; depth ordered back-to-front across all 4 rotations.
+    - `noodle_cart` & `boba_bar`: Added rear support legs/posts grounding floating cart ends and overhead menu boards to countertops.
+    - `sauna_cabin`: Redrawn with cedar plank back/side walls, stepped interior sauna benches, volcanic stone heater stove, and front glass view door.
+    - `deckchair`: Replaced solid wooden wall blocks with true crossed X-frame scissor legs.
+    - `pool_water` & `lobby_fountain`: Submerged lane markers and wishing coins drawn before water surfaces to sit underwater.
+    - `rug` & `lobby_runner`: Fringe borders drawn with far fringe before field and near fringe after field to prevent clipping.
+    - `weight_bench`, `squat_rack`, `exercise_bike`, `rowing_machine`, `kitchen_prep_table`, `towel_rack`, `wall_sconce`, `jukebox`: Enforced strict back-to-front isometric depth order and eliminated reverse overlap artifacts.
+
+- **Exterior Hotel Cutaway Regression (`js/render.js`)**:
+  - Rewrote `drawTowerCutawayUnderCached` and `drawTowerCutawayOverCached` to draw the complete hotel building exterior from street level up to the active floor across all floors (Restaurant, Rooftop, Lobby, Pool, Gym, Library), resolving floating floor plate bugs (`bug_building_missing.png`, `bug_rooftop_building.png`).
+
+- **Skyline Vehicle Streaks & Shadow Bug (`js/render.js`, `js/skyline.js`)**:
+  - Reset vehicle canvas to identity transform before clearing each frame, resolving stretched vehicle smears across roads and buildings (`bug_skyline_car.png`, `bug_street_streaks.png`).
+  - Composited vehicle layer behind foreground 3D buildings and trees for realistic urban depth.
+  - Removed misplaced non-isometric contact shadow ellipse at street level (`bug_shadow_line.png`).
+
+- **Grand Lobby Frame Rate & Performance Optimization (`js/render.js`, `shots/v0125/perf.md`)**:
+  - Implemented pre-rendered caching for heavy static architectural elements (`drawLobbyArchitectureCached`), static cutaway towers, and warm-up furniture caching on room entry.
+  - Lobby 10s profile achieved 59.8 average FPS with p95 16.7ms and p99 16.8ms (well within target p95 <= 20ms, p99 <= 25ms).
+
+### Added
+
+- Verification artifacts in `shots/v0125/`:
+  - `audit.md`: Full catalog audit table documenting reference features, problems, and fixes for all 91 items.
+  - `after_contact_sheet.png`: High-resolution catalog contact sheet at 2x scale (180px per item).
+  - High-resolution closeups: `closeup_piano.png`, `closeup_gym_mirror.png`, `closeup_occlusion_1.png` (`string_lights`), `closeup_occlusion_2.png` (`telescope`), `closeup_occlusion_3.png` (`pool_ladder`).
+  - Room verification screenshots: `room_lobby.png`, `room_restaurant.png`, `room_rooftop.png`, `room_pool.png`, `room_gym.png`, `room_library.png`, `vehicles_skyline.png`.
+  - `perf.md`: Grand lobby performance profile benchmarks.
+
+
 ## [0.12.4] - 2026-11-14
 
 ### Added

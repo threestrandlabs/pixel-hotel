@@ -179,8 +179,41 @@ export function traceLineOfSightSteps(a, b, isBlocked) {
   return steps;
 }
 
+export function supercoverHasLineOfSight(a, b, isBlocked) {
+  if (a.x === b.x && a.y === b.y) return true;
+  if (isBlocked(b.x, b.y)) return false;
+
+  const dxTotal = b.x - a.x;
+  const dyTotal = b.y - a.y;
+  const nx = Math.abs(dxTotal);
+  const ny = Math.abs(dyTotal);
+  const signX = Math.sign(dxTotal);
+  const signY = Math.sign(dyTotal);
+
+  let cx = a.x;
+  let cy = a.y;
+  for (let ix = 0, iy = 0; ix < nx || iy < ny;) {
+    const decision = (1 + 2 * ix) * ny - (1 + 2 * iy) * nx;
+    if (decision === 0) {
+      if (isBlocked(cx + signX, cy) || isBlocked(cx, cy + signY)) return false;
+      cx += signX;
+      cy += signY;
+      ix++;
+      iy++;
+    } else if (decision < 0) {
+      cx += signX;
+      ix++;
+    } else {
+      cy += signY;
+      iy++;
+    }
+    if (isBlocked(cx, cy)) return false;
+  }
+  return true;
+}
+
 export function hasLineOfSight(a, b, isBlocked) {
-  return traceLineOfSightSteps(a, b, isBlocked) !== null;
+  return supercoverHasLineOfSight(a, b, isBlocked) && traceLineOfSightSteps(a, b, isBlocked) !== null;
 }
 
 /**
@@ -199,6 +232,7 @@ export function smoothPath(path, isBlocked, { resample = false } = {}) {
     let furthestIdx = anchorIdx + 1;
     let furthestSteps = null;
     for (let probe = path.length - 1; probe > anchorIdx + 1; probe--) {
+      if (!supercoverHasLineOfSight(path[anchorIdx], path[probe], isBlocked)) continue;
       const steps = traceLineOfSightSteps(path[anchorIdx], path[probe], isBlocked);
       if (steps) {
         furthestIdx = probe;
@@ -209,7 +243,7 @@ export function smoothPath(path, isBlocked, { resample = false } = {}) {
     const nextWp = path[furthestIdx];
     waypoints.push({ x: nextWp.x, y: nextWp.y });
     if (resample) {
-      const seg = furthestSteps || path.slice(anchorIdx, furthestIdx + 1);
+      const seg = furthestSteps || (furthestIdx === anchorIdx + 1 ? [path[anchorIdx], path[furthestIdx]] : (traceLineOfSightSteps(path[anchorIdx], path[furthestIdx], isBlocked) || path.slice(anchorIdx, furthestIdx + 1)));
       for (let i = 1; i < seg.length; i++) {
         expanded.push({ x: seg[i].x, y: seg[i].y });
       }

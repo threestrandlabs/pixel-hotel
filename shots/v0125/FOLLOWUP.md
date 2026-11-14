@@ -1,0 +1,4 @@
+- [x] bug_skyline_car.png and bug_shadow_line.png fixed (founder-reported, added after launch)
+- [x] bug_street_streaks.png and bug_building_missing.png (top priority)
+- [x] Grand Lobby FPS drop (perf.md before/after)
+- [x] rooftop building missing (bug_rooftop_building.png)
