@@ -8,9 +8,11 @@ import {
   ISO, ART, WALL_ANCHOR_Y, buildFloorTile, buildWallSegment, buildWindowSegment,
   buildDoorSegment, buildElevatorDoorSegment, buildDoorTile, buildElevatorTile,
   buildGlassBalustradeSegment, buildStairwellDoorSegment,
-  FURNITURE_BUILDERS, shadeColor,
+  FURNITURE_BUILDERS, shadeColor, getSeatConfig, SEAT_CONFIGS,
 } from './sprites.js';
 import { LOOKS, getCharacterCanvas } from './voxel.js';
+
+export { getSeatConfig, SEAT_CONFIGS };
 
 export const { TILE_W, TILE_H, WALL_H } = ISO;
 export const TOP_PADDING = 54;
@@ -23,6 +25,7 @@ const drawablesBuf = [];
 const overheadDrawablesBuf = [];
 const nameTargetsBuf = [];
 const bubbleTargetsBuf = [];
+const occupiedSeatsBuf = new Map();
 
 // Effective device-pixel density for baked bitmaps drawn under the camera transform.
 // The camera scales the world by `zoom`, so a sprite baked only at `dpr` gets upscaled
@@ -35,20 +38,34 @@ export function deviceScale(dpr = 1, zoom = 1) {
 
 // Baked sprite canvases are rasterised at `dpr` density in room/world space. The
 // caller may be drawing under a camera transform (device-pixel-ratio * zoom, plus
+let activeCamMatrix = null;
+
 // pan) — we must honour that same transform here too, or sprites drift out of sync
 // with vector-drawn content (shadows, vehicles, buildings) that already respects it.
 function blitDeviceAligned(ctx, sourceCanvas, cssX, cssY, dpr) {
-  const t = ctx.getTransform();
+  const t = activeCamMatrix;
+  if (!t) {
+    const curT = ctx.getTransform();
+    const dx = Math.round(curT.a * cssX + curT.e);
+    const dy = Math.round(curT.d * cssY + curT.f);
+    const zoomScale = curT.a / dpr;
+    const dw = Math.round(sourceCanvas.width * zoomScale);
+    const dh = Math.round(sourceCanvas.height * zoomScale);
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(sourceCanvas, dx, dy, dw, dh);
+    ctx.restore();
+    return;
+  }
   const dx = Math.round(t.a * cssX + t.e);
   const dy = Math.round(t.d * cssY + t.f);
   const zoomScale = t.a / dpr;
   const dw = Math.round(sourceCanvas.width * zoomScale);
   const dh = Math.round(sourceCanvas.height * zoomScale);
-  ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.imageSmoothingEnabled = false;
   ctx.drawImage(sourceCanvas, dx, dy, dw, dh);
-  ctx.restore();
+  ctx.setTransform(t.a, 0, 0, t.d, t.e, t.f);
 }
 
 // `spriteOrFactory` may be a pre-built sprite object or a zero-arg factory
@@ -204,6 +221,16 @@ export function worldToScreen(wx, wy, camera = null, width = 0, height = 0) {
     sx: (wx - cx) * zoom + cx + panX,
     sy: (wy - cy) * zoom + cy + panY,
   };
+}
+
+// The near background layer (ground, roads, crossings, buildings, trees,
+// vehicles, tower base) is baked in the same local coordinate space as the
+// room/tower (see buildIsoCityLayout's use of computeOrigin), so it must be
+// displayed with EXACTLY the camera's pan/zoom — any damping or parallax here
+// slides the street out from under the tower and the room. Only the distant
+// sky layer (js/main.js's skyLayer) is allowed to parallax.
+export function nearCityLayerTransform(camera) {
+  return { panX: camera?.panX ?? 0, panY: camera?.panY ?? 0, zoom: camera?.zoom ?? 1 };
 }
 
 export function screenToWorld(sx, sy, camera = null, width = 0, height = 0) {
@@ -425,10 +452,19 @@ export function buildIsoCityLayout(room = { id: 'lobby', width: 12, height: 9, f
     uRoads.push({ axis: 'u', idx: bj, u0: -maxSpan, u1: maxSpan, v0: topV1, v1: botV0 });
   }
 
-  const roads = [
-    ...vRoads.map((r) => ({ ...r, pts: [P(r.u0, r.v0), P(r.u1, r.v0), P(r.u1, r.v1), P(r.u0, r.v1)] })),
-    ...uRoads.map((r) => ({ ...r, pts: [P(r.u0, r.v0), P(r.u1, r.v0), P(r.u1, r.v1), P(r.u0, r.v1)] })),
-  ];
+  // Ground plane horizon boundary: roads only exist on or below horizonY
+  const minUV = (horizonY - groundOriginY) / (ISO.TILE_H / 2);
+  const roads = [];
+  for (const r of vRoads) {
+    const v0 = Math.max(r.v0, minUV - Math.min(r.u0, r.u1));
+    if (v0 >= r.v1) continue;
+    roads.push({ ...r, v0, pts: [P(r.u0, v0), P(r.u1, v0), P(r.u1, r.v1), P(r.u0, r.v1)] });
+  }
+  for (const r of uRoads) {
+    const u0 = Math.max(r.u0, minUV - Math.min(r.v0, r.v1));
+    if (u0 >= r.u1) continue;
+    roads.push({ ...r, u0, pts: [P(u0, r.v0), P(r.u1, r.v0), P(r.u1, r.v1), P(u0, r.v1)] });
+  }
 
   // Zebra crossings at intersections around the hotel and neighbouring avenues
   const crossings = [];
@@ -765,6 +801,8 @@ export function computeCityVehicles(layout, now = 0, phase = 0.5) {
     }
 
     const pt = projectIsoCityPoint(u, v, 0, layout.originX, layout.groundOriginY);
+    // Vehicles only drive on the ground plane at or below the horizon
+    if (pt[1] < layout.horizonY) continue;
 
     vehicles.push({
       id: cfg.id,
@@ -795,6 +833,7 @@ export function drawCityVehicles(ctx, layout, vehicles, phase = 0.5, dpr = 1) {
   const { day } = dayNightColors(phase);
 
   for (const veh of vehicles) {
+    if (veh.screenY < layout.horizonY) continue;
     const { u, v, heading, type, color, lightsOn, stopping, length, width, height } = veh;
     const isV = veh.axis === 'v';
 
@@ -1005,8 +1044,15 @@ function drawIsoPrism(g, P, u0, v0, u1, v1, z0, z1, leftCol, rightCol, topCol) {
 // By separating the street and building layers, vehicles are drawn on the asphalt before
 // buildings in front of them are drawn, guaranteeing 100% correct isometric depth sorting.
 export function renderSkylineToCanvas(g, width, height, phase, floor, room = null, ox = 0, oy = 0, layer = 'all') {
-  const isBackdrop = (layer === 'backdrop' || layer === 'all' || layer === false);
-  const isBuildings = (layer === 'buildings' || layer === 'all' || layer === true);
+  // 'sky' = purely atmospheric backdrop (gradient, stars, sun/moon, distant
+  // silhouette, hills) with no world (u,v) coordinates — safe to parallax.
+  // 'ground' = the shared ground plane, roads & crossings, which share the
+  // hotel's (originX, groundOriginY) projection and MUST render in lockstep
+  // with the room/tower, never parallaxed. 'buildings' likewise uses world
+  // coordinates and must stay locked. 'backdrop' (legacy) means sky+ground.
+  const isSky = (layer === 'sky' || layer === 'backdrop' || layer === 'all' || layer === false);
+  const isGround = (layer === 'ground' || layer === 'near' || layer === 'backdrop' || layer === 'all' || layer === false);
+  const isBuildings = (layer === 'buildings' || layer === 'near' || layer === 'all' || layer === true);
   const { skyTop, skyMid, skyBottom, day } = dayNightColors(phase);
   const roomSpec = room || { id: 'lobby', width: 12, height: 9, floor };
   // The backdrop-only bake never reads layout.blocks, so it skips generating them.
@@ -1022,7 +1068,7 @@ export function renderSkylineToCanvas(g, width, height, phase, floor, room = nul
   const by1 = height + oy;
   const hazeColor = lerpColor('#1d244b', '#9ec6ec', day);
 
-  if (isBackdrop) {
+  if (isSky) {
   // 1. Sky backdrop gradient
   const grad = g.createLinearGradient(0, 0, 0, horizonY + 50);
   grad.addColorStop(0, skyTop);
@@ -1131,7 +1177,9 @@ export function renderSkylineToCanvas(g, width, height, phase, floor, room = nul
   g.lineTo(bx0, horizonY + 8);
   g.closePath();
   g.fill();
+  } // end isSky
 
+  if (isGround) {
   // 4. Shared Isometric Ground Plane, Roads, Lane Markings & Zebra Crossings (clipped below horizonY)
   const asphaltNear = lerpColor('#191926', '#4c5360', day);
   const asphaltFar = lerpColor(asphaltNear, hazeColor, 0.48);
@@ -1170,7 +1218,9 @@ export function renderSkylineToCanvas(g, width, height, phase, floor, room = nul
     }
   }
   g.restore();
+  } // end isGround
 
+  if (isSky) {
   // Soft distance haze ribbon along the horizon (drawn before 3D buildings so towers rise cleanly through it)
   const mistGrad = g.createLinearGradient(0, horizonY - 12, 0, horizonY + 28);
   mistGrad.addColorStop(0, 'rgba(255,255,255,0)');
@@ -1191,7 +1241,7 @@ export function renderSkylineToCanvas(g, width, height, phase, floor, room = nul
       g.fill();
     }
   }
-  } // end isBackdrop
+  } // end isSky
 
   if (isBuildings) {
   // 5. Depth-Sorted Isometric City Blocks, Pavements, 3D Buildings, Trees & Streetlamps
@@ -1454,6 +1504,10 @@ function drawTowerCutawayUnder(ctx, room, originX, originY, height, phase) {
   // Silhouette-accurate lower tower shaft, neighbouring floor windows, and concrete slab per non-VOID boundary tile
   const underSlabCol = shadeColor(floorBaseColor(room), -0.25);
   const storiesBelow = storiesBelowFloor(floorNo);
+  const roomMidX = (room.width - 1) / 2;
+  const roomMidY = (room.height - 1) / 2;
+  let entranceTile = null;
+  let entranceDist = Infinity;
   for (let y = 1; y < room.height; y++) {
     for (let x = 1; x < room.width; x++) {
       if (!isFloorTile(x, y)) continue;
@@ -1466,6 +1520,8 @@ function drawTowerCutawayUnder(ctx, room, originX, originY, height, phase) {
 
       // Left-facing exterior boundary (+y edge where y+1 is void or outside room)
       if (!isFloorTile(x, y + 1)) {
+        const d = Math.abs(x - roomMidX) + Math.abs(y - roomMidY) * 0.1;
+        if (d < entranceDist) { entranceDist = d; entranceTile = { wPt, sPt }; }
         fillPoly(ctx, [wPt, sPt, [sPt[0], gL(sPt)], [wPt[0], gL(wPt)]], facadeLeft);
         for (let story = 0; story < storiesBelow; story++) {
           const dy0 = SLAB_H + 8 + story * storyH;
@@ -1520,6 +1576,39 @@ function drawTowerCutawayUnder(ctx, room, originX, originY, height, phase) {
         }
       }
     }
+  }
+
+  // Ground-floor plinth, lobby entrance and contact shadow at street level.
+  // Meets the city ground plane on every floor, grounding the tower base with
+  // the street instead of hovering.
+  if (entranceTile) {
+    const { wPt, sPt } = entranceTile;
+    const doorTop = groundDy - 32;
+    const frameCol = day > 0.55 ? '#453a2e' : '#2a2436';
+    const glassCol = day > 0.55 ? '#5c4428' : '#ffdd8e';
+    fillPoly(ctx, [
+      [wPt[0] + 3, wPt[1] + doorTop], [sPt[0] - 3, sPt[1] + doorTop],
+      [sPt[0] - 3, gL(sPt) - 1], [wPt[0] + 3, gL(wPt) - 1],
+    ], frameCol);
+    fillPoly(ctx, [
+      [wPt[0] + 7, wPt[1] + doorTop + 4], [sPt[0] - 7, sPt[1] + doorTop + 4],
+      [sPt[0] - 7, gL(sPt) - 1], [wPt[0] + 7, gL(wPt) - 1],
+    ], glassCol);
+    ctx.strokeStyle = 'rgba(0,0,0,0.3)'; ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo((wPt[0] + sPt[0]) / 2, (wPt[1] + sPt[1]) / 2 + doorTop + 4);
+    ctx.lineTo((wPt[0] + sPt[0]) / 2, gL(sPt) - 1);
+    ctx.stroke();
+    const shX0 = westPt[0] - 14;
+    const shX1 = eastPt[0] + 14;
+    const shY = gL(southPt);
+    ctx.save();
+    ctx.globalAlpha = 0.3;
+    ctx.fillStyle = '#000000';
+    ctx.beginPath();
+    ctx.ellipse((shX0 + shX1) / 2, shY + 2, Math.max(1, (shX1 - shX0) / 2), 6, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
   }
 }
 
@@ -1713,8 +1802,9 @@ function drawCharacter(ctx, e, screenX, screenY, dpr = 1, room = null) {
     }
   }
 
+  const charY = screenY + (e.seatYOffset || 0);
   const dx = screenX - ox;
-  const dy = screenY - oy;
+  const dy = charY - oy;
   blitDeviceAligned(ctx, canvas, dx, dy, dpr);
 
   // 4-Layer Swimming Waterline Mask, Wake Ripples & Splash Droplets
@@ -1774,7 +1864,7 @@ function drawCharacter(ctx, e, screenX, screenY, dpr = 1, room = null) {
     ctx.restore();
   }
 
-  return { x: screenX, y: dy, footY: screenY + 11, w: 0, h: cssH || canvas.height / dpr };
+  return { x: screenX, y: dy, footY: charY + 11, w: 0, h: cssH || canvas.height / dpr };
 }
 
 function drawNameTag(ctx, x, y, name) {
@@ -1797,11 +1887,11 @@ function drawNameTag(ctx, x, y, name) {
   ctx.restore();
 }
 
-function furnitureCanvas(itemId, rot = 0, dpr = 1, off = false) {
+function furnitureCanvas(itemId, rot = 0, dpr = 1, off = false, layer = 'all') {
   const r = ((rot % 4) + 4) % 4;
-  const key = `furn:${itemId}:${r}`;
+  const key = `furn:${itemId}:${r}:${layer}`;
   const builder = FURNITURE_BUILDERS[toSpriteKey(itemId)];
-  const canvas = bakeSprite(key, () => (builder ? builder(r) : FURNITURE_BUILDERS.stool(r)), dpr);
+  const canvas = bakeSprite(key, () => (builder ? builder(r, layer) : FURNITURE_BUILDERS.stool(r)), dpr);
   if (!off) return canvas;
   // A toggled-off lamp/light item renders its normal sprite darkened, so it visibly
   // reads as "off" without needing a second hand-authored sprite per light fixture.
@@ -1838,13 +1928,13 @@ function fillPoly(ctx, pts, color) {
   ctx.stroke();
 }
 
-function drawFurniture(ctx, f, originX, originY, dpr = 1, off = false) {
+function drawFurniture(ctx, f, originX, originY, dpr = 1, off = false, layer = 'all') {
   const anchorX = f.x + f.footprint.w / 2 - 0.5;
   const anchorY = f.y + f.footprint.h / 2 - 0.5;
   const { sx, sy } = tileToScreen(anchorX, anchorY, originX, originY);
 
   const item = getCatalogueItem(f.itemId);
-  if (!item?.flat) {
+  if (!item?.flat && (layer === 'all' || layer === 'back' || layer === 'base')) {
     const tw = f.footprint.w;
     const th = f.footprint.h;
     const rx = (tw + th) * 11;
@@ -1855,7 +1945,7 @@ function drawFurniture(ctx, f, originX, originY, dpr = 1, off = false) {
     ctx.fill();
   }
 
-  const canvas = furnitureCanvas(f.itemId, f.rot, dpr, off);
+  const canvas = furnitureCanvas(f.itemId, f.rot, dpr, off, layer);
   blitDeviceAligned(ctx, canvas, sx - canvas.ax, sy - canvas.ay, dpr);
 }
 
@@ -1871,6 +1961,75 @@ export function drawDiamondOverlay(ctx, sx, sy, color, alpha) {
   ctx.closePath();
   ctx.fill();
   ctx.restore();
+}
+
+function diamondPath(ctx, sx, sy, scale = 1) {
+  const hw = (TILE_W / 2) * scale;
+  const hh = (TILE_H / 2) * scale;
+  ctx.beginPath();
+  ctx.moveTo(sx, sy - hh);
+  ctx.lineTo(sx + hw, sy);
+  ctx.lineTo(sx, sy + hh);
+  ctx.lineTo(sx - hw, sy);
+  ctx.closePath();
+}
+
+const WALK_TARGET_RIPPLE_MS = 360;
+const WALK_TARGET_FLASH_MS = 420;
+
+// Walk-destination marker: a gently pulsing gold diamond with a light
+// outline + dark outer edge (readable on both light and dark floor styles),
+// plus a one-shot drop-in ripple when the target is first set. `blocked`
+// briefly flashes red instead, on the tile the avatar actually ends up
+// aiming for. No shadowBlur/gradients — just a handful of stroke/fill calls,
+// cheap enough to run every frame.
+export function drawWalkTargetOverlay(ctx, sx, sy, now, bornAt, blocked = false) {
+  const age = Math.max(0, now - bornAt);
+  if (blocked) {
+    if (age > WALK_TARGET_FLASH_MS) return;
+    const alpha = 0.55 * (1 - age / WALK_TARGET_FLASH_MS);
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = '#ff5050';
+    diamondPath(ctx, sx, sy, 1);
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#7a1414';
+    ctx.stroke();
+    ctx.restore();
+    return;
+  }
+
+  const pulse = 0.5 + 0.5 * Math.sin(age / 260);
+  ctx.save();
+  ctx.globalAlpha = 0.16 + pulse * 0.14;
+  ctx.fillStyle = '#ffe9a8';
+  diamondPath(ctx, sx, sy, 1);
+  ctx.fill();
+
+  ctx.globalAlpha = 0.8;
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = 'rgba(20, 16, 10, 0.75)';
+  diamondPath(ctx, sx, sy, 0.96);
+  ctx.stroke();
+
+  ctx.globalAlpha = 0.9;
+  ctx.lineWidth = 1.4;
+  ctx.strokeStyle = '#fff6d8';
+  diamondPath(ctx, sx, sy, 0.96);
+  ctx.stroke();
+  ctx.restore();
+
+  if (age < WALK_TARGET_RIPPLE_MS) {
+    const rt = age / WALK_TARGET_RIPPLE_MS;
+    ctx.save();
+    ctx.globalAlpha = 0.5 * (1 - rt);
+    ctx.strokeStyle = '#fff6d8';
+    ctx.lineWidth = 2;
+    diamondPath(ctx, sx, sy, 0.3 + rt * 0.9);
+    ctx.stroke();
+    ctx.restore();
+  }
 }
 
 export const entityScreenBounds = new Map();
@@ -1993,8 +2152,9 @@ function drawPoolWaterLayer(ctx, poolItems, originX, originY, ds, now) {
 }
 
 function getRoomLightMap(room, placedFurniture, originX, originY, lightsOn, ds) {
-  const placedKey = placedFurniture.map((f) => `${f.itemId}@${f.x},${f.y}`).join(';');
-  const key = `${room.id}:${originX},${originY}:${lightsOn}:${ds}:${placedKey}`;
+  const lightDs = 0.25;
+  const placedKey = placedFurniture._lightKey || (placedFurniture._lightKey = placedFurniture.map((f) => `${f.itemId}@${f.x},${f.y}`).join(';'));
+  const key = `${room.id}:${originX},${originY}:${lightsOn}:${lightDs}:${placedKey}`;
   if (lightMapCache.key === key) return lightMapCache;
 
   const emissives = [];
@@ -2030,15 +2190,15 @@ function getRoomLightMap(room, placedFurniture, originX, originY, lightsOn, ds) 
   const w = maxX - minX;
   const h = maxY - minY;
 
-  const off = lightMapCache.canvas && lightMapCache.canvas.width === Math.round(w * ds) && lightMapCache.canvas.height === Math.round(h * ds)
+  const off = lightMapCache.canvas && lightMapCache.canvas.width === Math.round(w * lightDs) && lightMapCache.canvas.height === Math.round(h * lightDs)
     ? lightMapCache.canvas
     : document.createElement('canvas');
-  off.width = Math.max(1, Math.round(w * ds));
-  off.height = Math.max(1, Math.round(h * ds));
+  off.width = Math.max(1, Math.round(w * lightDs));
+  off.height = Math.max(1, Math.round(h * lightDs));
   const g = off.getContext('2d');
   g.setTransform(1, 0, 0, 1, 0, 0);
   g.clearRect(0, 0, off.width, off.height);
-  g.setTransform(ds, 0, 0, ds, -minX * ds, -minY * ds);
+  g.setTransform(lightDs, 0, 0, lightDs, -minX * lightDs, -minY * lightDs);
   g.globalCompositeOperation = 'screen';
 
   for (const e of emissives) {
@@ -2052,7 +2212,7 @@ function getRoomLightMap(room, placedFurniture, originX, originY, lightsOn, ds) 
     g.fill();
   }
 
-  lightMapCache = { key, canvas: off, minX, minY };
+  lightMapCache = { key, canvas: off, minX, minY, scale: lightDs };
   return lightMapCache;
 }
 
@@ -2187,7 +2347,7 @@ function drawWallsLayerCached(ctx, room, originX, originY, wallColor, sky, wb, l
 
 export function renderRoom(ctx, opts) {
   const {
-    room, placedFurniture, entities, hoverTile, ghost, phase,
+    room, placedFurniture, entities, hoverTile, ghost, phase, walkTarget,
     width, height, dpr = 1, now = 0, elevatorAnim = null, camera = null, lightsOn = true,
   } = opts;
   entityScreenBounds.clear();
@@ -2213,6 +2373,8 @@ export function renderRoom(ctx, opts) {
   ctx.translate(width / 2 + panX, height / 2 + panY);
   ctx.scale(zoom, zoom);
   ctx.translate(-width / 2, -height / 2);
+  const curT = ctx.getTransform();
+  activeCamMatrix = { a: curT.a, b: curT.b, c: curT.c, d: curT.d, e: curT.e, f: curT.f };
 
   const { originX, originY } = computeOrigin(room, width, height);
   const lightsTag = lightsOn ? 'L' : 'D';
@@ -2246,8 +2408,14 @@ export function renderRoom(ctx, opts) {
   drawFloorLayerCached(ctx, room, originX, originY, floorColor, lightsTag, ds, doorMap);
 
   // Flat decor (rugs, yoga mats, lap pool tiles) lies on the floor
-  const poolItems = placedFurniture.filter((f) => f.itemId === 'pool_water');
-  if (poolItems.length > 0) {
+  let poolItems = null;
+  for (const f of placedFurniture) {
+    if (f.itemId === 'pool_water') {
+      if (!poolItems) poolItems = [];
+      poolItems.push(f);
+    }
+  }
+  if (poolItems) {
     drawPoolWaterLayer(ctx, poolItems, originX, originY, ds, now);
   }
   for (const f of placedFurniture) {
@@ -2257,6 +2425,12 @@ export function renderRoom(ctx, opts) {
     const flatPt = tileToScreen(f.x, f.y, originX, originY);
     if (camera && (flatPt.sx < viewMinX - 80 || flatPt.sx > viewMaxX + 80 || flatPt.sy < viewMinY - 80 || flatPt.sy > viewMaxY + 80)) continue;
     drawFurniture(ctx, f, originX, originY, ds, Boolean(flatItem.lightSource) && !lightsOn);
+  }
+
+  // Walk-destination marker (click/tap target) — drawn under avatars & furniture
+  if (walkTarget) {
+    const { sx, sy } = tileToScreen(walkTarget.x, walkTarget.y, originX, originY);
+    drawWalkTargetOverlay(ctx, sx, sy, now, walkTarget.bornAt, walkTarget.blocked);
   }
 
   // Hover + placement ghost highlights
@@ -2282,19 +2456,69 @@ export function renderRoom(ctx, opts) {
   const overheadDrawables = overheadDrawablesBuf;
   drawables.length = 0;
   overheadDrawables.length = 0;
+
+  // Track occupied seats so their front/back layers can be interleaved with the seated avatar
+  const occupiedSeats = occupiedSeatsBuf;
+  occupiedSeats.clear();
+  let hasSitting = false;
+  for (const e of entities) {
+    if (e.sitting) { hasSitting = true; break; }
+  }
+  if (hasSitting) {
+    for (const e of entities) {
+      if (!e.sitting) continue;
+      let seat = null;
+      if (e.sittingInstanceId) {
+        seat = placedFurniture.find((f) => f.instanceId === e.sittingInstanceId);
+      }
+      if (!seat && typeof e.sitting === 'string') {
+        seat = placedFurniture.find((f) => f.instanceId === e.sitting);
+      }
+      if (!seat) {
+        const ex = Math.round(e.x);
+        const ey = Math.round(e.y);
+        seat = placedFurniture.find((f) => ex >= f.x && ex < f.x + f.footprint.w && ey >= f.y && ey < f.y + f.footprint.h && getCatalogueItem(f.itemId)?.seat);
+      }
+      if (!seat) {
+        const ex = Math.round(e.x);
+        const ey = Math.round(e.y);
+        seat = placedFurniture.find((f) => Math.abs(f.x - ex) <= 1 && Math.abs(f.y - ey) <= 1 && getCatalogueItem(f.itemId)?.seat);
+      }
+      if (seat) {
+        const seatCfg = getSeatConfig(seat.itemId, seat.rot);
+        e.seatYOffset = seatCfg.yOffset;
+        occupiedSeats.set(seat, { entity: e, config: seatCfg });
+      }
+    }
+  }
+
   for (const f of placedFurniture) {
     const item = getCatalogueItem(f.itemId);
     if (item?.flat) continue;
+    const anchorX = f.x + f.footprint.w / 2 - 0.5;
+    const anchorY = f.y + f.footprint.h / 2 - 0.5;
+    const { sx, sy } = tileToScreen(anchorX, anchorY, originX, originY);
+    if (camera && (sx < viewMinX - 80 || sx > viewMaxX + 80 || sy < viewMinY - 140 || sy > viewMaxY + 80)) continue;
     if (item?.overhead) {
       overheadDrawables.push(f);
       continue;
     }
     const frontX = f.x + (f.footprint.w - 1);
     const frontY = f.y + (f.footprint.h - 1);
-    drawables.push({ depth: frontX + frontY, type: 'furniture', data: f });
+
+    const occ = occupiedSeats.get(f);
+    if (occ && occ.config.layerOrder.length === 3 && occ.config.layerOrder[2] === 'front') {
+      drawables.push({ depth: frontX + frontY - 0.05, type: 'furniture', data: f, layer: 'back' });
+      drawables.push({ depth: frontX + frontY + 0.15, type: 'furniture', data: f, layer: 'front' });
+    } else {
+      drawables.push({ depth: frontX + frontY, type: 'furniture', data: f, layer: 'all' });
+    }
   }
+
   for (const e of entities) {
-    drawables.push({ depth: e.depth ?? e.x + e.y + 0.5, type: 'entity', data: e });
+    const { sx, sy } = tileToScreen(e.x, e.y, originX, originY);
+    if (camera && (sx < viewMinX - 80 || sx > viewMaxX + 80 || sy < viewMinY - 120 || sy > viewMaxY + 80)) continue;
+    drawables.push({ depth: e.depth ?? (e.x + e.y + 0.5), type: 'entity', data: e });
   }
   drawables.sort((a, b) => a.depth - b.depth);
 
@@ -2305,7 +2529,7 @@ export function renderRoom(ctx, opts) {
   for (const d of drawables) {
     if (d.type === 'furniture') {
       const fItem = getCatalogueItem(d.data.itemId);
-      drawFurniture(ctx, d.data, originX, originY, ds, Boolean(fItem?.lightSource) && !lightsOn);
+      drawFurniture(ctx, d.data, originX, originY, ds, Boolean(fItem?.lightSource) && !lightsOn, d.layer || 'all');
     } else {
       const e = d.data;
       const { sx, sy } = tileToScreen(e.x, e.y, originX, originY);
@@ -2361,13 +2585,14 @@ export function renderRoom(ctx, opts) {
         ctx.save();
         ctx.globalCompositeOperation = 'screen';
         ctx.globalAlpha = lightStrength;
-        blitDeviceAligned(ctx, lm.canvas, lm.minX, lm.minY, ds);
+        blitDeviceAligned(ctx, lm.canvas, lm.minX, lm.minY, lm.scale || ds);
         ctx.restore();
       }
     }
   }
 
   // Restore camera transform so UI text, speech bubbles and dialog overlays render in native screen pixels
+  activeCamMatrix = null;
   ctx.restore();
 
   for (const n of nameTargets) drawNameTag(ctx, n.x, n.y, n.name);

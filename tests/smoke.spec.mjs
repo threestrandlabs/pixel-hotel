@@ -931,6 +931,54 @@ async function main() {
     await page2x.waitForTimeout(450);
     await page2x.screenshot({ path: path.join(SCREENSHOT_DIR, '09-restaurant-2x.png') });
 
+    // ---- v0.12.3: background at 2 zoom levels and ground-plane road/vehicle check ----
+    await page2x.evaluate(() => {
+      window.__pixelHotel.takeElevator('lobby');
+      window.__pixelHotel.setZoom(0.8);
+    });
+    await page2x.waitForTimeout(400);
+    const shotsV0123 = path.join(ROOT, 'shots', 'v0123');
+    fs.mkdirSync(shotsV0123, { recursive: true });
+    await page2x.screenshot({ path: path.join(shotsV0123, 'bg-zoom-0.8.png') });
+
+    await page2x.evaluate(() => {
+      window.__pixelHotel.setZoom(1.5);
+    });
+    await page2x.waitForTimeout(400);
+    await page2x.screenshot({ path: path.join(shotsV0123, 'bg-zoom-1.5.png') });
+
+    await page2x.evaluate(() => {
+      window.__pixelHotel.resetZoom();
+    });
+    await page2x.waitForTimeout(200);
+
+    const cityCheck = await page2x.evaluate(async () => {
+      const { getCachedIsoCityLayout, computeCityVehicles } = await import('/js/render.js');
+      const roomSpec = { id: 'lobby', width: 12, height: 9, floor: 1 };
+      const width = 960;
+      const height = 600;
+      const ox = 400;
+      const oy = 320;
+      const layout = getCachedIsoCityLayout(roomSpec, width, height, 0.5, ox, oy);
+      const vehicles = computeCityVehicles(layout, performance.now(), 0.5);
+
+      const roadYMin = Math.min(...layout.roads.flatMap((r) => (r.pts || []).map((p) => p[1])));
+      const vehiclesYMin = vehicles.length ? Math.min(...vehicles.map((v) => v.screenY)) : layout.horizonY;
+
+      return {
+        allRoadsOnOrBelowHorizon: roadYMin >= layout.horizonY - 0.5,
+        allVehiclesOnOrBelowHorizon: vehiclesYMin >= layout.horizonY - 0.5,
+        vehicleCount: vehicles.length,
+      };
+    });
+
+    check('v0.12.3: background captured at 2 zoom levels',
+      fs.existsSync(path.join(shotsV0123, 'bg-zoom-0.8.png')) &&
+      fs.existsSync(path.join(shotsV0123, 'bg-zoom-1.5.png'))
+    );
+    check('v0.12.3: city roads lie on or below horizon plane', cityCheck.allRoadsOnOrBelowHorizon);
+    check('v0.12.3: city vehicles lie on or below horizon plane', cityCheck.allVehiclesOnOrBelowHorizon && cityCheck.vehicleCount > 0);
+
     // ---- v0.8.0: multiplayer panel opens/switches tabs with zero network calls until opt-in ----
     await page.click('#btnMultiplayer');
     await page.waitForTimeout(100);

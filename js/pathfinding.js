@@ -436,6 +436,29 @@ export function retargetMover(mover, tx, ty, now, { width, height, isBlocked, st
 }
 
 /**
+ * Pure reducer for the click/tap walk-destination highlight: derives the next
+ * marker state from a `retargetMover` result, without touching the mover or
+ * any DOM/canvas state. Set on a successful walk/retarget (always the
+ * resolved goal tile, i.e. the nearest reachable tile if the clicked one was
+ * blocked), left untouched for a duplicate click on the same tile, replaced
+ * by each new click, and flashed red at the clicked tile when no path exists
+ * at all. Callers are responsible for clearing it on arrival/room switch.
+ */
+export function nextWalkTarget(current, result, tx, ty, now) {
+  if (!result.ok) {
+    // Clicking the tile you're already standing on resolves to a trivial
+    // (length-1) path — that's not a blocked destination, just nothing to do.
+    if (result.alreadyAtGoal) return null;
+    return { x: tx, y: ty, bornAt: now, blocked: true };
+  }
+  if (result.ignoredDuplicate) {
+    return current;
+  }
+  const goal = result.path[result.path.length - 1];
+  return { x: goal.x, y: goal.y, bornAt: now, blocked: false };
+}
+
+/**
  * Advances a mover's interpolation at timestamp `now`, dynamically re-planning
  * at tile boundaries if the next step becomes blocked by a moving NPC or placed item.
  */

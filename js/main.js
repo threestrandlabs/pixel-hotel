@@ -1,5 +1,5 @@
 import { ROOMS, NPCS, QUESTS, getCatalogueItem, TILE, SAVE_VERSION, ITEM_CATEGORIES, ROOM_TIERS, makeRoomGrid } from './data.js';
-import { retargetMover, advanceMover, findPath } from './pathfinding.js';
+import { retargetMover, advanceMover, findPath, nextWalkTarget } from './pathfinding.js';
 import {
   buyItem, placeItem, pickupItem, moveItem, canPlaceAt, footprintCells,
   availableCatalogue, rotatedFootprint, findApproachTile, seatDirFromRot, isDiningSeat,
@@ -13,6 +13,7 @@ import {
   renderRoom, computeOrigin, screenToTile, tileToScreen, worldToScreen, hitTestNpc, getItemIconDataUrl,
   DEFAULT_ZOOM, MIN_ZOOM, MAX_ZOOM, clampZoom, zoomAtPoint, centerCameraOnTile, deadzoneCameraTarget,
   renderSkylineToCanvas, getCachedIsoCityLayout, computeCityVehicles, drawCityVehicles,
+  nearCityLayerTransform,
 } from './render.js';
 import { FpsMonitor, resolveBackgroundDetail } from './adaptiveQuality.js';
 import { audio, formatTime, trackForRoom } from './audio.js';
@@ -46,6 +47,8 @@ ctx.imageSmoothingEnabled = false;
 const BG_SCALE = 0.25;
 const fpsMonitor = new FpsMonitor(2000, 45);
 
+const skyLayer = document.getElementById('skyLayer');
+const skyCanvas = document.getElementById('skyCanvas');
 const bgLayer = document.getElementById('bgLayer');
 const bgCanvas = document.getElementById('bgCanvas');
 const vehicleCanvas = document.getElementById('vehicleCanvas');
@@ -61,6 +64,7 @@ const bgState = {
   rebakeScheduled: false,
   lastVehicleUpdateAt: 0,
   lastTransform: '',
+  lastSkyTransform: '',
 };
 
 let rebakeHandle = null;
@@ -84,6 +88,10 @@ function performBackgroundBake(room, width, height, phase, ox, oy) {
   const bgW = Math.max(1, Math.round((width + 2 * ox) * BG_SCALE));
   const bgH = Math.max(1, Math.round((height + 2 * oy) * BG_SCALE));
 
+  // Near layer (ground, roads, crossings, buildings, trees, lamps): baked at the
+  // same origin the room/tower uses, and locked 1:1 to the camera at draw time
+  // (see updateBackgroundTransform) — no parallax, so the street never drifts
+  // from the tower's base.
   if (bgCanvas.width !== bgW || bgCanvas.height !== bgH) {
     bgCanvas.width = bgW;
     bgCanvas.height = bgH;
@@ -107,7 +115,24 @@ function performBackgroundBake(room, width, height, phase, ox, oy) {
   const g = bgCanvas.getContext('2d');
   g.setTransform(BG_SCALE, 0, 0, BG_SCALE, ox * BG_SCALE, oy * BG_SCALE);
   g.imageSmoothingEnabled = true;
-  const beacons = renderSkylineToCanvas(g, width, height, phase, floor, room, ox, oy, 'all');
+  const beacons = renderSkylineToCanvas(g, width, height, phase, floor, room, ox, oy, 'near');
+
+  // Far layer (sky, stars, sun/moon, distant skyline silhouette, hills): has no
+  // world (u,v) coordinates, so it is the only part allowed to parallax.
+  if (skyCanvas) {
+    if (skyCanvas.width !== bgW || skyCanvas.height !== bgH) {
+      skyCanvas.width = bgW;
+      skyCanvas.height = bgH;
+    }
+    skyCanvas.style.left = `${-ox}px`;
+    skyCanvas.style.top = `${-oy}px`;
+    skyCanvas.style.width = `${width + 2 * ox}px`;
+    skyCanvas.style.height = `${height + 2 * oy}px`;
+    const sg = skyCanvas.getContext('2d');
+    sg.setTransform(BG_SCALE, 0, 0, BG_SCALE, ox * BG_SCALE, oy * BG_SCALE);
+    sg.imageSmoothingEnabled = true;
+    renderSkylineToCanvas(sg, width, height, phase, floor, room, ox, oy, 'sky');
+  }
 
   bgState.floor = floor;
   bgState.width = width;
@@ -131,16 +156,31 @@ function scheduleBackgroundRebake(room, width, height, phase, ox, oy) {
   });
 }
 
+// The near layer (ground/roads/buildings/vehicles, baked by performBackgroundBake
+// with layer:'near') shares the room's exact projection, so it must move with
+// EXACTLY the same pan/zoom as the game canvas's camera transform (see
+// renderRoom's ctx.translate/scale in render.js) — any parallax here would slide
+// the street out from under the tower and the room. Only the far sky layer
+// (distant skyline with no world coordinates) is allowed to parallax.
 function updateBackgroundTransform(panX, panY, zoom) {
-  if (!bgLayer) return;
-  const parallax = 0.35;
-  const bgPanX = Math.round(panX * parallax);
-  const bgPanY = Math.round(panY * parallax);
-  const bgZoom = (1 + (zoom - 1) * 0.3).toFixed(4);
-  const transform = `translate3d(${bgPanX}px, ${bgPanY}px, 0) scale(${bgZoom})`;
-  if (bgState.lastTransform !== transform) {
-    bgState.lastTransform = transform;
-    bgLayer.style.transform = transform;
+  if (bgLayer) {
+    const near = nearCityLayerTransform({ panX, panY, zoom });
+    const transform = `translate3d(${near.panX}px, ${near.panY}px, 0) scale(${near.zoom})`;
+    if (bgState.lastTransform !== transform) {
+      bgState.lastTransform = transform;
+      bgLayer.style.transform = transform;
+    }
+  }
+  if (skyLayer) {
+    const parallax = 0.35;
+    const skyPanX = Math.round(panX * parallax);
+    const skyPanY = Math.round(panY * parallax);
+    const skyZoom = (1 + (zoom - 1) * 0.3).toFixed(4);
+    const transform = `translate3d(${skyPanX}px, ${skyPanY}px, 0) scale(${skyZoom})`;
+    if (bgState.lastSkyTransform !== transform) {
+      bgState.lastSkyTransform = transform;
+      skyLayer.style.transform = transform;
+    }
   }
 }
 
@@ -192,24 +232,47 @@ function updateVehiclesAndBeacons(now, room, width, height, phase, ox, oy, quali
   }
 }
 
+const MARGIN_BUCKET = 160;
+
+// The near layer is now locked 1:1 to the camera, so (unlike the old damped
+// parallax) zooming out or dragging far enough can reveal the edge of the
+// baked bitmap. Compute the margin the current pan/zoom actually needs — using
+// MIN_ZOOM as the worst case so later zoom-outs never need a fresh rebake —
+// and only pay for a (idle-scheduled) rebake when the existing bake falls short.
+function requiredCityMargin(cssDim, pan, zoomNow) {
+  const worstZoom = Math.min(zoomNow, MIN_ZOOM);
+  const halfVisible = (cssDim / 2 + Math.abs(pan)) / worstZoom;
+  const needed = Math.max(0, halfVisible - cssDim / 2) + cssDim * 0.12;
+  return Math.ceil(needed / MARGIN_BUCKET) * MARGIN_BUCKET;
+}
+
 function updateBackground(now, room, width, height, phase, camera, qualityMode) {
-  const ox = Math.max(380, Math.round(width * 0.45));
-  const oy = Math.max(260, Math.round(height * 0.45));
+  const baseOx = Math.max(380, Math.round(width * 0.45));
+  const baseOy = Math.max(260, Math.round(height * 0.45));
+  const neededOx = Math.max(baseOx, requiredCityMargin(width, camera.panX, camera.zoom));
+  const neededOy = Math.max(baseOy, requiredCityMargin(height, camera.panY, camera.zoom));
   const floor = room?.floor || 1;
 
   if (bgState.floor === null) {
-    performBackgroundBake(room, width, height, phase, ox, oy);
+    performBackgroundBake(room, width, height, phase, neededOx, neededOy);
   } else if (
-    bgState.floor !== floor ||
-    Math.abs(bgState.width - width) > 60 ||
-    Math.abs(bgState.height - height) > 60 ||
-    Math.abs(bgState.phase - phase) >= 0.15
+    !player.walking && (
+      bgState.floor !== floor ||
+      Math.abs(bgState.width - width) > 60 ||
+      Math.abs(bgState.height - height) > 60 ||
+      Math.abs(bgState.phase - phase) >= 0.15 ||
+      neededOx > bgState.ox ||
+      neededOy > bgState.oy
+    )
   ) {
-    scheduleBackgroundRebake(room, width, height, phase, ox, oy);
+    scheduleBackgroundRebake(room, width, height, phase, Math.max(neededOx, bgState.ox), Math.max(neededOy, bgState.oy));
   }
 
   updateBackgroundTransform(camera.panX, camera.panY, camera.zoom);
-  updateVehiclesAndBeacons(now, room, width, height, phase, ox, oy, qualityMode);
+  // Use the margin of the bake actually on screen right now (bgState.ox/oy),
+  // not the (possibly larger, not-yet-baked) required margin above, so the
+  // vehicle canvas's transform always matches its current backing size.
+  updateVehiclesAndBeacons(now, room, width, height, phase, bgState.ox || baseOx, bgState.oy || baseOy, qualityMode);
 }
 
 let state = loadState(window.localStorage);
@@ -265,6 +328,7 @@ let chatLog = [];
 const ui = {
   placing: null, // { instanceId, itemId, rot, moveInstanceId }
   hoverTile: null,
+  walkTarget: null, // { x, y, bornAt, blocked } — click/tap destination highlight
   phase: 0.5, // start at noon
   startTime: null,
   cssW: 960,
@@ -881,6 +945,7 @@ function tryWalkPlayer(tx, ty) {
   const occ = occupantTilesExcluding('player', null);
   const blocked = isBlockedFactory(room, roomRuntime, occ, true);
   const result = walkMoverTo(player, tx, ty, room, blocked);
+  ui.walkTarget = nextWalkTarget(ui.walkTarget, result, tx, ty, performance.now());
   if (!result.ok) return false;
   if (result.ignoredDuplicate) return true;
   player.sitting = null;
@@ -1061,6 +1126,7 @@ function doorLandingTile(d) {
 }
 
 function onPlayerArrive() {
+  ui.walkTarget = null;
   const room = currentRoomDef();
   const cell = room.grid[player.y][player.x];
   if (player.pendingDialogue) {
@@ -1144,6 +1210,7 @@ function switchRoom(roomId, toTile) {
   player.bubbleUntil = 0;
   player.targetX = null;
   player.targetY = null;
+  ui.walkTarget = null;
   closeNpcDialogue();
   state.player.sitting = null;
   state.player.activity = null;
@@ -1464,6 +1531,7 @@ function buildEntities(now = performance.now()) {
     id: 'player',
     x: player.renderX, y: player.renderY, dir: player.dir, frame: player.frame, walking: player.walking,
     sitting: !!player.sitting, lying: !!player.lying,
+    sittingInstanceId: player.sitting || null,
     blink: ((now + pOff * 1.3) % 3800) < 150,
     breathe: player.walking ? 0 : Math.floor((now + pOff) / 1400) % 2,
     action: pAction,
@@ -1491,6 +1559,7 @@ function buildEntities(now = performance.now()) {
       id: n.id,
       x: n.renderX, y: n.renderY, dir: n.dir, frame: n.frame, walking: n.walking,
       sitting: !!n.sitting, lying: !!n.lying,
+      sittingInstanceId: n.sitting || null,
       blink: ((now + nOff * 1.3) % 3800) < 150,
       breathe: n.walking ? 0 : Math.floor((now + nOff) / 1400) % 2,
       action: nAction,
@@ -1538,7 +1607,10 @@ function frame(now) {
   syncCanvasSize();
   tickNpcs(now);
   const room0 = currentRoomDef();
-  const playerBlocked = isBlockedFactory(room0, currentRoomRuntime(), occupantTilesExcluding('player', null), true);
+  const isStepping = player.walking && (now - (player.stepStart || 0) >= (player.stepDuration || STEP_MS));
+  const playerBlocked = isStepping
+    ? isBlockedFactory(room0, currentRoomRuntime(), occupantTilesExcluding('player', null), true)
+    : null;
   advanceMover(player, now, {
     width: room0.width, height: room0.height, isBlocked: playerBlocked, stepMs: STEP_MS, onArrive: onPlayerArrive,
   });
@@ -1588,6 +1660,7 @@ function frame(now) {
     entities: buildEntities(now),
     hoverTile: ui.placing ? null : ui.hoverTile,
     ghost,
+    walkTarget: ui.placing ? null : ui.walkTarget,
     phase: ui.phase,
     width: ui.cssW,
     height: ui.cssH,
@@ -2778,7 +2851,7 @@ window.__pixelHotel = Object.assign(window.__pixelHotel || {}, {
     performBackgroundBake(currentRoomDef(), ui.cssW, ui.cssH, ui.phase, ox, oy);
   }, // 0.5 noon, 0 midnight
   getSaveVersion: () => SAVE_VERSION,
-  getVersion: () => '0.12.1',
+  getVersion: () => '0.12.3',
   getBackgroundDetail: () => state.settings.backgroundDetail || 'auto',
   setBackgroundDetail: (mode) => {
     state.settings.backgroundDetail = mode;
