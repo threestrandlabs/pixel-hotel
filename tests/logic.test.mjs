@@ -31,6 +31,7 @@ import {
   nearCityLayerTransform, getCachedIsoCityLayout, renderSkylineToCanvas, getSeatConfig,
   TILE_W, TILE_H, drawDiamondOverlay, ensureCameraTransform, ensureDeviceTransform,
   setActiveCamMatrix, drawSwimWaterlineOverlay, drawPoolWaterLayer, drawCharacter,
+  visibleBlitRect, blitDeviceAligned,
 } from '../js/render.js';
 import { ChiptuneAudio, MOOD_PROFILES, MUSIC_FILES, PLAYLIST, TRACK_ORDER, moodForRoom, formatTime } from '../js/audio.js';
 
@@ -1676,6 +1677,130 @@ test('pool overlay: drawCharacter restores camera transform after blitDeviceAlig
     assert.deepStrictEqual(appliedTransform, camMatrix, 'swim overlay after character blit must use active camera matrix');
   } finally {
     global.document = realDocument;
+    setActiveCamMatrix(null);
+  }
+});
+
+test('blitDeviceAligned visibleBlitRect: fully visible blit returns full source and unchanged dest', () => {
+  const res = visibleBlitRect(100, 80, 10, 15, 100, 80, 500, 400);
+  assert.deepStrictEqual(res, { sx: 0, sy: 0, sw: 100, sh: 80, dx: 10, dy: 15, dw: 100, dh: 80 });
+});
+
+test('blitDeviceAligned visibleBlitRect: fully offscreen blits return null', () => {
+  assert.equal(visibleBlitRect(100, 100, -200, 50, 100, 100, 500, 400), null, 'off to the left');
+  assert.equal(visibleBlitRect(100, 100, 600, 50, 100, 100, 500, 400), null, 'off to the right');
+  assert.equal(visibleBlitRect(100, 100, 50, -200, 100, 100, 500, 400), null, 'off above');
+  assert.equal(visibleBlitRect(100, 100, 50, 500, 100, 100, 500, 400), null, 'off below');
+});
+
+test('blitDeviceAligned visibleBlitRect: partial overlap clips huge source to visible canvas intersection', () => {
+  // Restaurant layer: source 11008x6048 placed at negative offset onto 768x1330 viewport
+  const res = visibleBlitRect(11008, 6048, -2000, -1000, 11008, 6048, 768, 1330);
+  assert.ok(res !== null, 'returns clipped rect');
+  assert.equal(res.sx, 2000);
+  assert.equal(res.sy, 1000);
+  assert.equal(res.sw, 768);
+  assert.equal(res.sh, 1330);
+  assert.ok(res.sw < 11008 && res.sh < 6048, 'source rect must be much smaller than full source');
+  assert.equal(res.dx, 0);
+  assert.equal(res.dy, 0);
+  assert.equal(res.dw, 768);
+  assert.equal(res.dh, 1330);
+  assert.ok(res.dx >= 0 && res.dy >= 0 && res.dx + res.dw <= 768 && res.dy + res.dh <= 1330, 'dest rect must lie inside canvas');
+});
+
+test('blitDeviceAligned: clips to visible viewport using 9-arg drawImage when canvas size is known', () => {
+  const drawImageCalls = [];
+  let currentTransform = { a: 2, b: 0, c: 0, d: 2, e: 0, f: 0 };
+  const mockCtx = {
+    canvas: { width: 768, height: 1330 },
+    setTransform(a, b, c, d, e, f) {
+      currentTransform = { a, b, c, d, e, f };
+    },
+    getTransform() { return currentTransform; },
+    drawImage(...args) {
+      drawImageCalls.push(args);
+    },
+  };
+  const source = { width: 11008, height: 6048 };
+  const camMatrix = { a: 2, b: 0, c: 0, d: 2, e: 0, f: 0 };
+  setActiveCamMatrix(camMatrix);
+  try {
+    // cssX = -1000, cssY = -500, dpr = 2 -> dx = -2000, dy = -1000, dw = 11008, dh = 6048
+    blitDeviceAligned(mockCtx, source, -1000, -500, 2);
+    assert.equal(drawImageCalls.length, 1, 'drawImage called once');
+    const args = drawImageCalls[0];
+    assert.equal(args.length, 9, 'drawImage called with 9 args for clipped blit');
+    const [src, sx, sy, sw, sh, dx, dy, dw, dh] = args;
+    assert.equal(src, source);
+    assert.equal(sw, 768);
+    assert.equal(sh, 1330);
+    assert.equal(dw, 768);
+    assert.equal(dh, 1330);
+    assert.ok(sw < 11008 && sh < 6048, 'sw/sh must be on the order of the viewport, not the full source');
+    assert.equal(dx, 0);
+    assert.equal(dy, 0);
+  } finally {
+    setActiveCamMatrix(null);
+  }
+});
+
+test('blitDeviceAligned: falls back to 5-arg full blit when canvas width/height is 0', () => {
+  const drawImageCalls = [];
+  let currentTransform = { a: 2, b: 0, c: 0, d: 2, e: 0, f: 0 };
+  const mockCtx = {
+    canvas: { width: 0, height: 0 },
+    setTransform(a, b, c, d, e, f) {
+      currentTransform = { a, b, c, d, e, f };
+    },
+    getTransform() { return currentTransform; },
+    drawImage(...args) {
+      drawImageCalls.push(args);
+    },
+  };
+  const source = { width: 11008, height: 6048 };
+  const camMatrix = { a: 2, b: 0, c: 0, d: 2, e: 0, f: 0 };
+  setActiveCamMatrix(camMatrix);
+  try {
+    blitDeviceAligned(mockCtx, source, -1000, -500, 2);
+    assert.equal(drawImageCalls.length, 1, 'drawImage called once');
+    const args = drawImageCalls[0];
+    assert.equal(args.length, 5, 'falls back to 5-arg blit when canvas size is 0');
+    assert.equal(args[0], source);
+    assert.equal(args[1], -2000);
+    assert.equal(args[2], -1000);
+    assert.equal(args[3], 11008);
+    assert.equal(args[4], 6048);
+  } finally {
+    setActiveCamMatrix(null);
+  }
+});
+
+test('blitDeviceAligned: offscreen blit with activeCamMatrix skips drawImage but puts ctx in device transform mode', () => {
+  const drawImageCalls = [];
+  let currentTransform = { a: 2, b: 0, c: 0, d: 2, e: 0, f: 0 };
+  const mockCtx = {
+    canvas: { width: 768, height: 1330 },
+    setTransform(a, b, c, d, e, f) {
+      currentTransform = { a, b, c, d, e, f };
+    },
+    getTransform() { return currentTransform; },
+    drawImage(...args) {
+      drawImageCalls.push(args);
+    },
+  };
+  const source = { width: 100, height: 100 };
+  const camMatrix = { a: 2, b: 0, c: 0, d: 2, e: 0, f: 0 };
+  setActiveCamMatrix(camMatrix);
+  try {
+    // dx = 2000, dy = 2000, completely offscreen on a 768x1330 canvas
+    blitDeviceAligned(mockCtx, source, 1000, 1000, 2);
+    assert.equal(drawImageCalls.length, 0, 'drawImage must not be called when blit is offscreen');
+    assert.deepStrictEqual(currentTransform, { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }, 'ensureDeviceTransform must have run putting ctx in device mode');
+    // Ensure subsequent camera restore works because activeTransformMode was left in 'device'
+    ensureCameraTransform(mockCtx);
+    assert.deepStrictEqual(currentTransform, camMatrix, 'camera transform was restored successfully from device mode');
+  } finally {
     setActiveCamMatrix(null);
   }
 });

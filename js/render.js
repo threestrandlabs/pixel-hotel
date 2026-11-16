@@ -66,9 +66,75 @@ export function ensureCameraTransform(ctx) {
   }
 }
 
+export function visibleBlitRect(srcW, srcH, dx, dy, dw, dh, destW, destH) {
+  if (srcW <= 0 || srcH <= 0 || dw <= 0 || dh <= 0 || destW <= 0 || destH <= 0) {
+    return null;
+  }
+  const destX1 = Math.max(0, dx);
+  const destX2 = Math.min(destW, dx + dw);
+  const destY1 = Math.max(0, dy);
+  const destY2 = Math.min(destH, dy + dh);
+
+  if (destX1 >= destX2 || destY1 >= destY2) {
+    return null;
+  }
+
+  if (destX1 === dx && destX2 === dx + dw && destY1 === dy && destY2 === dy + dh) {
+    return { sx: 0, sy: 0, sw: srcW, sh: srcH, dx, dy, dw, dh };
+  }
+
+  if (dw === srcW && dh === srcH) {
+    const sx = destX1 - dx;
+    const sy = destY1 - dy;
+    const sw = destX2 - destX1;
+    const sh = destY2 - destY1;
+    return { sx, sy, sw, sh, dx: destX1, dy: destY1, dw: sw, dh: sh };
+  }
+
+  const scaleX = dw / srcW;
+  const scaleY = dh / srcH;
+
+  const sx = Math.max(0, Math.min(srcW, Math.round((destX1 - dx) / scaleX)));
+  const sx2 = Math.max(0, Math.min(srcW, Math.round((destX2 - dx) / scaleX)));
+  const sw = sx2 - sx;
+
+  const sy = Math.max(0, Math.min(srcH, Math.round((destY1 - dy) / scaleY)));
+  const sy2 = Math.max(0, Math.min(srcH, Math.round((destY2 - dy) / scaleY)));
+  const sh = sy2 - sy;
+
+  if (sw <= 0 || sh <= 0) {
+    return null;
+  }
+
+  const outDx = dx + Math.round(sx * scaleX);
+  const outDy = dy + Math.round(sy * scaleY);
+  const outDw = Math.round(sx2 * scaleX) - Math.round(sx * scaleX);
+  const outDh = Math.round(sy2 * scaleY) - Math.round(sy * scaleY);
+
+  if (outDw <= 0 || outDh <= 0) {
+    return null;
+  }
+
+  return {
+    sx,
+    sy,
+    sw,
+    sh,
+    dx: outDx,
+    dy: outDy,
+    dw: outDw,
+    dh: outDh,
+  };
+}
+
 // pan) — we must honour that same transform here too, or sprites drift out of sync
 // with vector-drawn content (shadows, vehicles, buildings) that already respects it.
-function blitDeviceAligned(ctx, sourceCanvas, cssX, cssY, dpr) {
+export function blitDeviceAligned(ctx, sourceCanvas, cssX, cssY, dpr) {
+  const canvas = ctx.canvas;
+  const destW = canvas?.width;
+  const destH = canvas?.height;
+  const hasDestSize = typeof destW === 'number' && destW > 0 && typeof destH === 'number' && destH > 0;
+
   const t = activeCamMatrix;
   if (!t) {
     const curT = ctx.getTransform();
@@ -77,10 +143,19 @@ function blitDeviceAligned(ctx, sourceCanvas, cssX, cssY, dpr) {
     const zoomScale = curT.a / dpr;
     const dw = Math.round(sourceCanvas.width * zoomScale);
     const dh = Math.round(sourceCanvas.height * zoomScale);
+    let rect = null;
+    if (hasDestSize) {
+      rect = visibleBlitRect(sourceCanvas.width, sourceCanvas.height, dx, dy, dw, dh, destW, destH);
+      if (!rect) return;
+    }
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(sourceCanvas, dx, dy, dw, dh);
+    if (rect) {
+      ctx.drawImage(sourceCanvas, rect.sx, rect.sy, rect.sw, rect.sh, rect.dx, rect.dy, rect.dw, rect.dh);
+    } else {
+      ctx.drawImage(sourceCanvas, dx, dy, dw, dh);
+    }
     ctx.restore();
     return;
   }
@@ -91,6 +166,14 @@ function blitDeviceAligned(ctx, sourceCanvas, cssX, cssY, dpr) {
   const dh = Math.round(sourceCanvas.height * zoomScale);
 
   ensureDeviceTransform(ctx);
+
+  if (hasDestSize) {
+    const rect = visibleBlitRect(sourceCanvas.width, sourceCanvas.height, dx, dy, dw, dh, destW, destH);
+    if (!rect) return;
+    ctx.drawImage(sourceCanvas, rect.sx, rect.sy, rect.sw, rect.sh, rect.dx, rect.dy, rect.dw, rect.dh);
+    return;
+  }
+
   ctx.drawImage(sourceCanvas, dx, dy, dw, dh);
 }
 
