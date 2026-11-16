@@ -27,13 +27,15 @@ import {
   openArcadeLeaderboard, closeArcadeLeaderboard, getActiveArcadeState,
 } from './arcade/ui.js';
 import { initPoolUI, openPoolGame, closePoolGame, getActivePoolState } from './arcade/pool-ui.js';
-import { initGumballUI, openGumballModal, renderGumballsTab } from './gumballs/gumballs-ui.js';
+import { initGumballUI, openGumballModal, closeGumballModal, renderGumballsTab } from './gumballs/gumballs-ui.js';
 import { distinctOwnedInRarity, totalDistinctOwned, todayDateStr } from './gumballs/gumballs.js';
 import { applyTraderPersona } from './gumballs/trader.js';
-import { initTraderUI, openTraderModal } from './gumballs/trader-ui.js';
-import { initLibraryUI, openLibraryModal } from './gumballs/library-ui.js';
+import { initTraderUI, openTraderModal, closeTraderModal } from './gumballs/trader-ui.js';
+import { initLibraryUI, openLibraryModal, closeLibraryModal } from './gumballs/library-ui.js';
+import { closeMinigamesModal } from './minigames/ui.js';
 import { initAvatarModal, openAvatarModal, closeAvatarModal, isAvatarModalOpen } from './avatarModal.js';
 import { DEFAULT_PLAYER_LOOK, validateAvatarLook } from './avatar.js';
+import { renderCharacter } from './voxel.js';
 import { EMOTES, EMOTE_IDS, EMOTE_ICONS, EMOTE_DURATION_MS, isEmoteAllowed } from './emotes.js';
 import { initViewerUI, openViewerModal, closeViewerModal, isViewerModalOpen, drawWeatherOverlay } from './viewer.js';
 import { getWeatherState, WEATHER_ICONS, WEATHER_LABELS } from './weather.js';
@@ -893,31 +895,124 @@ function exitPool() {
 function showPoolActivityPrompt() {
   const modal = document.getElementById('poolPromptModal');
   if (modal) {
+    trackFocusOpen(modal);
     modal.classList.remove('hidden');
   } else {
     freeRoamPool();
   }
 }
 
+function closePoolPromptModal() {
+  document.getElementById('poolPromptModal')?.classList.add('hidden');
+  restoreTriggerFocus('poolPromptModal');
+}
+
+let salonDraft = null;
+let salonInitialLook = null;
+
+function renderSalonPreview() {
+  const canvas = document.getElementById('salonPreviewCanvas');
+  if (!canvas || !salonDraft) return;
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width;
+  const h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+  const look = validateAvatarLook(salonDraft) || DEFAULT_PLAYER_LOOK;
+  const pose = { stride: 0, sit: false, lie: false, blink: false, breathe: 0 };
+  const makeCanvas = (cw, ch) => {
+    const c = document.createElement('canvas');
+    c.width = cw;
+    c.height = ch;
+    return c;
+  };
+  const rendered = renderCharacter(look, 'down', pose, makeCanvas, 1.5);
+  if (rendered && rendered.canvas) {
+    const drawW = rendered.canvas.width / 1.5;
+    const drawH = rendered.canvas.height / 1.5;
+    const destX = Math.round((w - drawW) / 2);
+    const destY = Math.round((h - drawH) / 2 + 10);
+    ctx.imageRendering = 'pixelated';
+    ctx.drawImage(rendered.canvas, destX, destY, drawW, drawH);
+  }
+}
+
+function refreshSalonUi() {
+  if (!salonDraft) return;
+  document.querySelectorAll('.salon-style-btn').forEach((btn) => {
+    const isSel = btn.dataset.style === salonDraft.hairStyle;
+    btn.setAttribute('aria-pressed', isSel ? 'true' : 'false');
+    btn.classList.toggle('active', isSel);
+  });
+  document.querySelectorAll('.salon-color-btn').forEach((btn) => {
+    const isSel = (btn.dataset.color || '').toLowerCase() === (salonDraft.hairColor || '').toLowerCase();
+    btn.setAttribute('aria-pressed', isSel ? 'true' : 'false');
+    btn.classList.toggle('active', isSel);
+  });
+  renderSalonPreview();
+  const hasChanged = salonDraft.hairStyle !== salonInitialLook.hairStyle ||
+    (salonDraft.hairColor || '').toLowerCase() !== (salonInitialLook.hairColor || '').toLowerCase();
+  const canAfford = state.coins >= 20;
+  const purchaseBtn = document.getElementById('btnSalonPurchase');
+  const summaryEl = document.getElementById('salonSummary');
+  if (purchaseBtn) {
+    purchaseBtn.disabled = !hasChanged || !canAfford;
+  }
+  if (summaryEl) {
+    if (!hasChanged) {
+      summaryEl.textContent = 'Current style. Pick a hairstyle or colour to preview.';
+    } else if (!canAfford) {
+      summaryEl.textContent = 'Previewing changes. You need 20 coins to purchase this style.';
+    } else {
+      summaryEl.textContent = 'Looking fresh! Click Purchase (🪙 20) to confirm your new look.';
+    }
+  }
+}
+
 function openSalonModal() {
-  document.getElementById('salonModal')?.classList.remove('hidden');
+  const modal = document.getElementById('salonModal');
+  if (!modal) return;
+  trackFocusOpen(modal);
+  const look = state.player.look || DEFAULT_PLAYER_LOOK;
+  salonInitialLook = {
+    hairStyle: look.hairStyle || 'classic',
+    hairColor: look.hairColor || look.hair || '#2c221e',
+  };
+  salonDraft = {
+    ...look,
+    hairStyle: salonInitialLook.hairStyle,
+    hairColor: salonInitialLook.hairColor,
+    hair: salonInitialLook.hairColor,
+  };
+  refreshSalonUi();
+  modal.classList.remove('hidden');
+}
+
+function closeSalonModal() {
+  const modal = document.getElementById('salonModal');
+  if (modal) modal.classList.add('hidden');
+  salonDraft = null;
+  salonInitialLook = null;
+  restoreTriggerFocus('salonModal');
 }
 
 function handleSalonStyle(style) {
-  if (state.coins < 20) {
-    showToast('Not enough coins! (Costs 20 coins)');
-    return;
-  }
-  state.coins -= 20;
-  refreshCoins();
-  state.player.look = state.player.look || {};
-  state.player.look.hairStyle = style;
-  showToast(`Antoine gave you a ${style} cut! ✨ (-20 coins)`);
-  saveState(window.localStorage, state);
-  document.getElementById('salonModal')?.classList.add('hidden');
+  if (!salonDraft) return;
+  salonDraft.hairStyle = style;
+  refreshSalonUi();
 }
 
 function handleSalonColor(color) {
+  if (!salonDraft) return;
+  salonDraft.hairColor = color;
+  salonDraft.hair = color;
+  refreshSalonUi();
+}
+
+function handleSalonPurchase() {
+  if (!salonDraft || !salonInitialLook) return;
+  const hasChanged = salonDraft.hairStyle !== salonInitialLook.hairStyle ||
+    (salonDraft.hairColor || '').toLowerCase() !== (salonInitialLook.hairColor || '').toLowerCase();
+  if (!hasChanged) return;
   if (state.coins < 20) {
     showToast('Not enough coins! (Costs 20 coins)');
     return;
@@ -925,10 +1020,14 @@ function handleSalonColor(color) {
   state.coins -= 20;
   refreshCoins();
   state.player.look = state.player.look || {};
-  state.player.look.hairColor = color;
-  showToast('Dyed your hair! Looking fresh ✨ (-20 coins)');
+  state.player.look.hairStyle = salonDraft.hairStyle;
+  state.player.look.hairColor = salonDraft.hairColor;
+  state.player.look.hair = salonDraft.hairColor;
+  if (player) player.look = state.player.look;
+  updateLocalLook(state.player.look);
+  showToast(`Antoine gave you a fresh new cut! ✨ (-20 coins)`);
   saveState(window.localStorage, state);
-  document.getElementById('salonModal')?.classList.add('hidden');
+  closeSalonModal();
 }
 
 function openRoomUpgradeModal() {
@@ -967,6 +1066,7 @@ function openRoomUpgradeModal() {
   ui.preUpgradeAutoFollow = audio.autoFollowRoom;
   audio.setTrack('renovation', false);
   refreshMusicPlayer();
+  trackFocusOpen(modal);
   modal.classList.remove('hidden');
 }
 
@@ -974,6 +1074,7 @@ function closeRoomUpgradeModal() {
   const modal = document.getElementById('roomUpgradeModal');
   if (!modal || modal.classList.contains('hidden')) return;
   modal.classList.add('hidden');
+  restoreTriggerFocus('roomUpgradeModal');
   if (audio.trackId === 'renovation') {
     const restoreId = (ui.preUpgradeAutoFollow || !ui.preUpgradeTrackId) ? trackForRoom(state.player.room) : ui.preUpgradeTrackId;
     audio.setAutoFollowRoom(ui.preUpgradeAutoFollow !== false);
@@ -2012,18 +2113,189 @@ document.getElementById('btnFollowCamera').addEventListener('click', () => {
 });
 document.getElementById('btnNpcDlgClose').addEventListener('click', closeNpcDialogue);
 
+const lastFocusMap = new Map();
+
+function trackFocusOpen(surfaceEl, triggerEl = document.activeElement) {
+  if (!surfaceEl) return;
+  if (triggerEl && triggerEl !== document.body && !surfaceEl.contains(triggerEl)) {
+    lastFocusMap.set(surfaceEl.id, triggerEl);
+  }
+  requestAnimationFrame(() => {
+    const focusable = surfaceEl.querySelector(
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    );
+    if (focusable) {
+      focusable.focus();
+    } else {
+      surfaceEl.setAttribute('tabindex', '-1');
+      surfaceEl.focus();
+    }
+  });
+}
+
+function restoreTriggerFocus(surfaceId) {
+  const trigger = lastFocusMap.get(surfaceId);
+  if (trigger && typeof trigger.focus === 'function' && document.body.contains(trigger)) {
+    trigger.focus();
+  }
+  lastFocusMap.delete(surfaceId);
+}
+
+if (typeof MutationObserver !== 'undefined') {
+  const surfaceObserver = new MutationObserver((mutations) => {
+    for (const m of mutations) {
+      if (m.attributeName === 'class') {
+        const el = m.target;
+        const wasHidden = m.oldValue ? m.oldValue.includes('hidden') : false;
+        const isHidden = el.classList.contains('hidden');
+        if (wasHidden && !isHidden) {
+          trackFocusOpen(el);
+        } else if (!wasHidden && isHidden) {
+          restoreTriggerFocus(el.id);
+        }
+      }
+    }
+  });
+  document.querySelectorAll('.overlay, .panel').forEach((el) => {
+    surfaceObserver.observe(el, { attributes: true, attributeFilter: ['class'], attributeOldValue: true });
+  });
+}
+
+function closeSurfaceById(surfaceId) {
+  switch (surfaceId) {
+    case 'helpOverlay':
+      hideHelp();
+      break;
+    case 'skyViewerModal':
+      closeViewerModal();
+      break;
+    case 'avatarModal':
+      closeAvatarModal();
+      break;
+    case 'arcadeGameModal':
+      closeArcadeGame();
+      break;
+    case 'arcadeLeaderboardModal':
+      closeArcadeLeaderboard();
+      break;
+    case 'poolGameModal':
+      closePoolGame();
+      break;
+    case 'poolPromptModal':
+      closePoolPromptModal();
+      break;
+    case 'salonModal':
+      closeSalonModal();
+      break;
+    case 'roomUpgradeModal':
+      closeRoomUpgradeModal();
+      break;
+    case 'gumballModal':
+      closeGumballModal();
+      break;
+    case 'gumballTradeModal':
+      closeTraderModal();
+      break;
+    case 'gumballLibraryModal':
+      closeLibraryModal();
+      break;
+    case 'minigameModal':
+      closeMinigamesModal();
+      break;
+    case 'emoteBar':
+      toggleEmoteBar(false);
+      break;
+    default: {
+      const el = document.getElementById(surfaceId);
+      if (el) el.classList.add('hidden');
+      break;
+    }
+  }
+  restoreTriggerFocus(surfaceId);
+}
+
+function closeActiveSurface() {
+  const overlayChecks = [
+    { id: 'helpOverlay', check: () => !document.getElementById('helpOverlay')?.classList.contains('hidden'), close: hideHelp },
+    { id: 'skyViewerModal', check: isViewerModalOpen, close: closeViewerModal },
+    { id: 'avatarModal', check: isAvatarModalOpen, close: closeAvatarModal },
+    { id: 'arcadeGameModal', check: () => !document.getElementById('arcadeGameModal')?.classList.contains('hidden'), close: closeArcadeGame },
+    { id: 'arcadeLeaderboardModal', check: () => !document.getElementById('arcadeLeaderboardModal')?.classList.contains('hidden'), close: closeArcadeLeaderboard },
+    { id: 'poolGameModal', check: () => getActivePoolState().isOpen, close: closePoolGame },
+    { id: 'poolPromptModal', check: () => !document.getElementById('poolPromptModal')?.classList.contains('hidden'), close: closePoolPromptModal },
+    { id: 'salonModal', check: () => !document.getElementById('salonModal')?.classList.contains('hidden'), close: closeSalonModal },
+    { id: 'roomUpgradeModal', check: () => !document.getElementById('roomUpgradeModal')?.classList.contains('hidden'), close: closeRoomUpgradeModal },
+    { id: 'gumballModal', check: () => !document.getElementById('gumballModal')?.classList.contains('hidden'), close: closeGumballModal },
+    { id: 'gumballTradeModal', check: () => !document.getElementById('gumballTradeModal')?.classList.contains('hidden'), close: closeTraderModal },
+    { id: 'gumballLibraryModal', check: () => !document.getElementById('gumballLibraryModal')?.classList.contains('hidden'), close: closeLibraryModal },
+    { id: 'minigameModal', check: () => !document.getElementById('minigameModal')?.classList.contains('hidden'), close: closeMinigamesModal },
+  ];
+
+  for (const entry of overlayChecks) {
+    if (entry.check()) {
+      entry.close();
+      restoreTriggerFocus(entry.id);
+      return true;
+    }
+  }
+
+  const otherOverlay = document.querySelector('.overlay:not(.hidden)');
+  if (otherOverlay) {
+    closeSurfaceById(otherOverlay.id);
+    return true;
+  }
+
+  if (!document.getElementById('emoteBar')?.classList.contains('hidden')) {
+    toggleEmoteBar(false);
+    restoreTriggerFocus('emoteBar');
+    return true;
+  }
+
+  const openPanel = document.querySelector('.panel:not(.hidden)');
+  if (openPanel) {
+    openPanel.classList.add('hidden');
+    restoreTriggerFocus(openPanel.id);
+    return true;
+  }
+
+  if (ui.activeDialogue) {
+    closeNpcDialogue();
+    return true;
+  }
+  if (ui.placing) {
+    cancelPlacing();
+    return true;
+  }
+
+  return false;
+}
+
 window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
-    if (!document.getElementById('helpOverlay').classList.contains('hidden')) hideHelp();
-    else if (isViewerModalOpen()) closeViewerModal();
-    else if (isAvatarModalOpen()) closeAvatarModal();
-    else if (!document.getElementById('emoteBar')?.classList.contains('hidden')) toggleEmoteBar(false);
-    else if (!document.getElementById('arcadeGameModal').classList.contains('hidden')) closeArcadeGame();
-    else if (!document.getElementById('arcadeLeaderboardModal').classList.contains('hidden')) closeArcadeLeaderboard();
-    else if (!document.getElementById('elevatorPanel').classList.contains('hidden')) document.getElementById('elevatorPanel').classList.add('hidden');
-    else if (!document.getElementById('roomUpgradeModal').classList.contains('hidden')) closeRoomUpgradeModal();
-    else if (ui.activeDialogue) closeNpcDialogue();
-    else cancelPlacing();
+    closeActiveSurface();
+  }
+  else if (e.key === 'Tab') {
+    const activeOverlay = document.querySelector('.overlay:not(.hidden)');
+    if (activeOverlay) {
+      const focusables = Array.from(activeOverlay.querySelectorAll(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      )).filter((el) => el.offsetParent !== null || el.offsetWidth > 0 || el.offsetHeight > 0);
+      if (focusables.length > 0) {
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+        if (e.shiftKey) {
+          if (document.activeElement === first || !activeOverlay.contains(document.activeElement)) {
+            e.preventDefault();
+            last.focus();
+          }
+        } else {
+          if (document.activeElement === last || !activeOverlay.contains(document.activeElement)) {
+            e.preventDefault();
+            first.focus();
+          }
+        }
+      }
+    }
   }
   else if (getActiveArcadeState().isOpen) return;
   else if (e.key >= '1' && e.key <= '8' && !isTypingTarget(e)) {
@@ -2047,9 +2319,18 @@ function isTypingTarget(e) { return e.target && (e.target.tagName === 'INPUT' ||
 
 function togglePanel(id) {
   const el = document.getElementById(id);
+  if (!el) return;
   const willShow = el.classList.contains('hidden');
-  document.querySelectorAll('.panel').forEach((p) => p.classList.add('hidden'));
-  if (willShow) el.classList.remove('hidden');
+  document.querySelectorAll('.panel').forEach((p) => {
+    if (!p.classList.contains('hidden')) {
+      p.classList.add('hidden');
+      restoreTriggerFocus(p.id);
+    }
+  });
+  if (willShow) {
+    trackFocusOpen(el);
+    el.classList.remove('hidden');
+  }
   if (id === 'inventoryPanel' && willShow) {
     // Re-opening the panel always lands back on the category tiles, not wherever you left off.
     activeCategory.shopTab = null;
@@ -2064,7 +2345,9 @@ function togglePanel(id) {
 
 function openElevatorPanel() {
   document.querySelectorAll('.panel').forEach((p) => p.classList.add('hidden'));
-  document.getElementById('elevatorPanel').classList.remove('hidden');
+  const el = document.getElementById('elevatorPanel');
+  trackFocusOpen(el);
+  el.classList.remove('hidden');
   refreshElevatorPanel();
 }
 
@@ -2072,24 +2355,18 @@ document.getElementById('btnElevator').addEventListener('click', () => togglePan
 document.getElementById('btnMyRoom').addEventListener('click', () => travelByElevator('myroom'));
 document.getElementById('btnUpgradeRoom')?.addEventListener('click', openRoomUpgradeModal);
 document.getElementById('btnUpgradeClose')?.addEventListener('click', closeRoomUpgradeModal);
-document.getElementById('roomUpgradeModal')?.addEventListener('click', (e) => {
-  if (e.target === e.currentTarget) closeRoomUpgradeModal();
-});
 
 document.getElementById('btnPoolSwimLaps')?.addEventListener('click', () => {
-  document.getElementById('poolPromptModal')?.classList.add('hidden');
+  closePoolPromptModal();
   startLapSwimming();
 });
 document.getElementById('btnPoolFreeRoam')?.addEventListener('click', () => {
-  document.getElementById('poolPromptModal')?.classList.add('hidden');
+  closePoolPromptModal();
   freeRoamPool();
 });
 document.getElementById('btnPoolExit')?.addEventListener('click', () => {
-  document.getElementById('poolPromptModal')?.classList.add('hidden');
+  closePoolPromptModal();
   exitPool();
-});
-document.getElementById('poolPromptModal')?.addEventListener('click', (e) => {
-  if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden');
 });
 
 document.querySelectorAll('.salon-style-btn').forEach((btn) => {
@@ -2098,16 +2375,9 @@ document.querySelectorAll('.salon-style-btn').forEach((btn) => {
 document.querySelectorAll('.salon-color-btn').forEach((btn) => {
   btn.addEventListener('click', () => handleSalonColor(btn.dataset.color));
 });
-document.getElementById('btnSalonClose')?.addEventListener('click', () => {
-  document.getElementById('salonModal')?.classList.add('hidden');
-});
-document.getElementById('salonModal')?.addEventListener('click', (e) => {
-  if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden');
-});
+document.getElementById('btnSalonPurchase')?.addEventListener('click', handleSalonPurchase);
+document.getElementById('btnSalonClose')?.addEventListener('click', closeSalonModal);
 document.getElementById('btnSkyViewerClose')?.addEventListener('click', closeViewerModal);
-document.getElementById('skyViewerModal')?.addEventListener('click', (e) => {
-  if (e.target === e.currentTarget) closeViewerModal();
-});
 
 document.getElementById('btnInventory').addEventListener('click', () => togglePanel('inventoryPanel'));
 document.getElementById('btnQuests').addEventListener('click', () => togglePanel('questPanel'));
@@ -2115,13 +2385,21 @@ document.getElementById('btnMultiplayer').addEventListener('click', () => toggle
 document.querySelectorAll('.panel-close').forEach((btn) => {
   btn.addEventListener('click', () => {
     if (btn.dataset.close) {
-      document.getElementById(btn.dataset.close)?.classList.add('hidden');
+      closeSurfaceById(btn.dataset.close);
     }
   });
 });
-// Elevator directory is a centred modal: clicking the dimmed backdrop (not the box itself) closes it.
-document.getElementById('elevatorPanel').addEventListener('click', (e) => {
-  if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden');
+document.querySelectorAll('.overlay').forEach((overlay) => {
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay && !overlay.hasAttribute('data-no-backdrop-close')) {
+      closeSurfaceById(overlay.id);
+    }
+  });
+});
+document.getElementById('elevatorPanel')?.addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) {
+    closeSurfaceById('elevatorPanel');
+  }
 });
 document.querySelectorAll('.tab-btn').forEach((btn) => {
   btn.addEventListener('click', () => {
@@ -2638,10 +2916,18 @@ function toggleMute() {
   toggleMusicMute();
 }
 
-function showHelp() { document.getElementById('helpOverlay').classList.remove('hidden'); }
+function showHelp() {
+  const modal = document.getElementById('helpOverlay');
+  if (modal) {
+    trackFocusOpen(modal);
+    modal.classList.remove('hidden');
+  }
+}
 function hideHelp() {
-  document.getElementById('helpOverlay').classList.add('hidden');
+  const modal = document.getElementById('helpOverlay');
+  if (modal) modal.classList.add('hidden');
   window.localStorage.setItem(HELP_SEEN_KEY, '1');
+  restoreTriggerFocus('helpOverlay');
 }
 document.getElementById('btnHelp').addEventListener('click', showHelp);
 document.getElementById('btnHelpClose').addEventListener('click', hideHelp);
