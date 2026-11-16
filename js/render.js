@@ -2064,6 +2064,7 @@ function drawEdgeRail(ctx, edge, x, y, originX, originY, dpr) {
 }
 
 export function drawDiamondOverlay(ctx, sx, sy, color, alpha) {
+  ensureCameraTransform(ctx);
   ctx.save();
   ctx.globalAlpha = alpha;
   ctx.fillStyle = color;
@@ -2098,6 +2099,7 @@ const WALK_TARGET_FLASH_MS = 420;
 // aiming for. No shadowBlur/gradients — just a handful of stroke/fill calls,
 // cheap enough to run every frame.
 export function drawWalkTargetOverlay(ctx, sx, sy, now, bornAt, blocked = false) {
+  ensureCameraTransform(ctx);
   const age = Math.max(0, now - bornAt);
   if (blocked) {
     if (age > WALK_TARGET_FLASH_MS) return;

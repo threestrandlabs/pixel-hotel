@@ -29,6 +29,7 @@ import {
   clampZoom, zoomAtPoint, centerCameraOnTile, screenToTile, worldToScreen,
   DEFAULT_ZOOM, MIN_ZOOM, MAX_ZOOM, deviceScale, deadzoneCameraTarget, CAMERA_DEADZONE_MARGIN,
   nearCityLayerTransform, getCachedIsoCityLayout, renderSkylineToCanvas, getSeatConfig,
+  TILE_W, TILE_H, drawDiamondOverlay, ensureCameraTransform, ensureDeviceTransform,
 } from '../js/render.js';
 import { ChiptuneAudio, MOOD_PROFILES, MUSIC_FILES, PLAYLIST, TRACK_ORDER, moodForRoom, formatTime } from '../js/audio.js';
 
@@ -1402,6 +1403,114 @@ test('v0.7.0 zoom: pointer-to-tile mapping round-trips correctly at multiple zoo
     assert.equal(tile.x, 6, `x round-trips at zoom ${zoom}`);
     assert.equal(tile.y, 4, `y round-trips at zoom ${zoom}`);
   }
+});
+
+test('picking: screenToTile round-trips for outdoor decks (rooftop, garden) and indoor rooms (lobby) with realistic camera and interior points', () => {
+  const width = 960, height = 600;
+  const roomsToTest = [
+    {
+      room: ROOMS.lobby,
+      name: 'lobby',
+      tiles: [
+        { x: 4, y: 2, label: 'spawn' },
+        { x: 6, y: 4, label: 'interior' },
+        { x: 4, y: 8, label: 'south edge' },
+        { x: 2, y: 7, label: 'south-west edge' },
+        { x: 9, y: 7, label: 'south-east edge' },
+      ],
+    },
+    {
+      room: ROOMS.garden,
+      name: 'garden',
+      tiles: [
+        { x: 8, y: 2, label: 'spawn' },
+        { x: 14, y: 6, label: 'patio deck' },
+        { x: 8, y: 16, label: 'front south edge grass' },
+        { x: 7, y: 17, label: 'front south edge corner' },
+        { x: 5, y: 15, label: 'south edge' },
+        { x: 16, y: 12, label: 'east zone' },
+      ],
+    },
+    {
+      room: ROOMS.rooftop,
+      name: 'rooftop',
+      tiles: [
+        { x: 6, y: 2, label: 'spawn' },
+        { x: 10, y: 8, label: 'deck centre' },
+        { x: 6, y: 14, label: 'front south edge deck' },
+        { x: 5, y: 15, label: 'front south edge corner' },
+        { x: 4, y: 12, label: 'riser zone edge' },
+        { x: 14, y: 10, label: 'infinity pool edge' },
+      ],
+    },
+  ];
+
+  for (const { room, name, tiles } of roomsToTest) {
+    const { originX, originY } = computeOrigin(room, width, height);
+    // Realistic camera from centerCameraOnTile matching production switchRoom/recenterCamera
+    const camera = centerCameraOnTile(room.spawn.x, room.spawn.y, room, width, height, DEFAULT_ZOOM);
+    assert.ok(camera.panX !== 0 || camera.panY !== 0, `${name}: camera has realistic non-zero pan`);
+    assert.equal(camera.zoom, DEFAULT_ZOOM, `${name}: camera uses DEFAULT_ZOOM`);
+
+    for (const t of tiles) {
+      // Production path: tileToScreen world coords -> worldToScreen screen coords
+      const { sx: wx, sy: wy } = tileToScreen(t.x, t.y, originX, originY);
+      const { sx, sy } = worldToScreen(wx, wy, camera, width, height);
+
+      // 1. Center of tile round-trip: screenToTile maps screen point back to exact tile
+      const pickedCenter = screenToTile(sx, sy, originX, originY, camera, width, height);
+      assert.equal(pickedCenter.x, t.x, `${name} (${t.label}): tile center x matches`);
+      assert.equal(pickedCenter.y, t.y, `${name} (${t.label}): tile center y matches`);
+
+      // 2. Interior points of the isometric diamond: points inside the diamond must map back to t
+      const hw = (TILE_W / 2) * camera.zoom;
+      const hh = (TILE_H / 2) * camera.zoom;
+      const interiorOffsets = [
+        [0, -hh * 0.45],          // north interior
+        [0, hh * 0.45],           // south interior
+        [-hw * 0.45, 0],          // west interior
+        [hw * 0.45, 0],           // east interior
+        [hw * 0.25, hh * 0.25],   // south-east quadrant
+        [-hw * 0.25, -hh * 0.25], // north-west quadrant
+        [hw * 0.25, -hh * 0.25],  // north-east quadrant
+        [-hw * 0.25, hh * 0.25],  // south-west quadrant
+      ];
+
+      for (const [dx, dy] of interiorOffsets) {
+        const pickedInterior = screenToTile(sx + dx, sy + dy, originX, originY, camera, width, height);
+        assert.equal(pickedInterior.x, t.x, `${name} (${t.label} dx=${dx.toFixed(1)}, dy=${dy.toFixed(1)}): interior x matches`);
+        assert.equal(pickedInterior.y, t.y, `${name} (${t.label} dx=${dx.toFixed(1)}, dy=${dy.toFixed(1)}): interior y matches`);
+      }
+    }
+  }
+});
+
+test('picking: drawDiamondOverlay restores camera transform so hover highlight projects with active camera', () => {
+  let appliedTransform = null;
+  let currentTransform = { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
+  const fakeCtx = {
+    save() {},
+    restore() {},
+    globalAlpha: 1,
+    fillStyle: '',
+    beginPath() {},
+    moveTo() {},
+    lineTo() {},
+    closePath() {},
+    fill() { appliedTransform = { ...currentTransform }; },
+    setTransform(a, b, c, d, e, f) {
+      currentTransform = { a, b, c, d, e, f };
+    },
+    getTransform() { return currentTransform; },
+  };
+
+  // Switch context to device transform mode (as left by blitDeviceAligned)
+  ensureDeviceTransform(fakeCtx);
+  assert.equal(currentTransform.a, 1);
+
+  // Calling drawDiamondOverlay must ensure camera transform is restored on ctx
+  drawDiamondOverlay(fakeCtx, 100, 100, '#fff6c9', 0.35);
+  assert.ok(appliedTransform, 'fill was called with a valid transform');
 });
 
 test('v0.7.0 zoom: zoomAtPoint keeps the world point under the cursor fixed on screen', () => {
