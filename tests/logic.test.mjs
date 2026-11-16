@@ -30,6 +30,7 @@ import {
   DEFAULT_ZOOM, MIN_ZOOM, MAX_ZOOM, deviceScale, deadzoneCameraTarget, CAMERA_DEADZONE_MARGIN,
   nearCityLayerTransform, getCachedIsoCityLayout, renderSkylineToCanvas, getSeatConfig,
   TILE_W, TILE_H, drawDiamondOverlay, ensureCameraTransform, ensureDeviceTransform,
+  setActiveCamMatrix, drawSwimWaterlineOverlay, drawPoolWaterLayer, drawCharacter,
 } from '../js/render.js';
 import { ChiptuneAudio, MOOD_PROFILES, MUSIC_FILES, PLAYLIST, TRACK_ORDER, moodForRoom, formatTime } from '../js/audio.js';
 
@@ -1511,6 +1512,172 @@ test('picking: drawDiamondOverlay restores camera transform so hover highlight p
   // Calling drawDiamondOverlay must ensure camera transform is restored on ctx
   drawDiamondOverlay(fakeCtx, 100, 100, '#fff6c9', 0.35);
   assert.ok(appliedTransform, 'fill was called with a valid transform');
+});
+
+test('pool overlay: drawSwimWaterlineOverlay restores camera transform so swim wake & collar project with active camera', () => {
+  let appliedTransform = null;
+  let currentTransform = { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
+  const fakeCtx = {
+    save() {},
+    restore() {},
+    fillStyle: '',
+    strokeStyle: '',
+    lineWidth: 1,
+    beginPath() {},
+    ellipse() { appliedTransform = { ...currentTransform }; },
+    arc() {},
+    fill() {},
+    stroke() {},
+    setTransform(a, b, c, d, e, f) {
+      currentTransform = { a, b, c, d, e, f };
+    },
+    getTransform() { return currentTransform; },
+  };
+
+  const camMatrix = { a: 1.5, b: 0, c: 0, d: 1.5, e: 140, f: 90 };
+  setActiveCamMatrix(camMatrix);
+  try {
+    // Put context into device transform mode (as left by blitDeviceAligned)
+    ensureDeviceTransform(fakeCtx);
+    assert.deepStrictEqual(currentTransform, { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 });
+
+    // Calling drawSwimWaterlineOverlay must ensure camera transform is restored on ctx
+    drawSwimWaterlineOverlay(fakeCtx, 120, 80, 0);
+    assert.ok(appliedTransform, 'ellipse was called');
+    assert.deepStrictEqual(appliedTransform, camMatrix, 'swim overlay must be drawn with active camera matrix, not identity device transform');
+  } finally {
+    setActiveCamMatrix(null);
+  }
+});
+
+test('pool overlay: drawPoolWaterLayer restores camera transform so caustics shimmer ellipse projects with active camera', () => {
+  let appliedTransform = null;
+  let currentTransform = { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
+  const fakeCtx = {
+    save() {},
+    restore() {},
+    fillStyle: '',
+    beginPath() {},
+    ellipse() { appliedTransform = { ...currentTransform }; },
+    fill() {},
+    drawImage() {},
+    setTransform(a, b, c, d, e, f) {
+      currentTransform = { a, b, c, d, e, f };
+    },
+    getTransform() { return currentTransform; },
+  };
+
+  const camMatrix = { a: 1.25, b: 0, c: 0, d: 1.25, e: 60, f: 45 };
+  setActiveCamMatrix(camMatrix);
+
+  const realDocument = global.document;
+  global.document = {
+    createElement(tag) {
+      const canvas = { width: 0, height: 0 };
+      canvas.getContext = () => ({
+        setTransform() {},
+        clearRect() {},
+        drawImage() {},
+        fillRect() {},
+        beginPath() {},
+        moveTo() {},
+        lineTo() {},
+        closePath() {},
+        fill() {},
+        stroke() {},
+        arc() {},
+        ellipse() {},
+        rect() {},
+        clip() {},
+        save() {},
+        restore() {},
+        imageSmoothingEnabled: false,
+      });
+      return canvas;
+    },
+  };
+
+  try {
+    const poolItems = [{ itemId: 'pool_water', x: 2, y: 2, rot: 0, footprint: { w: 1, h: 1 } }];
+    // drawPoolWaterLayer blits the cached water layer via blitDeviceAligned (putting ctx in device mode)
+    // and must restore camera transform before drawing the caustics shimmer ellipse
+    drawPoolWaterLayer(fakeCtx, poolItems, 400, 300, 1, 1500);
+
+    assert.ok(appliedTransform, 'caustics ellipse was called');
+    assert.deepStrictEqual(appliedTransform, camMatrix, 'caustics shimmer ellipse must be drawn with active camera matrix, not identity device transform');
+  } finally {
+    global.document = realDocument;
+    setActiveCamMatrix(null);
+  }
+});
+
+test('pool overlay: drawCharacter restores camera transform after blitDeviceAligned for swim waterline', () => {
+  let appliedTransform = null;
+  let currentTransform = { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
+  const fakeCtx = {
+    save() {},
+    restore() {},
+    fillStyle: '',
+    strokeStyle: '',
+    lineWidth: 1,
+    beginPath() {},
+    ellipse() { appliedTransform = { ...currentTransform }; },
+    arc() {},
+    fill() {},
+    stroke() {},
+    drawImage() {},
+    setTransform(a, b, c, d, e, f) {
+      currentTransform = { a, b, c, d, e, f };
+    },
+    getTransform() { return currentTransform; },
+  };
+
+  const camMatrix = { a: 2, b: 0, c: 0, d: 2, e: 200, f: 100 };
+  setActiveCamMatrix(camMatrix);
+
+  const realDocument = global.document;
+  global.document = {
+    createElement(tag) {
+      const canvas = { width: 0, height: 0 };
+      canvas.getContext = () => ({
+        setTransform() {},
+        clearRect() {},
+        drawImage() {},
+        fillRect() {},
+        beginPath() {},
+        moveTo() {},
+        lineTo() {},
+        closePath() {},
+        fill() {},
+        stroke() {},
+        arc() {},
+        ellipse() {},
+        rect() {},
+        clip() {},
+        save() {},
+        restore() {},
+      });
+      return canvas;
+    },
+  };
+
+  try {
+    const entity = {
+      spriteKey: 'player',
+      color: '#00b4d8',
+      action: 'swim',
+      actionFrame: 0,
+      dir: 'down',
+      x: 3,
+      y: 3,
+    };
+    drawCharacter(fakeCtx, entity, 150, 120, 1, null);
+    assert.ok(appliedTransform, 'swim overlay ellipse was called');
+    assert.deepStrictEqual(appliedTransform, camMatrix, 'swim overlay after character blit must use active camera matrix');
+  } finally {
+    global.document = realDocument;
+    setActiveCamMatrix(null);
+  }
 });
 
 test('v0.7.0 zoom: zoomAtPoint keeps the world point under the cursor fixed on screen', () => {

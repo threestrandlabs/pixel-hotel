@@ -41,6 +41,15 @@ export function deviceScale(dpr = 1, zoom = 1) {
 let activeCamMatrix = null;
 let activeTransformMode = 'camera';
 
+/**
+ * Test hook: set active camera transform matrix used by ensureCameraTransform.
+ * Pass null to clear.
+ */
+export function setActiveCamMatrix(matrix) {
+  activeCamMatrix = matrix ? { ...matrix } : null;
+  activeTransformMode = 'camera';
+}
+
 export function ensureDeviceTransform(ctx) {
   if (activeTransformMode !== 'device') {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -1800,7 +1809,41 @@ function drawTowerCutawayOver(ctx, room, originX, originY) {
 
 // ---------- Entities, Furniture, Text & Overlays ----------
 
-function drawCharacter(ctx, e, screenX, screenY, dpr = 1, room = null) {
+export function drawSwimWaterlineOverlay(ctx, screenX, screenY, actionFrame = 0) {
+  ensureCameraTransform(ctx);
+  ctx.save();
+  // Layer 2: Translucent turquoise waterline collar masking submerged waist seam
+  ctx.fillStyle = 'rgba(42, 188, 212, 0.58)';
+  ctx.beginPath();
+  ctx.ellipse(screenX, screenY - 2, 20, 9.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Layer 3: Animated concentric white foam wake rings
+  const ringPhase = (actionFrame || 0) % 4;
+  ctx.strokeStyle = 'rgba(220, 252, 255, 0.88)';
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  ctx.ellipse(screenX, screenY - 2, 14 + ringPhase * 2.5, 6.5 + ringPhase * 1.1, 0, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.strokeStyle = 'rgba(140, 238, 252, 0.55)';
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.ellipse(screenX, screenY - 2, 21 + ((ringPhase + 2) % 4) * 2, 9.5 + ((ringPhase + 2) % 4) * 0.9, 0, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Layer 4: Splash droplets kicked up by alternating swim strokes
+  ctx.fillStyle = '#e8fcff';
+  const splashSide = (ringPhase % 2 === 0) ? -1 : 1;
+  for (const [sxOff, syOff, r] of [[splashSide * 15, -10, 2.2], [splashSide * 19, -6, 1.6], [-splashSide * 13, -7, 1.5]]) {
+    ctx.beginPath();
+    ctx.arc(screenX + sxOff, screenY + syOff, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+export function drawCharacter(ctx, e, screenX, screenY, dpr = 1, room = null) {
   const isSwimsuit = e.outfit === 'swimsuit' || e.isWearingSwimsuit || (e.action === 'swim');
   let baseLook = LOOKS[e.spriteKey] || { ...LOOKS.player, shirt: e.color || LOOKS.player.shirt };
   if (e.look) {
@@ -1837,6 +1880,7 @@ function drawCharacter(ctx, e, screenX, screenY, dpr = 1, room = null) {
 
   // Treadmill belt motion lines beneath runner's feet
   if (e.action === 'treadmill') {
+    ensureCameraTransform(ctx);
     ctx.save();
     ctx.strokeStyle = 'rgba(88, 226, 255, 0.72)';
     ctx.lineWidth = 2;
@@ -1882,37 +1926,9 @@ function drawCharacter(ctx, e, screenX, screenY, dpr = 1, room = null) {
 
   // 4-Layer Swimming Waterline Mask, Wake Ripples & Splash Droplets
   if (e.action === 'swim') {
-    ctx.save();
-    // Layer 2: Translucent turquoise waterline collar masking submerged waist seam
-    ctx.fillStyle = 'rgba(42, 188, 212, 0.58)';
-    ctx.beginPath();
-    ctx.ellipse(screenX, screenY - 2, 20, 9.5, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Layer 3: Animated concentric white foam wake rings
-    const ringPhase = (e.actionFrame || 0) % 4;
-    ctx.strokeStyle = 'rgba(220, 252, 255, 0.88)';
-    ctx.lineWidth = 1.6;
-    ctx.beginPath();
-    ctx.ellipse(screenX, screenY - 2, 14 + ringPhase * 2.5, 6.5 + ringPhase * 1.1, 0, 0, Math.PI * 2);
-    ctx.stroke();
-
-    ctx.strokeStyle = 'rgba(140, 238, 252, 0.55)';
-    ctx.lineWidth = 1.2;
-    ctx.beginPath();
-    ctx.ellipse(screenX, screenY - 2, 21 + ((ringPhase + 2) % 4) * 2, 9.5 + ((ringPhase + 2) % 4) * 0.9, 0, 0, Math.PI * 2);
-    ctx.stroke();
-
-    // Layer 4: Splash droplets kicked up by alternating swim strokes
-    ctx.fillStyle = '#e8fcff';
-    const splashSide = (ringPhase % 2 === 0) ? -1 : 1;
-    for (const [sxOff, syOff, r] of [[splashSide * 15, -10, 2.2], [splashSide * 19, -6, 1.6], [-splashSide * 13, -7, 1.5]]) {
-      ctx.beginPath();
-      ctx.arc(screenX + sxOff, screenY + syOff, r, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.restore();
+    drawSwimWaterlineOverlay(ctx, screenX, screenY, e.actionFrame);
   } else if (e.action === 'treadmill') {
+    ensureCameraTransform(ctx);
     // Athletic effort / sweat droplets near temple while running
     ctx.save();
     const dropShift = ((e.actionFrame || 0) % 2) * 3;
@@ -1923,6 +1939,7 @@ function drawCharacter(ctx, e, screenX, screenY, dpr = 1, room = null) {
     ctx.fill();
     ctx.restore();
   } else if (e.action === 'eat') {
+    ensureCameraTransform(ctx);
     // Rising warm culinary aroma / sip sparkle near character
     ctx.save();
     const wisp = ((e.actionFrame || 0) % 2) * 2.5;
@@ -2217,7 +2234,7 @@ export function getItemIconDataUrl(itemId, size = 52, dpr = 1) {
   return canvas?.toDataURL ? canvas.toDataURL() : '';
 }
 
-function drawPoolWaterLayer(ctx, poolItems, originX, originY, ds, now) {
+export function drawPoolWaterLayer(ctx, poolItems, originX, originY, ds, now) {
   const key = `${poolItems.length}:${originX},${originY}:${ds}`;
   if (poolWaterLayerCache.key !== key) {
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -2256,6 +2273,7 @@ function drawPoolWaterLayer(ctx, poolItems, originX, originY, ds, now) {
   blitDeviceAligned(ctx, poolWaterLayerCache.canvas, poolWaterLayerCache.minX, poolWaterLayerCache.minY, ds);
 
   // Cheap animated caustics shimmer overlay across the cached pool surface
+  ensureCameraTransform(ctx);
   const phase = (now % 3000) / 3000;
   const cx = (poolWaterLayerCache.minX + poolWaterLayerCache.maxX) / 2;
   const cy = poolWaterLayerCache.minY + phase * (poolWaterLayerCache.maxY - poolWaterLayerCache.minY);
