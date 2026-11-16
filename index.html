@@ -11,12 +11,12 @@
 <div id="app">
   <header id="topbar">
     <div id="brand">🏨 Pixel Hotel</div>
-    <div id="roomName">Floor 1 — Grand Lobby</div>
-    <div id="coinsDisplay">💰 <span id="coinsValue">0</span></div>
-    <div id="weatherBadge" class="weather-badge" title="Current weather">☀️</div>
+    <div id="roomName">Floor 1: Grand Lobby</div>
+    <div id="coinsDisplay" aria-label="Balance: 0 coins">💰 <span id="coinsValue">0</span></div>
+    <div id="weatherBadge" class="weather-badge" title="Current weather" aria-label="Current weather">☀️</div>
     <div id="topQuickButtons">
-      <button id="btnMute" class="pixel-btn" title="Audio Mixer &amp; Settings">🎚️</button>
-      <button id="btnHelp" class="pixel-btn" title="Help (H)">❓</button>
+      <button id="btnMute" class="pixel-btn" title="Audio Mixer &amp; Settings" aria-label="Audio Mixer &amp; Settings">🎚️</button>
+      <button id="btnHelp" class="pixel-btn" title="Help (H)" aria-label="Help">❓</button>
     </div>
     <nav id="topButtons" class="action-bar">
       <button id="btnElevator" class="pixel-btn action-btn" title="Elevator Directory (E)"><span class="btn-icon">🛗</span><span class="btn-text">Elevator</span></button>
@@ -43,7 +43,7 @@
       <canvas id="vehicleCanvas"></canvas>
     </div>
     <canvas id="gameCanvas" width="960" height="600"></canvas>
-    <div id="toast" class="hidden"></div>
+    <div id="toast" class="hidden" role="status" aria-live="polite"></div>
     <div id="minigameHud" class="hidden minigame-hud">
       <div class="minigame-hud-header">
         <span id="minigameHudTitle">🎮 Mini-Game</span>
@@ -59,7 +59,7 @@
         <button id="btnZoomReset" class="pixel-btn" title="Reset Zoom (0)">1:1</button>
         <button id="btnCenterPlayer" class="pixel-btn" title="Recenter Camera on Player">🎯</button>
       </div>
-      <button id="btnFollowCamera" class="pixel-btn" title="Follow Camera: Off — the camera stays still and only pans when you near the screen edge" aria-pressed="false">📷 Follow: Off</button>
+      <button id="btnFollowCamera" class="pixel-btn" title="Follow Camera: Off (the camera stays still and only pans when you near the screen edge)" aria-pressed="false">📷 Follow: Off</button>
     </div>
     <div id="musicPlayer" class="music-player">
       <div class="mp-bar">
@@ -141,7 +141,7 @@
       <div id="npcDlgOptions" class="npc-dlg-options"></div>
     </div>
     <div id="placingBar" class="hidden">
-      <img id="placingIcon" class="item-icon placing-icon hidden" src="" alt="" />
+      <img id="placingIcon" class="item-icon placing-icon hidden" alt="" />
       <span id="placingLabel">Placing item...</span>
       <button id="btnRotate" class="pixel-btn">⟳ Rotate (R)</button>
       <button id="btnCancelPlace" class="pixel-btn">✕ Cancel (Esc)</button>
@@ -156,20 +156,20 @@
     </form>
   </div>
 
-  <aside id="elevatorPanel" class="panel elevator-modal-backdrop hidden">
+  <aside id="elevatorPanel" class="panel elevator-modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="elevatorPanelTitle">
     <div class="elevator-modal-box">
       <div class="panel-header">
-        <span>🛗 Tower Elevator Directory</span>
-        <button class="panel-close" data-close="elevatorPanel">✕</button>
+        <span id="elevatorPanelTitle">🛗 Tower Elevator Directory</span>
+        <button class="panel-close" data-close="elevatorPanel" aria-label="Close">✕</button>
       </div>
       <div id="elevatorList" class="tab-content"></div>
     </div>
   </aside>
 
-  <aside id="inventoryPanel" class="panel hidden">
+  <aside id="inventoryPanel" class="panel hidden" role="dialog" aria-modal="true" aria-labelledby="inventoryPanelTitle">
     <div class="panel-header">
-      <span>Inventory &amp; Shop</span>
-      <button class="panel-close" data-close="inventoryPanel">✕</button>
+      <span id="inventoryPanelTitle">Inventory &amp; Shop</span>
+      <button class="panel-close" data-close="inventoryPanel" aria-label="Close">✕</button>
     </div>
     <div class="panel-tabs">
       <button class="tab-btn active" data-tab="shopTab">Shop</button>
@@ -183,18 +183,18 @@
     <div id="gumballsTab" class="tab-content hidden"></div>
   </aside>
 
-  <aside id="questPanel" class="panel hidden">
+  <aside id="questPanel" class="panel hidden" role="dialog" aria-modal="true" aria-labelledby="questPanelTitle">
     <div class="panel-header">
-      <span>Quests</span>
-      <button class="panel-close" data-close="questPanel">✕</button>
+      <span id="questPanelTitle">Quests</span>
+      <button class="panel-close" data-close="questPanel" aria-label="Close">✕</button>
     </div>
     <div id="questList"></div>
   </aside>
 
-  <aside id="multiplayerPanel" class="panel hidden">
+  <aside id="multiplayerPanel" class="panel hidden" role="dialog" aria-modal="true" aria-labelledby="multiplayerPanelTitle">
     <div class="panel-header">
-      <span>🌐 Multiplayer</span>
-      <button class="panel-close" data-close="multiplayerPanel">✕</button>
+      <span id="multiplayerPanelTitle">🌐 Multiplayer</span>
+      <button class="panel-close" data-close="multiplayerPanel" aria-label="Close">✕</button>
     </div>
     <div class="panel-tabs">
       <button class="tab-btn active" data-tab="mpConnectTab">Connect</button>
@@ -240,10 +240,10 @@
     </div>
   </aside>
 
-  <aside id="audioPanel" class="panel hidden">
+  <aside id="audioPanel" class="panel hidden" role="dialog" aria-modal="true" aria-labelledby="audioPanelTitle">
     <div class="panel-header">
-      <span>🎚️ Audio Mixer &amp; Settings</span>
-      <button class="panel-close" data-close="audioPanel">✕</button>
+      <span id="audioPanelTitle">🎚️ Audio Mixer &amp; Settings</span>
+      <button class="panel-close" data-close="audioPanel" aria-label="Close">✕</button>
     </div>
     <div class="tab-content audio-controls">
       <div class="audio-mood-row">
@@ -293,33 +293,33 @@
     </div>
   </aside>
 
-  <div id="helpOverlay" class="overlay hidden">
-    <div class="overlay-box" style="position: relative;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-        <h2 style="margin: 0;">Welcome to Pixel Hotel!</h2>
-        <button class="panel-close" id="btnHelpCloseTop" data-close="helpOverlay">✕</button>
+  <div id="helpOverlay" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
+    <div class="overlay-box help-box">
+      <div class="modal-head modal-head-lg">
+        <h2 id="helpTitle">Welcome to Pixel Hotel!</h2>
+        <button class="panel-close" id="btnHelpCloseTop" data-close="helpOverlay" aria-label="Close">✕</button>
       </div>
       <ul>
         <li><b class="help-action-walk">Click a floor tile</b> to walk there.</li>
         <li><b class="help-action-sit">Click a chair/sofa/bed</b> to walk over and sit.</li>
-        <li><b>🛗 Elevator (<kbd>E</kbd>)</b> — ride between all 10 tower floors, facilities, and <b>My Room</b>!</li>
-        <li><b>Type in the chat box</b> and press Enter to talk — nearby guests reply!</li>
-        <li><b>🛋️ Items</b> — buy furniture, then place/move/rotate/pick it up in your suite or any room.</li>
-        <li><b>📜 Quests</b> — complete goals for coins and unlocks.</li>
+        <li><b>🛗 Elevator (<kbd>E</kbd>)</b>: ride between all 10 tower floors, facilities, and <b>My Room</b>!</li>
+        <li><b>Type in the chat box</b> and press Enter to talk (nearby guests reply!)</li>
+        <li><b>🛋️ Items</b>: buy furniture, then place/move/rotate/pick it up in your suite or any room.</li>
+        <li><b>📜 Quests</b>: complete goals for coins and unlocks.</li>
       </ul>
-      <p class="kbd-hint">Shortcuts: <kbd>E</kbd> elevator · <kbd>I</kbd> inventory · <kbd>Q</kbd> quests · <kbd>M</kbd> mute · <kbd>H</kbd> help · <kbd>S</kbd> save · <kbd>R</kbd> rotate · <kbd>Esc</kbd> cancel</p>
+      <p class="kbd-hint">Shortcuts: <kbd>E</kbd> elevator · <kbd>I</kbd> inventory · <kbd>Q</kbd> quests · <kbd>M</kbd> mute · <kbd>H</kbd> help · <kbd>S</kbd> save · <kbd>R</kbd> rotate · <kbd>Esc</kbd> close / cancel</p>
       <button id="btnHelpClose" class="pixel-btn">Got it!</button>
     </div>
   </div>
 
-  <div id="poolPromptModal" class="overlay hidden">
-    <div class="overlay-box" style="max-width: 380px; text-align: center; position: relative;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-        <h2 style="margin: 0; font-size: 16px;">🏊 Azure Olympic Pool</h2>
-        <button class="panel-close" id="btnPoolPromptClose" data-close="poolPromptModal">✕</button>
+  <div id="poolPromptModal" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="poolPromptTitle">
+    <div class="overlay-box pool-prompt-box">
+      <div class="modal-head">
+        <h2 id="poolPromptTitle">🏊 Azure Olympic Pool</h2>
+        <button class="panel-close" id="btnPoolPromptClose" data-close="poolPromptModal" aria-label="Close">✕</button>
       </div>
       <p>Heated Olympic lap pool with 25m lanes. Choose an activity:</p>
-      <div style="display:flex; flex-direction:column; gap:10px; margin: 16px 0;">
+      <div class="pool-prompt-actions">
         <button id="btnPoolSwimLaps" class="pixel-btn">🏊 Swim Laps (Automatic Lap Routine)</button>
         <button id="btnPoolFreeRoam" class="pixel-btn">🌊 Free Roam (Swim Anywhere)</button>
         <button id="btnPoolExit" class="pixel-btn">🪜 Exit Pool via Deck</button>
@@ -327,68 +327,75 @@
     </div>
   </div>
 
-  <div id="salonModal" class="overlay hidden">
-    <div class="overlay-box" style="max-width: 440px; text-align: center; position: relative;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-        <h2 style="margin: 0; font-size: 16px;">💇 Antoine's Azure Salon</h2>
-        <button class="panel-close" id="btnSalonCloseTop" data-close="salonModal">✕</button>
+  <div id="salonModal" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="salonTitle">
+    <div class="overlay-box salon-box">
+      <div class="modal-head">
+        <h2 id="salonTitle">💇 Antoine's Azure Salon</h2>
+        <button class="panel-close" id="btnSalonCloseTop" data-close="salonModal" aria-label="Close">✕</button>
       </div>
-      <p>Transform your look with a stylish haircut or vibrant dye! <b>Cost: 20 Coins</b></p>
-      <div style="margin: 14px 0; text-align: left;">
-        <h4 style="margin: 6px 0;">Select Hairstyle</h4>
-        <div id="salonHairStyles" style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px;">
-          <button class="pixel-btn salon-style-btn" data-style="classic">Classic</button>
-          <button class="pixel-btn salon-style-btn" data-style="bob">Bob Cut</button>
-          <button class="pixel-btn salon-style-btn" data-style="ponytail">Ponytail</button>
-          <button class="pixel-btn salon-style-btn" data-style="spiky">Spiky</button>
-          <button class="pixel-btn salon-style-btn" data-style="curls">Curls</button>
-        </div>
-        <h4 style="margin: 6px 0;">Select Hair Color</h4>
-        <div id="salonHairColors" style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px;">
-          <button class="pixel-btn salon-color-btn" data-color="#2c221e">Espresso</button>
-          <button class="pixel-btn salon-color-btn" data-color="#e6a15c">Golden</button>
-          <button class="pixel-btn salon-color-btn" data-color="#b83828">Auburn</button>
-          <button class="pixel-btn salon-color-btn" data-color="#4aa3df">Ocean</button>
-          <button class="pixel-btn salon-color-btn" data-color="#e75480">Rose</button>
-          <button class="pixel-btn salon-color-btn" data-color="#b088f0">Lavender</button>
+      <p>Transform your look with a stylish haircut or vibrant dye! <b>Cost: 20 Coins</b> per change. Preview first: you are only charged when you press Purchase.</p>
+      <div class="salon-body">
+        <div class="salon-preview-wrap"><canvas id="salonPreviewCanvas" width="120" height="150" role="img" aria-label="Preview of your new look"></canvas></div>
+        <div class="salon-options">
+          <h3>Select Hairstyle</h3>
+          <div id="salonHairStyles" class="salon-option-row" role="group" aria-label="Hairstyle">
+            <button class="pixel-btn salon-style-btn" data-style="classic" aria-pressed="false">Classic</button>
+            <button class="pixel-btn salon-style-btn" data-style="bob" aria-pressed="false">Bob Cut</button>
+            <button class="pixel-btn salon-style-btn" data-style="ponytail" aria-pressed="false">Ponytail</button>
+            <button class="pixel-btn salon-style-btn" data-style="spiky" aria-pressed="false">Spiky</button>
+            <button class="pixel-btn salon-style-btn" data-style="curls" aria-pressed="false">Curls</button>
+          </div>
+          <h3>Select Hair Color</h3>
+          <div id="salonHairColors" class="salon-option-row" role="group" aria-label="Hair colour">
+            <button class="pixel-btn salon-color-btn" data-color="#2c221e" aria-pressed="false">Espresso</button>
+            <button class="pixel-btn salon-color-btn" data-color="#e6a15c" aria-pressed="false">Golden</button>
+            <button class="pixel-btn salon-color-btn" data-color="#b83828" aria-pressed="false">Auburn</button>
+            <button class="pixel-btn salon-color-btn" data-color="#4aa3df" aria-pressed="false">Ocean</button>
+            <button class="pixel-btn salon-color-btn" data-color="#e75480" aria-pressed="false">Rose</button>
+            <button class="pixel-btn salon-color-btn" data-color="#b088f0" aria-pressed="false">Lavender</button>
+          </div>
         </div>
       </div>
-      <button id="btnSalonClose" class="pixel-btn">Close</button>
+      <p id="salonSummary" class="salon-summary" role="status">Pick a hairstyle or colour to preview it.</p>
+      <div class="salon-actions">
+        <button id="btnSalonPurchase" class="pixel-btn pixel-btn-primary" disabled>Purchase (🪙 20)</button>
+        <button id="btnSalonClose" class="pixel-btn">Close</button>
+      </div>
     </div>
   </div>
 
-  <div id="roomUpgradeModal" class="overlay hidden">
-    <div class="overlay-box" style="max-width: 540px;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-        <h2>🏨 Room Upgrade Agency</h2>
-        <button class="panel-close" id="btnUpgradeClose" data-close="roomUpgradeModal">✕</button>
+  <div id="roomUpgradeModal" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="upgradeTitle">
+    <div class="overlay-box upgrade-box">
+      <div class="modal-head modal-head-lg">
+        <h2 id="upgradeTitle">🏨 Room Upgrade Agency</h2>
+        <button class="panel-close" id="btnUpgradeClose" data-close="roomUpgradeModal" aria-label="Close">✕</button>
       </div>
-      <p style="margin-bottom: 12px; font-size: 13px; color: #555;">Upgrade your private room to higher hotel floors with larger layouts and luxurious floorings. Placed furniture migrates safely.</p>
-      <div id="roomUpgradeList" style="display: flex; flex-direction: column; gap: 10px;"></div>
+      <p class="upgrade-intro">Upgrade your private room to higher hotel floors with larger layouts and luxurious floorings. Placed furniture migrates safely.</p>
+      <div id="roomUpgradeList"></div>
     </div>
   </div>
 
   <!-- v0.8.7 Arcade Game Centered Modal -->
-  <div id="arcadeGameModal" class="overlay hidden">
-    <div class="overlay-box arcade-game-box" style="max-width: 380px; text-align: center; position: relative;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-        <h2 id="arcadeGameTitle" style="margin: 0; font-size: 16px;">🕹️ Arcade Game</h2>
-        <button class="panel-close" id="btnArcadeClose" data-close="arcadeGameModal">✕</button>
+  <div id="arcadeGameModal" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="arcadeGameTitle" data-no-backdrop-close>
+    <div class="overlay-box arcade-game-box">
+      <div class="modal-head">
+        <h2 id="arcadeGameTitle">🕹️ Arcade Game</h2>
+        <button class="panel-close" id="btnArcadeClose" data-close="arcadeGameModal" aria-label="Close">✕</button>
       </div>
 
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-size: 13px; background: rgba(0,0,0,0.3); padding: 4px 10px; border-radius: 4px;">
-        <div>Score: <b id="arcadeScore" style="color: #00e5ff;">0</b></div>
-        <div>🪙 Daily: <b id="arcadeDailyCoins" style="color: #ffd27a;">0/50</b></div>
+      <div class="arcade-stats">
+        <div>Score: <b id="arcadeScore">0</b></div>
+        <div>🪙 Daily: <b id="arcadeDailyCoins">0/50</b></div>
       </div>
 
-      <div id="arcadeCanvasWrap" style="position: relative; width: 320px; height: 320px; max-width: calc(100vw - 44px); max-height: calc(100vw - 44px); margin: 0 auto; background: #000; border: 2px solid #5c4a96; border-radius: 4px; overflow: hidden;">
-        <canvas id="arcadeCanvas" width="320" height="320" style="display: block; image-rendering: pixelated; width: 100%; height: 100%; touch-action: none;"></canvas>
+      <div id="arcadeCanvasWrap">
+        <canvas id="arcadeCanvas" width="320" height="320"></canvas>
 
-        <div id="arcadeGameOverOverlay" class="hidden" style="position: absolute; inset: 0; background: rgba(10, 6, 24, 0.88); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 16px;">
-          <h3 style="color: #ff4081; margin: 0; font-size: 22px;">GAME OVER</h3>
-          <div style="font-size: 14px; color: #fff;">Final Score: <b id="arcadeFinalScore" style="color: #00e5ff; font-size: 18px;">0</b></div>
-          <div id="arcadeRewardText" style="font-size: 13px; color: #ffd27a; min-height: 18px;"></div>
-          <div style="display: flex; gap: 8px; margin-top: 6px;">
+        <div id="arcadeGameOverOverlay" class="hidden">
+          <h3>GAME OVER</h3>
+          <div class="arcade-final">Final Score: <b id="arcadeFinalScore">0</b></div>
+          <div id="arcadeRewardText"></div>
+          <div class="arcade-final-actions">
             <button id="btnArcadePlayAgain" class="pixel-btn">Play Again</button>
             <button id="btnArcadeOpenLeaderboard" class="pixel-btn">Leaderboard</button>
           </div>
@@ -411,7 +418,7 @@
         </div>
       </div>
 
-      <div style="margin-top: 10px; display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: #aaa;">
+      <div class="modal-foot-hint">
         <span>Controls: <kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd> / Touch &amp; Swipe</span>
         <span><kbd>Esc</kbd> to quit</span>
       </div>
@@ -419,79 +426,78 @@
   </div>
 
   <!-- v0.8.7 Arcade Leaderboard Centered Modal -->
-  <div id="arcadeLeaderboardModal" class="overlay hidden">
-    <div class="overlay-box" style="max-width: 440px; width: 90%;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-        <h2 style="margin: 0; font-size: 17px;">🏆 Arcade Hall of Fame</h2>
-        <button class="panel-close" id="btnLeaderboardClose" data-close="arcadeLeaderboardModal">✕</button>
+  <div id="arcadeLeaderboardModal" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="leaderboardTitle">
+    <div class="overlay-box leaderboard-box">
+      <div class="modal-head">
+        <h2 id="leaderboardTitle">🏆 Arcade Hall of Fame</h2>
+        <button class="panel-close" id="btnLeaderboardClose" data-close="arcadeLeaderboardModal" aria-label="Close">✕</button>
       </div>
 
       <!-- Game Tabs -->
-      <div class="arcade-tabs" style="display: flex; gap: 6px; margin-bottom: 10px;">
+      <div class="arcade-tabs">
         <button class="pixel-btn active" data-arcade-game="noodle_snake">Noodle Snake</button>
         <button class="pixel-btn" data-arcade-game="brick_bash">Brick Bash</button>
         <button class="pixel-btn" data-arcade-game="block_drop">Block Drop</button>
       </div>
 
       <!-- Scope Sub-tabs -->
-      <div class="arcade-subtabs" style="display: flex; gap: 6px; margin-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.12); padding-bottom: 8px;">
+      <div class="arcade-subtabs">
         <button class="pixel-btn active" data-leaderboard-scope="local">Local Top 10</button>
         <button class="pixel-btn" data-leaderboard-scope="global">Global Top 10</button>
         <button class="pixel-btn" data-leaderboard-scope="mine">Mine</button>
       </div>
 
       <!-- Rows -->
-      <div id="arcadeLeaderboardRows" style="background: rgba(0,0,0,0.3); border-radius: 6px; padding: 6px; min-height: 200px; max-height: 280px; overflow-y: auto;">
-      </div>
+      <div id="arcadeLeaderboardRows"></div>
 
-      <div style="margin-top: 10px; font-size: 11px; color: #888; text-align: right;" id="arcadeLeaderboardStatus">
+      <div id="arcadeLeaderboardStatus">
         Offline Local Top 10
       </div>
     </div>
   </div>
 
   <!-- v0.9.1 Arcade Pool ("Rail & Pocket") 8-ball vs bot -->
-  <div id="poolGameModal" class="overlay hidden">
-    <div class="overlay-box" style="max-width: 360px; text-align: center; position: relative;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-        <h2 style="margin: 0; font-size: 16px;">🎱 Rail &amp; Pocket</h2>
-        <button class="panel-close" id="btnPoolClose" data-close="poolGameModal">✕</button>
+  <div id="poolGameModal" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="poolGameTitle" data-no-backdrop-close>
+    <div class="overlay-box pool-game-box">
+      <div class="modal-head">
+        <h2 id="poolGameTitle">🎱 Rail &amp; Pocket</h2>
+        <button class="panel-close" id="btnPoolClose" data-close="poolGameModal" aria-label="Close">✕</button>
       </div>
 
-      <div style="display: flex; justify-content: center; gap: 6px; margin-bottom: 8px;">
+      <div class="pool-difficulty">
         <button class="pixel-btn" data-pool-difficulty="easy">Easy</button>
         <button class="pixel-btn active" data-pool-difficulty="medium">Medium</button>
         <button class="pixel-btn" data-pool-difficulty="hard">Hard</button>
       </div>
 
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-size: 12px; background: rgba(0,0,0,0.3); padding: 4px 10px; border-radius: 4px;">
+      <div class="pool-status-row">
         <span id="poolTurnStatus">Your turn</span>
         <span id="poolStreakStatus">🔥 Streak: 0 · 🏆 Wins: 0</span>
       </div>
 
-      <div style="position: relative; width: 300px; height: 150px; max-width: calc(100vw - 44px); margin: 0 auto; border: 2px solid #4a2c18; border-radius: 4px; overflow: hidden;">
-        <canvas id="poolCanvas" width="300" height="150" style="display: block; width: 100%; height: 100%; touch-action: none;"></canvas>
+      <div id="poolCanvasWrap">
+        <canvas id="poolCanvas" width="300" height="150"></canvas>
 
-        <div id="poolGameOverOverlay" class="hidden" style="position: absolute; inset: 0; background: rgba(10, 6, 24, 0.9); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 12px;">
-          <h3 id="poolResultTitle" style="margin: 0; font-size: 18px; color: #fff;">Result</h3>
-          <div id="poolResultText" style="font-size: 12px; color: #ffd27a; text-align: center;"></div>
+        <div id="poolGameOverOverlay" class="hidden">
+          <h3 id="poolResultTitle">Result</h3>
+          <div id="poolResultText"></div>
           <button id="btnPoolPlayAgain" class="pixel-btn">Play Again</button>
         </div>
       </div>
 
-      <div style="margin-top: 10px; display: flex; justify-content: space-between; align-items: center;">
+      <div class="pool-foot">
         <button id="btnPoolNewGame" class="pixel-btn">Rerack</button>
-        <span style="font-size: 11px; color: #aaa;">Drag back from the cue ball to aim &amp; shoot</span>
+        <span>Drag back from the cue ball to aim &amp; shoot</span>
       </div>
     </div>
   </div>
 
   <!-- v0.9.1 Gumball Machine pull modal -->
-  <div id="gumballModal" class="overlay hidden">
+  <div id="gumballModal" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="gumballTitle">
     <div class="overlay-box gumball-box">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-        <h2 style="margin: 0; font-size: 16px;">🍬 Gachapon Gumball Machine</h2>
-        <button class="panel-close" id="btnGumballClose" data-close="gumballModal">✕</button>
+      <div class="modal-head">
+        <h2 id="gumballTitle">🍬 Gachapon Gumball Machine</h2>
+        <button class="panel-close" id="btnGumballClose" data-close="gumballModal" aria-label="Close">✕</button>
       </div>
       <p class="gumball-hint">Pay 5 coins, turn the crank, see what drops!</p>
       <div id="gumballMachineStage" class="gumball-stage">
@@ -502,30 +508,30 @@
           <div id="gumballRevealRarity" class="gumball-reveal-rarity"></div>
         </div>
       </div>
-      <div style="display:flex; justify-content:center; gap:10px; margin-top: 10px;">
+      <div class="gumball-actions">
         <button id="btnGumballPull" class="pixel-btn">Pull for 🪙 5</button>
       </div>
     </div>
   </div>
 
   <!-- v0.9.1 Gumball Trader trade modal -->
-  <div id="gumballTradeModal" class="overlay hidden">
-    <div class="overlay-box gumball-box" style="max-width: 380px;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-        <h2 id="traderModalName" style="margin: 0; font-size: 16px;">🍬 Trader</h2>
-        <button class="panel-close" id="btnTraderClose" data-close="gumballTradeModal">✕</button>
+  <div id="gumballTradeModal" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="traderModalName">
+    <div class="overlay-box gumball-box gumball-trade-box">
+      <div class="modal-head">
+        <h2 id="traderModalName">🍬 Trader</h2>
+        <button class="panel-close" id="btnTraderClose" data-close="gumballTradeModal" aria-label="Close">✕</button>
       </div>
-      <p class="gumball-hint">Today's trades — every offer favors me, but maybe you need what I've got.</p>
+      <p class="gumball-hint">Today's trades: every offer favors me, but maybe you need what I've got.</p>
       <div id="traderOffersList" class="trader-offers-list"></div>
     </div>
   </div>
 
   <!-- v0.9.1 Gumball Library: full catalogue, owned in color, unowned as silhouettes -->
-  <div id="gumballLibraryModal" class="overlay hidden">
-    <div class="overlay-box" style="max-width: 640px; width: 92%;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-        <h2 style="margin: 0; font-size: 16px;">📖 Gumball Library</h2>
-        <button class="panel-close" id="btnGumballLibraryClose" data-close="gumballLibraryModal">✕</button>
+  <div id="gumballLibraryModal" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="libraryTitle">
+    <div class="overlay-box library-box">
+      <div class="modal-head">
+        <h2 id="libraryTitle">📖 Gumball Library</h2>
+        <button class="panel-close" id="btnGumballLibraryClose" data-close="gumballLibraryModal" aria-label="Close">✕</button>
       </div>
       <p class="gumball-hint" id="gumballLibraryProgress">0/20 collected</p>
       <div id="gumballLibraryGrid" class="gumball-library-grid"></div>
@@ -547,11 +553,11 @@
   </div>
 
   <!-- v0.9.0 Avatar Creator Modal -->
-  <div id="avatarModal" class="overlay hidden">
+  <div id="avatarModal" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="avatarTitle">
     <div class="overlay-box avatar-modal-box">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-        <h2 style="margin: 0; font-size: 17px; display: flex; align-items: center; gap: 8px;">👔 <span>Wardrobe &amp; Avatar</span></h2>
-        <button class="panel-close" id="btnAvatarCloseTop" data-close="avatarModal">✕</button>
+      <div class="modal-head">
+        <h2 id="avatarTitle" class="avatar-title">👔 <span>Wardrobe &amp; Avatar</span></h2>
+        <button class="panel-close" id="btnAvatarCloseTop" data-close="avatarModal" aria-label="Close">✕</button>
       </div>
 
       <div class="avatar-modal-body">
@@ -560,11 +566,11 @@
             <canvas id="avatarPreviewCanvas" width="160" height="200"></canvas>
           </div>
           <div class="avatar-rotate-bar">
-            <button id="btnRotateAvatarLeft" class="pixel-btn" title="Rotate Left">⟲</button>
-            <span id="avatarDirLabel" style="font-size: 11px; color: #bbb;">Front</span>
-            <button id="btnRotateAvatarRight" class="pixel-btn" title="Rotate Right">⟳</button>
+            <button id="btnRotateAvatarLeft" class="pixel-btn" title="Rotate Left" aria-label="Rotate left">⟲</button>
+            <span id="avatarDirLabel">Front</span>
+            <button id="btnRotateAvatarRight" class="pixel-btn" title="Rotate Right" aria-label="Rotate right">⟳</button>
           </div>
-          <button id="btnRandomizeAvatar" class="pixel-btn" style="width: 100%; margin-top: 6px;">🎲 Randomise</button>
+          <button id="btnRandomizeAvatar" class="pixel-btn">🎲 Randomise</button>
         </div>
 
         <div class="avatar-controls-pane">
@@ -575,30 +581,30 @@
             <button class="pixel-btn avatar-tab-btn" data-tab="top">Top</button>
             <button class="pixel-btn avatar-tab-btn" data-tab="bottom">Bottom</button>
             <button class="pixel-btn avatar-tab-btn" data-tab="shoes">Shoes</button>
-            <button class="pixel-btn avatar-tab-btn" data-tab="accessory">Acc.</button>
+            <button class="pixel-btn avatar-tab-btn" data-tab="accessory" title="Accessories" aria-label="Accessories">Acc.</button>
           </div>
 
           <div id="avatarTabContent" class="avatar-tab-content"></div>
         </div>
       </div>
 
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px; border-top: 1px solid rgba(255,255,255,0.12); padding-top: 10px;">
-        <div id="avatarCoinCost" style="font-size: 12px; color: #ffd27a;"></div>
-        <div style="display: flex; gap: 8px;">
+      <div class="avatar-foot">
+        <div id="avatarCoinCost"></div>
+        <div class="avatar-foot-actions">
           <button id="btnCancelAvatar" class="pixel-btn">Cancel</button>
-          <button id="btnSaveAvatar" class="pixel-btn pixel-btn-primary" style="background: #38b068; color: #fff; font-weight: bold;">💾 Save &amp; Wear</button>
+          <button id="btnSaveAvatar" class="pixel-btn pixel-btn-primary">💾 Save &amp; Wear</button>
         </div>
       </div>
     </div>
   </div>
 
   <!-- v0.12.0 Sky Viewing Platform modal: full-screen procedural city skyline -->
-  <div id="skyViewerModal" class="overlay sky-viewer-overlay hidden">
+  <div id="skyViewerModal" class="overlay sky-viewer-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="skyViewerTitle">
     <div class="sky-viewer-box">
       <div class="sky-viewer-header">
         <h2 id="skyViewerTitle">🔭 Skyline Viewer</h2>
         <span id="skyViewerWeatherLabel" class="sky-viewer-weather"></span>
-        <button class="panel-close" id="btnSkyViewerClose" data-close="skyViewerModal">✕</button>
+        <button class="panel-close" id="btnSkyViewerClose" data-close="skyViewerModal" aria-label="Close">✕</button>
       </div>
       <div class="sky-viewer-canvas-wrap">
         <canvas id="skyViewerCanvas"></canvas>
@@ -608,11 +614,11 @@
   </div>
 
   <!-- v0.11 Group Mini-Games Modal -->
-  <div id="minigameModal" class="overlay hidden">
-    <div class="overlay-box minigame-modal-box" style="max-width: 480px;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-        <h2 style="margin: 0; font-size: 16px;">🎮 Party Mini-Games</h2>
-        <button class="panel-close" id="btnMinigameModalClose" data-close="minigameModal">✕</button>
+  <div id="minigameModal" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="minigameTitle">
+    <div class="overlay-box minigame-modal-box">
+      <div class="modal-head">
+        <h2 id="minigameTitle">🎮 Party Mini-Games</h2>
+        <button class="panel-close" id="btnMinigameModalClose" data-close="minigameModal" aria-label="Close">✕</button>
       </div>
 
       <div id="minigameDailyCapWrap" class="minigame-daily-bar">
@@ -621,7 +627,7 @@
 
       <!-- Host View -->
       <div id="minigameHostView" class="minigame-view hidden">
-        <p class="mp-hint" style="margin-bottom: 10px;">Select a game to start with party members (2-8 players):</p>
+        <p class="mp-hint minigame-intro">Select a game to start with party members (2-8 players):</p>
         <div class="minigame-card-list">
           <div class="minigame-card">
             <div class="minigame-card-icon">🙈</div>
@@ -635,7 +641,7 @@
             <div class="minigame-card-icon">🪑</div>
             <div class="minigame-card-info">
               <b>Musical Chairs</b>
-              <p>Music plays and stops at random. Race to sit on a chair — one fewer chair each round!</p>
+              <p>Music plays and stops at random. Race to sit on a chair (one fewer chair each round)!</p>
             </div>
             <button class="pixel-btn btn-start-minigame" data-game="musical_chairs">Start</button>
           </div>
@@ -653,15 +659,15 @@
       <!-- Guest / Join Prompt View -->
       <div id="minigameGuestView" class="minigame-view hidden">
         <div id="minigameInviteCard" class="minigame-invite-card hidden">
-          <div id="minigameInviteIcon" style="font-size: 32px; margin-bottom: 6px;">🎮</div>
-          <h3 id="minigameInviteTitle" style="margin: 0 0 6px 0; font-size: 15px;">Party Game Invite</h3>
-          <p id="minigameInviteDesc" style="font-size: 12.5px; color: #ccc; margin-bottom: 12px;"></p>
-          <div style="display: flex; gap: 8px; justify-content: center;">
-            <button id="btnMinigameJoin" class="pixel-btn" style="background: #2e7d32;">Join Game</button>
+          <div id="minigameInviteIcon">🎮</div>
+          <h3 id="minigameInviteTitle">Party Game Invite</h3>
+          <p id="minigameInviteDesc"></p>
+          <div class="minigame-invite-actions">
+            <button id="btnMinigameJoin" class="pixel-btn pixel-btn-primary">Join Game</button>
             <button id="btnMinigameDecline" class="pixel-btn">Decline</button>
           </div>
         </div>
-        <div id="minigameGuestWaiting" class="mp-hint" style="text-align: center; padding: 18px 0;">
+        <div id="minigameGuestWaiting" class="mp-hint">
           Waiting for the party host to start a mini-game...
         </div>
       </div>
