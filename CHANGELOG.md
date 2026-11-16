@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 
+## [0.12.6] - 2026-11-16
+
+### Fixed
+
+- **Rooftop & Open-Air Hover Tile Alignment (`js/render.js`, `tests/logic.test.mjs`)**:
+  - Restored active camera transform matrix (`ensureCameraTransform`) before drawing vector overlays (`drawDiamondOverlay`, `drawWalkTargetOverlay`).
+  - `blitDeviceAligned` leaves the canvas context in device transform mode after blitting cached tower cutaways and floor layers; restoring the camera transform ensures hover highlights and walk-target markers line up precisely with the cursor on open-air decks (Rooftop Lounge, Sky Garden) as well as indoor rooms across panned and zoomed views.
+
+- **Accessibility, Contrast & Reduced Motion (`index.html`, `css/style.css`, `css/gumballs.css`)**:
+  - Elevated color contrast across the UI to satisfy WCAG AA (>= 4.5:1), including room upgrade agency text, form placeholders, arcade leaderboard headings, unowned gumball tags, and primary action buttons.
+  - Added global `@media (prefers-reduced-motion: reduce)` support, disabling looping audio HUD animations, infinite pulses, and slowing down alert flashing to eliminate vestibular and seizure risks.
+  - Added visible, high-contrast gold keyboard focus indicators (`:focus-visible`) across buttons, tabs, inputs, and sliders.
+  - Established a strict 11px font size floor across UI controls, eliminated zero-offset neon glow styling, fixed heading hierarchy, and added polite live region announcements for status notifications (`#toast`).
+
+- **Unified Dialog Focus & Escape-to-Close (`index.html`, `js/main.js`, `css/style.css`)**:
+  - Unified `Escape` key dismissal (`closeActiveSurface`) across all modal dialogs, side panels, in-world dialogue, and item placement mode.
+  - Added proper ARIA dialog roles (`role="dialog"`, `aria-modal="true"`) and focus trapping across all 18 modal dialogs and aside panels, auto-focusing on open and restoring focus to the invoking trigger upon close.
+  - Added backdrop click-to-close on modal overlays.
+
+- **Antoine's Salon Preview & Purchase Confirmation Flow (`index.html`, `js/main.js`, `css/style.css`)**:
+  - Redesigned the salon modal with a live avatar preview canvas, hairstyle selector, and hair color selector.
+  - Previewing styles no longer accidentally deducts coins; added an explicit `Purchase (🪙 20)` button enabled only when changes are staged and the player has sufficient balance.
+
+
 ## [0.12.5] - 2026-11-14
 
 ### Fixed
