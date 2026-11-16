@@ -237,96 +237,108 @@ export function buildParts(look, pose = {}) {
     }
   }
 
-  // Skirt / coat hem over upper legs
+  // Skirt / coat hem over upper legs (flush with torso so it never occludes hands)
+  const torsoDepth = 1.7;
+  const torsoFront = look.belly ? 1.85 : torsoDepth;
+  const torsoGroup = nextGroup++;
   if (skirt) {
-    const skirtGroup = nextGroup++;
-    add(-2.7, 2.7, -1.9, 1.9, 3.3 + dz, 5.1 + dz, look.shirt, { mat: 'shirt', slot: 'skirt', group: skirtGroup, dz });
+    add(-2.5, 2.5, -torsoDepth, torsoDepth, 3.4 + dz, 5.0 + dz, look.shirt, {
+      mat: 'shirt',
+      slot: 'skirt',
+      group: torsoGroup,
+      dz,
+    });
   }
 
   // 2. Torso: 5.0 wide (x: -2.5..2.5) x 3.4 deep (y: -1.7..1.7) x 6.0 tall (z: 5.0..11.0)
-  const torsoFront = look.belly ? 2.15 : 1.7;
-  const torsoGroup = nextGroup++;
-  add(-2.5, 2.5, -1.7, torsoFront, 5.0 + dz, 11.0 + dz + idleBreathe, look.shirt, {
+  add(-2.5, 2.5, -torsoDepth, torsoFront, 5.0 + dz, 11.0 + dz + idleBreathe, look.shirt, {
     mat: 'shirt',
     slot: 'torso',
     group: torsoGroup,
     dz: dz + idleBreathe * 0.5,
   });
 
-  // 3. Arms: 1.9 wide (xc = ±3.45 -> [-4.4, -2.5] and [2.5, 4.4]), hands end at z = 5.5
+  // 3. Arms & Hands: 1.9 wide (xc = ±3.45 -> [-4.4, -2.5] and [2.5, 4.4]), flush against torso side (x = ±2.5).
+  // Hand is a 1.9 wide x 1.9..2.2 deep x 1.9 tall skin block coplanar with the end of each sleeve so it is
+  // never overhanging-occluded by the sleeve or hidden behind the torso/head in any facing or pose.
   for (const s of [-1, 1]) {
     const xc = 3.45 * s;
     const ax0 = xc - 0.95;
     const ax1 = xc + 0.95;
-    const hx0 = xc - 0.85;
-    const hx1 = xc + 0.85;
+    const hx0 = ax0;
+    const hx1 = ax1;
     const o = -effStride * s * 1.0;
     const armGroup = nextGroup++;
-    const handGroup = nextGroup++;
+    const handGroup = look.bareArms ? armGroup : nextGroup++;
+    const ay0 = -1.1;
+    const ay1 = 1.1;
 
     if (isSwim) {
       const strokePhase = (actionFrame + (s > 0 ? 0 : 2)) % 4;
-      const reachY = strokePhase === 0 ? 1.6 : strokePhase === 1 ? 0.4 : strokePhase === 2 ? -1.0 : 0.3;
-      const reachZ = strokePhase === 0 ? 7.6 : strokePhase === 1 ? 6.6 : strokePhase === 2 ? 6.8 : 7.8;
-      add(ax0, ax1, -0.9 + reachY * 0.5, 1.3 + reachY * 0.5, reachZ + dz, reachZ + 2.6 + dz, sleeveColor, { mat: sleeveMat, slot: 'sleeve', group: armGroup });
-      add(hx0, hx1, 1.0 + reachY, 2.8 + reachY, reachZ - 0.4 + dz, reachZ + 1.2 + dz, look.skin, { mat: 'skin', slot: 'hand', group: handGroup });
+      const reachY = strokePhase === 0 ? 0.35 : strokePhase === 1 ? 0.1 : strokePhase === 2 ? -0.3 : 0.15;
+      const reachZ = strokePhase === 0 ? 7.6 : strokePhase === 1 ? 7.0 : strokePhase === 2 ? 7.2 : 7.8;
+      add(ax0, ax1, ay0 + reachY, ay1 + reachY, reachZ + dz, reachZ + 2.5 + dz, sleeveColor, { mat: sleeveMat, slot: 'sleeve', group: armGroup });
+      add(hx0, hx1, ay0 + reachY, ay1 + reachY, reachZ - 1.9 + dz, reachZ + dz, look.skin, { mat: 'skin', slot: 'hand', group: handGroup });
     } else if (isEat && s > 0) {
       const liftToMouth = (actionFrame % 2) === 1;
-      const armZ = sit ? 6.8 : 7.4;
-      add(ax0, ax1, -0.9, 1.3, armZ + dz, 10.9 + dz, sleeveColor, { mat: sleeveMat, slot: 'sleeve', group: armGroup });
-      const handY0 = liftToMouth ? 1.0 : 0.4;
-      const handY1 = liftToMouth ? 3.0 : 2.4;
-      const handZ0 = liftToMouth ? 9.6 + dz : 7.2 + dz;
-      add(hx0, hx1, handY0, handY1, handZ0, handZ0 + 1.6, look.skin, { mat: 'skin', slot: 'hand', group: handGroup });
-      // Held cup prop
-      add(hx0 - 0.6, hx1 + 0.2, handY1, handY1 + 1.5, handZ0 + 0.2, handZ0 + 1.9, '#f2ede4', { mat: 'Cup', slot: 'prop' });
+      const eatLift = liftToMouth ? 0.65 : 0.15;
+      const handZ0 = (sit ? 5.3 : 5.5) + dz + eatLift;
+      add(ax0, ax1, ay0, ay1, handZ0 + 1.9, 10.9 + dz, sleeveColor, { mat: sleeveMat, slot: 'sleeve', group: armGroup });
+      add(hx0, hx1, ay0, ay1, handZ0, handZ0 + 1.9, look.skin, { mat: 'skin', slot: 'hand', group: handGroup });
+      // Held cup prop positioned in front of chest so it never occludes the hand in any facing
+      add(0.8, 2.2, 1.65, 2.85, handZ0 + 0.2, handZ0 + 1.7, '#f2ede4', { mat: 'Cup', slot: 'prop' });
     } else if (isTreadmill) {
-      add(ax0, ax1, -1.0 + o * 0.4, 1.2 + o * 0.4, 7.6 + dz, 10.9 + dz, sleeveColor, { mat: sleeveMat, slot: 'sleeve', group: armGroup });
-      add(hx0, hx1, 0.3 + o * 0.7, 2.4 + o * 0.7, 6.6 + dz, 8.2 + dz, look.skin, { mat: 'skin', slot: 'hand', group: handGroup });
+      const sw = o * 0.25;
+      const armLift = sw > 0 ? 0.35 : 0;
+      add(ax0, ax1, ay0 + sw, ay1 + sw, 7.5 + dz + armLift, 10.9 + dz, sleeveColor, { mat: sleeveMat, slot: 'sleeve', group: armGroup });
+      add(hx0, hx1, ay0 + sw, ay1 + sw, 5.6 + dz + armLift, 7.5 + dz + armLift, look.skin, { mat: 'skin', slot: 'hand', group: handGroup });
     } else if (isUse) {
-      const tap = ((actionFrame + (s > 0 ? 0 : 1)) % 2) * 0.65;
-      add(ax0, ax1, -0.9, 1.2, 7.5 + dz, 10.9 + dz, sleeveColor, { mat: sleeveMat, slot: 'sleeve', group: armGroup });
-      add(hx0, hx1, 0.6, 2.6, 6.4 + dz + tap, 8.0 + dz + tap, look.skin, { mat: 'skin', slot: 'hand', group: handGroup });
+      const tap = ((actionFrame + (s > 0 ? 0 : 1)) % 2) * 0.4;
+      add(ax0, ax1, ay0, ay1, 7.4 + dz + tap, 10.9 + dz, sleeveColor, { mat: sleeveMat, slot: 'sleeve', group: armGroup });
+      add(hx0, hx1, ay0, ay1, 5.5 + dz + tap, 7.4 + dz + tap, look.skin, { mat: 'skin', slot: 'hand', group: handGroup });
     } else if (isLie) {
-      add(ax0, ax1, -1.1, 1.5, 4.6, 7.4, sleeveColor, { mat: sleeveMat, slot: 'sleeve', group: armGroup });
-      add(hx0, hx1, 1.2, 3.0, 4.2, 5.8, look.skin, { mat: 'skin', slot: 'hand', group: handGroup });
+      add(ax0, ax1, ay0, ay1, 5.0, 8.3, sleeveColor, { mat: sleeveMat, slot: 'sleeve', group: armGroup });
+      add(hx0, hx1, ay0, ay1, 3.1, 5.0, look.skin, { mat: 'skin', slot: 'hand', group: handGroup });
     } else if (sit) {
-      add(ax0, ax1, -1.0, 1.1, 6.8 + dz, 10.5 + dz, sleeveColor, { mat: sleeveMat, slot: 'sleeve', group: armGroup });
-      add(hx0, hx1, 0.4, 2.4, 5.4 + dz, 7.0 + dz, look.skin, { mat: 'skin', slot: 'hand', group: handGroup });
+      add(ax0, ax1, ay0, ay1, 7.2 + dz, 10.6 + dz, sleeveColor, { mat: sleeveMat, slot: 'sleeve', group: armGroup });
+      add(hx0, hx1, ay0, ay1, 5.3 + dz, 7.2 + dz, look.skin, { mat: 'skin', slot: 'hand', group: handGroup });
     } else if (emote === 'wave' && s > 0) {
-      const wShift = Math.sin((emoteFrame || 0) * 3) * 0.9;
-      add(ax0, ax1, -0.8, 1.1, 8.2 + dz, 11.8 + dz, sleeveColor, { mat: sleeveMat, slot: 'sleeve', group: armGroup });
-      add(hx0 + wShift, hx1 + wShift, -0.5, 1.2, 11.8 + dz, 14.8 + dz, look.skin, { mat: 'skin', slot: 'hand', group: handGroup });
+      const wBob = Math.sin((emoteFrame || 0) * 3) * 0.25;
+      const handZ0 = 6.1 + dz + wBob;
+      add(ax0, ax1, ay0, ay1, handZ0 + 1.9, 10.9 + dz, sleeveColor, { mat: sleeveMat, slot: 'sleeve', group: armGroup });
+      add(hx0, hx1, ay0, ay1, handZ0, handZ0 + 1.9, look.skin, { mat: 'skin', slot: 'hand', group: handGroup });
     } else if (emote === 'cheer') {
-      const cBounce = Math.sin((emoteFrame || 0) * 2) * 0.4;
-      add(ax0, ax1, -0.8, 1.0, 8.2 + dz, 11.8 + dz, sleeveColor, { mat: sleeveMat, slot: 'sleeve', group: armGroup });
-      add(hx0, hx1, -0.6, 1.0, 11.8 + dz, 15.0 + dz + cBounce, look.skin, { mat: 'skin', slot: 'hand', group: handGroup });
+      const cBounce = Math.sin((emoteFrame || 0) * 2) * 0.25;
+      const handZ0 = 6.1 + dz + cBounce;
+      add(ax0, ax1, ay0, ay1, handZ0 + 1.9, 10.9 + dz, sleeveColor, { mat: sleeveMat, slot: 'sleeve', group: armGroup });
+      add(hx0, hx1, ay0, ay1, handZ0, handZ0 + 1.9, look.skin, { mat: 'skin', slot: 'hand', group: handGroup });
     } else if (emote === 'clap') {
-      const cShift = Math.abs(Math.sin((emoteFrame || 0) * 4)) * 0.6;
-      const cx0 = s > 0 ? (0.8 - cShift) : (-2.2 + cShift);
-      const cx1 = s > 0 ? (2.2 - cShift) : (-0.8 + cShift);
-      add(ax0, ax1, -0.8, 1.0, 7.5 + dz, 10.8 + dz, sleeveColor, { mat: sleeveMat, slot: 'sleeve', group: armGroup });
-      add(cx0, cx1, 1.2, 2.8, 7.4 + dz, 9.2 + dz, look.skin, { mat: 'skin', slot: 'hand', group: handGroup });
+      const cOff = Math.abs(Math.sin((emoteFrame || 0) * 4)) * 0.25;
+      const handZ0 = 5.8 + dz + cOff;
+      add(ax0, ax1, ay0 + cOff, ay1 + cOff, handZ0 + 1.9, 10.9 + dz, sleeveColor, { mat: sleeveMat, slot: 'sleeve', group: armGroup });
+      add(hx0, hx1, ay0 + cOff, ay1 + cOff, handZ0, handZ0 + 1.9, look.skin, { mat: 'skin', slot: 'hand', group: handGroup });
     } else if (emote === 'thumbsup' && s > 0) {
-      add(ax0, ax1, -0.9, 1.1, 7.5 + dz, 10.8 + dz, sleeveColor, { mat: sleeveMat, slot: 'sleeve', group: armGroup });
-      add(hx0, hx1, 0.8, 2.8, 7.8 + dz, 9.5 + dz, look.skin, { mat: 'skin', slot: 'hand', group: handGroup });
-      add(hx0 + 0.2, hx1 - 0.2, 2.2, 2.8, 9.5 + dz, 10.7 + dz, look.skin, { mat: 'skin', slot: 'hand', group: handGroup });
+      const handZ0 = 5.9 + dz;
+      add(ax0, ax1, ay0, ay1, handZ0 + 1.9, 10.9 + dz, sleeveColor, { mat: sleeveMat, slot: 'sleeve', group: armGroup });
+      add(hx0, hx1, ay0, ay1, handZ0, handZ0 + 1.9, look.skin, { mat: 'skin', slot: 'hand', group: handGroup });
     } else if (emote === 'heart') {
-      const hx = s > 0 ? 0.5 : -1.9;
-      add(ax0, ax1, -0.8, 0.9, 8.4 + dz, 12.2 + dz, sleeveColor, { mat: sleeveMat, slot: 'sleeve', group: armGroup });
-      add(hx, hx + 1.4, -0.2, 1.2, 12.2 + dz, 15.2 + dz, look.skin, { mat: 'skin', slot: 'hand', group: handGroup });
+      const handZ0 = 6.0 + dz;
+      add(ax0, ax1, ay0, ay1, handZ0 + 1.9, 10.9 + dz, sleeveColor, { mat: sleeveMat, slot: 'sleeve', group: armGroup });
+      add(hx0, hx1, ay0, ay1, handZ0, handZ0 + 1.9, look.skin, { mat: 'skin', slot: 'hand', group: handGroup });
     } else if (emote === 'dance') {
-      const dArm = Math.sin((emoteFrame || 0) * 3 + s * 1.6) * 1.2;
-      add(ax0, ax1, -1.0 + dArm * 0.4, 1.1 + dArm * 0.4, 7.6 + dz, 10.9 + dz, sleeveColor, { mat: sleeveMat, slot: 'sleeve', group: armGroup });
-      add(hx0, hx1, 0.2 + dArm * 0.7, 2.2 + dArm * 0.7, 6.6 + dz, 8.4 + dz, look.skin, { mat: 'skin', slot: 'hand', group: handGroup });
+      const dSw = Math.sin((emoteFrame || 0) * 3 + s * 1.6) * 0.3;
+      add(ax0, ax1, ay0 + dSw, ay1 + dSw, 7.4 + dz, 10.9 + dz, sleeveColor, { mat: sleeveMat, slot: 'sleeve', group: armGroup });
+      add(hx0, hx1, ay0 + dSw, ay1 + dSw, 5.5 + dz, 7.4 + dz, look.skin, { mat: 'skin', slot: 'hand', group: handGroup });
     } else {
-      // Standard standing / walking arm (character.py lines 67-69: sleeve 7.4..10.9, hand 5.5..7.4)
-      add(ax0, ax1, -1.1 + o * 0.7, 1.1 + o * 0.7, 7.4 + dz + idleBreathe * 0.3, 10.9 + dz + idleBreathe * 0.5, sleeveColor, {
+      // Standard standing / walking arm (sleeve 7.4..10.9, hand 5.5..7.4)
+      const sw = o * 0.32;
+      const lift = sw > 0 ? 0.2 : 0;
+      add(ax0, ax1, ay0 + sw, ay1 + sw, 7.4 + dz + lift + idleBreathe * 0.3, 10.9 + dz + idleBreathe * 0.5, sleeveColor, {
         mat: sleeveMat,
         slot: 'sleeve',
         group: armGroup,
       });
-      add(hx0, hx1, -0.95 + o, 0.95 + o, 5.5 + dz + idleBreathe * 0.2, 7.4 + dz + idleBreathe * 0.3, look.skin, {
+      add(hx0, hx1, ay0 + sw, ay1 + sw, 5.5 + dz + lift + idleBreathe * 0.2, 7.4 + dz + lift + idleBreathe * 0.3, look.skin, {
         mat: 'skin',
         slot: 'hand',
         group: handGroup,
@@ -462,9 +474,9 @@ function buildHairBoxes(look, add, z, h, hairGroup, headGroup) {
     // Single continuous 3D box wrapping back and sides down to jaw level (zero corner seams)
     hb(-h - 0.08, h + 0.08, -h - 0.08, 0.8, z(12.2), z(hz(9)), 'hair_bob');
   } else if (st === 'long') {
-    // Coplanar upper wrap + lower shoulder cascade (zero corner seams)
+    // Upper wrap + lower back cascade tucked to torso width so it never occludes far sleeve/hand
     hb(-h - 0.08, h + 0.08, -h - 0.08, 0.8, z(11.0), z(hz(9)), 'hair_long');
-    hb(-h - 0.08, h + 0.08, -h - 0.08, -0.4, z(8.8), z(11.0), 'hair_long');
+    hb(-2.5, 2.5, -2.15, -1.3, z(9.0), z(11.0), 'hair_long');
   } else if (st === 'spiky') {
     // Full back+side hair flush to head down to z(13.6) so hair is visible both above AND below headband/goggles
     hb(-h - 0.04, h + 0.04, -h - 0.04, 0.4, z(13.6), z(hz(9)), 'hair_spiky_base', hairGroup, null, true);
@@ -1217,7 +1229,7 @@ export function renderCharacter(look, dir, pose, makeCanvas, scale = 1) {
           isOutline = true;
           break;
         }
-        if (boxes[nk].p.group !== myGroup && bestGrid[nIdx] < myBest - 0.5) {
+        if (boxes[nk].p.group !== myGroup && bestGrid[nIdx] < myBest - 0.5 && !(n < 2 && boxes[k].p.slot === 'hand')) {
           isOutline = true;
           break;
         }

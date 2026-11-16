@@ -443,3 +443,130 @@ test('voxel: rendered character uses limited 4-shade material ramps and never us
   assert.ok(usedColors.size >= 12 && usedColors.size <= 24, `Expected limited palette (12..24 shades), got ${usedColors.size}`);
 });
 
+test('voxel: every LOOK x 4 facings x DETAIL 1 and 2 at idle (and key poses/outfits) renders visible skin-ramp pixels in both hand regions', () => {
+  const dirs = ['down', 'left', 'up', 'right'];
+  const outfits = ['tee', 'cardigan', 'hoodie', 'bellhop', 'labcoat', 'dress', 'swimsuit'];
+
+  for (const detail of [1, 2]) {
+    setDetail(detail);
+    const bakeScale = 2 * detail; // DPR 2 * DETAIL (n=2 at Low, n=4 at High)
+
+    for (const [id, look] of Object.entries(LOOKS)) {
+      const sRmp = skinRamp(look.skin);
+      const skinFillColors = new Set([sRmp.top, sRmp.left, sRmp.right]);
+
+      // Verify buildParts hand geometry at idle: two 1.9-wide x 1.9-tall skin blocks flush against torso (±2.5)
+      const idleParts = buildParts(look, { stride: 0 });
+      const handParts = idleParts.filter((p) => p.slot === 'hand');
+      assert.equal(handParts.length, 2, `${id}: expected 2 hand parts`);
+      for (const hp of handParts) {
+        assert.equal(hp.mat, 'skin');
+        assert.ok(Math.abs((hp.x1 - hp.x0) - 1.9) < 1e-6, `${id}: hand width must be 1.9`);
+        assert.ok(Math.abs((hp.z1 - hp.z0) - 1.9) < 1e-6, `${id}: hand height must be 1.9`);
+        assert.ok(Math.abs(hp.x0 - 2.5) < 1e-6 || Math.abs(hp.x1 - (-2.5)) < 1e-6, `${id}: hand must sit flush against torso side x=±2.5`);
+      }
+
+      for (const dir of dirs) {
+        const res = renderCharacter(look, dir, { stride: 0 }, makePixelRecordingCanvas, bakeScale);
+        const { grid, width: W, height: H } = res.canvas;
+        const midX = res.ox * bakeScale;
+
+        let leftRegionSkin = 0;
+        let rightRegionSkin = 0;
+        let hasLitFace = false;
+        let hasShadedSideFace = false;
+
+        for (let x = 0; x < W; x++) {
+          // 2:1 isometric chin plane at z = 11.0 separates head above from torso/arms/hands below
+          const handRegionTopY = Math.max(0, Math.floor((res.oy - 19.5) * bakeScale - Math.abs(x - midX) * 0.5));
+          for (let y = handRegionTopY; y < H; y++) {
+            const c = grid[y][x]?.toLowerCase();
+            if (!c || !skinFillColors.has(c)) continue;
+            if (x < midX) leftRegionSkin++;
+            else rightRegionSkin++;
+            if (c === sRmp.left) hasLitFace = true;
+            if (c === sRmp.right) hasShadedSideFace = true;
+          }
+        }
+
+        assert.ok(
+          leftRegionSkin > 0 && rightRegionSkin > 0,
+          `${id} ${dir} DETAIL=${detail}: expected visible skin-ramp pixels in both hand regions, got left=${leftRegionSkin}, right=${rightRegionSkin}`,
+        );
+        assert.ok(
+          hasLitFace && hasShadedSideFace,
+          `${id} ${dir} DETAIL=${detail}: expected both lit (${sRmp.left}) and ~18%-darker side (${sRmp.right}) skin-ramp faces in hand regions`,
+        );
+      }
+    }
+
+    // Also verify all outfit types and active poses retain visible hands in all 4 facings
+    const poses = [
+      { stride: 1 },
+      { stride: -1 },
+      { sit: true },
+      { lie: true },
+      { action: 'swim', actionFrame: 0 },
+      { action: 'treadmill', actionFrame: 1 },
+      { action: 'eat', actionFrame: 1 },
+      { action: 'use', actionFrame: 1 },
+      { emote: 'wave', emoteFrame: 1 },
+      { emote: 'clap', emoteFrame: 1 },
+      { emote: 'cheer', emoteFrame: 1 },
+      { emote: 'thumbsup', emoteFrame: 1 },
+    ];
+    for (const outfit of outfits) {
+      const look = { ...LOOKS.player, outfit, bareArms: outfit === 'swimsuit' };
+      const sRmp = skinRamp(look.skin);
+      const skinFillColors = new Set([sRmp.top, sRmp.left, sRmp.right]);
+      for (const dir of dirs) {
+        const res = renderCharacter(look, dir, { stride: 0 }, makePixelRecordingCanvas, bakeScale);
+        const midX = res.ox * bakeScale;
+        let leftSkin = 0;
+        let rightSkin = 0;
+        for (let x = 0; x < res.canvas.width; x++) {
+          const handRegionTopY = Math.max(0, Math.floor((res.oy - 19.5) * bakeScale - Math.abs(x - midX) * 0.5));
+          for (let y = handRegionTopY; y < res.canvas.height; y++) {
+            const c = res.canvas.grid[y][x]?.toLowerCase();
+            if (c && skinFillColors.has(c)) {
+              if (x < midX) leftSkin++;
+              else rightSkin++;
+            }
+          }
+        }
+        assert.ok(leftSkin > 0 && rightSkin > 0, `outfit=${outfit} ${dir} DETAIL=${detail}: both hands must be visible`);
+      }
+    }
+
+    const pRmp = skinRamp(LOOKS.player.skin);
+    const pSkinColors = new Set([pRmp.top, pRmp.left, pRmp.right]);
+    for (const pose of poses) {
+      const parts = buildParts(LOOKS.player, pose);
+      const headPart = parts.find((p) => p.slot === 'head');
+      const hdz = headPart ? (headPart.dz || 0) : 0;
+      for (const dir of dirs) {
+        const res = renderCharacter(LOOKS.player, dir, pose, makePixelRecordingCanvas, bakeScale);
+        const midX = res.ox * bakeScale;
+        let leftSkin = 0;
+        let rightSkin = 0;
+        for (let x = 0; x < res.canvas.width; x++) {
+          const handRegionTopY = Math.max(0, Math.floor((res.oy - (19.5 + hdz * KZ)) * bakeScale - Math.abs(x - midX) * 0.5));
+          for (let y = handRegionTopY; y < res.canvas.height; y++) {
+            const c = res.canvas.grid[y][x]?.toLowerCase();
+            if (c && pSkinColors.has(c)) {
+              if (x < midX) leftSkin++;
+              else rightSkin++;
+            }
+          }
+        }
+        assert.ok(
+          leftSkin > 0 && rightSkin > 0,
+          `pose=${JSON.stringify(pose)} ${dir} DETAIL=${detail}: both hands must remain visible (left=${leftSkin}, right=${rightSkin})`,
+        );
+      }
+    }
+  }
+  setDetail(1);
+});
+
+
