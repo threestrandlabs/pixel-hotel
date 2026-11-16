@@ -16,6 +16,17 @@ export const EMOTES = [
 export const EMOTE_IDS = new Set(EMOTES.map((e) => e.id));
 export const EMOTE_ICONS = Object.fromEntries(EMOTES.map((e) => [e.id, e.icon]));
 
+export const EMOTE_EXPRESSION_MAP = {
+  wave: 'happy',
+  dance: 'smug',
+  laugh: 'laughing',
+  clap: 'happy',
+  heart: 'wink',
+  sleep: 'sleepy',
+  cheer: 'laughing',
+  thumbsup: 'happy',
+};
+
 export const EMOTE_DURATION_MS = 3000;
 export const EMOTE_RATE_LIMIT_MS = 1000;
 

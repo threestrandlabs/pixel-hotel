@@ -227,7 +227,8 @@ export function materialRamp(hexcol) {
 
   const topRgb = mk(towards(h, 0.15, 0.022), -0.05, +0.085);
   const leftRgb = [r, g, b];
-  const rightRgb = mk(towards(h, 0.72, 0.035), +0.05, -0.20);
+  const shadowDl = -Math.min(0.20, Math.max(0.06, l * 0.22));
+  const rightRgb = mk(towards(h, 0.72, 0.035), +0.04, shadowDl, 0.09);
   const lineRgb = midToneOutline([r, g, b], 0.70);
 
   const result = {
@@ -245,3 +246,182 @@ export function materialRamp(hexcol) {
 }
 
 export const ramp = materialRamp;
+
+const skinRampCache = new Map();
+
+// Skin ramp per guide 1.3, 4.1, 8.12: side face (right) is ~18% darker same hue (e.g. #f0c49a -> #c5a17e).
+export function skinRamp(hexcol) {
+  const norm = String(hexcol).toLowerCase();
+  if (skinRampCache.has(norm)) return skinRampCache.get(norm);
+  const base = materialRamp(norm);
+  const [r, g, b] = base.leftRgb;
+  const rightRgb = [Math.round(r * 0.821), Math.round(g * 0.821), Math.round(b * 0.821)];
+  const result = {
+    top: base.top,
+    left: base.left,
+    right: rgbToHex(rightRgb),
+    line: base.line,
+    topRgb: base.topRgb,
+    leftRgb: base.leftRgb,
+    rightRgb,
+    lineRgb: base.lineRgb,
+  };
+  skinRampCache.set(norm, result);
+  return result;
+}
+
+// ---------- pixel textures (phase 1b, Pass 14b calm-accent recipes from texture.py) ----------
+// No AA and no gradients: every texel is picked from the material's fixed 4-shade ramp
+// (top / left / right / line) by a deterministic rule at bake time only.
+// Speckle/dither kinds are OFF by default per locked Pass 14b style.
+export const TEXTURE_KINDS = ['wood', 'upholstery', 'character', 'grain', 'dither', 'weave', 'speckle', 'carpet'];
+export const TEXTURE_RULES = {
+  wood: { kind: 'wood', density: 0.05, rowMod: 2, segMod: 3, enabled: true },
+  upholstery: { kind: 'upholstery', density: 0.04, enabled: true },
+  cloth: { kind: 'character', slot: 'shirt_torso', density: 0.05, enabled: true },
+  hair: { kind: 'character', slot: 'hair_cap', density: 0.05, enabled: true },
+  shoe: { kind: 'speckle', density: 0, enabled: false },
+  skin: { kind: 'grain', density: 0, enabled: false },
+  speckle: { kind: 'speckle', density: 0, enabled: false },
+  dither: { kind: 'dither', density: 0, enabled: false },
+  weave: { kind: 'weave', density: 0, enabled: false },
+  carpet: { kind: 'carpet', density: 0, enabled: false },
+  plain: { kind: 'speckle', density: 0, enabled: false },
+};
+
+// Highlight pixels on top edges/corners (guide: a few hand-placed pixels, never a gradient).
+export const HIGHLIGHT_RULES = { wood: true, upholstery: true, cloth: true, hair: true, shoe: false, skin: false };
+
+const BAYER4 = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];
+
+// Deterministic 31-bit integer hash matching texture.py hash2d(x, y, seed).
+export function hash2d(x, y, seed = 0) {
+  let h = (Math.imul(x | 0, 374761393) + Math.imul(y | 0, 668265263) + Math.imul(seed | 0, 12741261)) & 0x7fffffff;
+  h = Math.imul(h ^ (h >>> 13), 12741261) & 0x7fffffff;
+  return (h ^ (h >>> 16)) & 0x7fffffff;
+}
+
+// Deterministic 2D integer hash -> [0,1).
+export function hash2(x, y, seed = 0) {
+  let h = (Math.imul(x | 0, 374761393) + Math.imul(y | 0, 668265263) + Math.imul(seed | 0, 1274126177)) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  h ^= h >>> 16;
+  return (h >>> 0) / 4294967296;
+}
+
+// Port of texture.py _streaks(iu, iv, s, n, row_mod, seg_mod, row_step=2):
+// Sparse broken wood grain (4-10px streaks at n=4, 2-5px at n=2, staggered per row).
+export function woodStreak(iu, iv, seed = 0, { detail = DETAIL, rowMod = 2, segMod = 3, rowStep = 2 } = {}) {
+  const n = 2 * (detail || 1);
+  const L = Math.max(3, Math.floor((6 * n) / 4));
+  const off = hash2d(iv, 3, seed) % L;
+  const k = Math.floor((iu + off) / L);
+  const pos = (((iu + off) % L) + L) % L;
+  const rowOn = (iv % rowStep === 0) && (hash2d(Math.floor(iv / rowStep), 5, seed) % rowMod === 0);
+  const segOn = (hash2d(k, iv, seed + 7) % segMod === 0);
+  const ln = Math.max(1, Math.floor(((2 + (hash2d(k, iv, seed + 11) % 4)) * n) / 4));
+  return rowOn && segOn && pos < ln;
+}
+
+// Port of texture.py wood(): sparse broken grain on top/left faces, faint hint on right, rim on lit top edge.
+export function woodTexel(iu, iv, base = 'left', { detail = DETAIL, seed = 17, isRim = false } = {}) {
+  if (base === 'top') {
+    return woodStreak(iu, iv, seed + 202, { detail, rowMod: 2, segMod: 3 }) ? 'left' : null;
+  }
+  if (base === 'left') {
+    if (isRim) return 'top';
+    return woodStreak(iu, iv, seed + 101, { detail, rowMod: 2, segMod: 3 }) ? 'line' : null;
+  }
+  if (base === 'right') {
+    return woodStreak(iu, iv, seed + 303, { detail, rowMod: 4, segMod: 5 }) ? 'line' : null;
+  }
+  return null;
+}
+
+// Port of texture.py upholstery(): near-flat fabric with 1px top-edge highlight row, optional 1px seam, and shadow-corner hash dither.
+export function upholsteryTexel(iu, iv, base = 'left', { seed = 19, isRim = false, isSeam = false, du = 99, dv = 99 } = {}) {
+  if (base === 'top') return isSeam ? 'left' : null;
+  if (base === 'left') return isRim ? 'top' : null;
+  if (base === 'right') {
+    if (isRim) return 'left';
+    const h = hash2d(iu, iv, seed) % 100;
+    if ((du < 4 && dv < 3 && h < 45) || (dv === 0 && h < 20)) return 'line';
+  }
+  return null;
+}
+
+// Port of texture.py character(): small highlight cluster on hair_cap top, single waist crease on shirt_torso.
+export function characterTexel(slot, iu, iv, base = 'left', { detail = DETAIL, cu = 0, cv = 0, hz = 0 } = {}) {
+  if (slot === 'hair_cap' && base === 'top') {
+    const du = iu - cu;
+    const dv = iv - cv;
+    return (du * du + dv * dv) <= 2 * (detail || 1) ? 'top' : null;
+  }
+  if (slot === 'shirt_torso' && (base === 'left' || base === 'right')) {
+    return (hz >= 6.4 && hz <= 6.6) ? 'right' : null;
+  }
+  return null;
+}
+
+// Shade a texel one ramp step lighter / darker than the face's base shade.
+const LIGHTER = { top: null, left: 'top', right: 'left', line: 'right' };
+const DARKER = { top: 'left', left: 'right', right: 'line', line: null };
+
+// Returns the ramp key to paint at texel (x, y) over a face whose base shade is `base`, or null.
+export function texelKey(kind, x, y, base = 'left', opts = {}) {
+  const { density = 0.2, seed = 0, detail = DETAIL } = opts;
+  const light = LIGHTER[base];
+  const dark = DARKER[base];
+  const pick = (h2) => (h2 < 0.5 ? (light || dark) : (dark || light));
+  switch (kind) {
+    case 'wood':
+      return woodTexel(x, y, base, { detail, seed, isRim: opts.isRim });
+    case 'upholstery':
+      return upholsteryTexel(x, y, base, { seed, isRim: opts.isRim, isSeam: opts.isSeam, du: opts.du, dv: opts.dv });
+    case 'character':
+      return characterTexel(opts.slot || 'shirt_torso', x, y, base, { detail, cu: opts.cu, cv: opts.cv, hz: opts.hz });
+    case 'dither':
+      return density > 0 && (BAYER4[y & 3][x & 3] + 0.5) / 16 < density ? (light || dark) : null;
+    case 'speckle': {
+      if (density <= 0) return null;
+      const h = hash2(x, y, seed);
+      return h < density ? pick(hash2(y, x, seed + 7)) : null;
+    }
+    case 'grain':
+      return density > 0 && hash2(x >> 2, y, seed) < density ? ((y & 1) ? (dark || light) : (light || dark)) : null;
+    case 'weave': {
+      if (density <= 0 || ((x + ((y & 1) ? 2 : 0)) & 3) !== 0) return null;
+      return hash2(x, y, seed) < density * 1.2 ? (light || dark) : null;
+    }
+    case 'carpet':
+      return density > 0 && ((x + y) & 1) === 0 && hash2(x, y, seed) < density ? (dark || light) : null;
+    default:
+      return null;
+  }
+}
+
+function paintPixel(target, x, y, color) {
+  if (typeof target.setPixel === 'function') target.setPixel(x, y, color);
+  else { target.fillStyle = color; target.fillRect(x, y, 1, 1); }
+}
+
+// target: canvas 2D ctx or any { setPixel(x, y, color) }. area: {x,y,w,h} or {spans:[{y,x0,x1}]}.
+// Only texels from `ramp` are emitted; the base fill is assumed to be painted already.
+export function textureFill(target, area, ramp, opts = {}) {
+  const { kind = 'wood', base = 'left' } = opts;
+  const emit = (x, y) => {
+    const k = texelKey(kind, x, y, base, opts);
+    if (k && ramp[k] !== undefined) paintPixel(target, x, y, ramp[k]);
+  };
+  if (area.spans) {
+    for (const s of area.spans) for (let x = s.x0; x < s.x1; x++) emit(x, s.y);
+  } else {
+    for (let y = area.y; y < area.y + area.h; y++) for (let x = area.x; x < area.x + area.w; x++) emit(x, y);
+  }
+}
+
+// pts: [{x,y}] hand-placed highlight pixels (top edges / corners) in the ramp's lightest shade.
+export function highlightPixels(target, pts, ramp, key = 'top') {
+  if (!ramp || ramp[key] === undefined) return;
+  for (const p of pts) paintPixel(target, p.x, p.y, ramp[key]);
+}

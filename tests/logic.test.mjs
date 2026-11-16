@@ -956,8 +956,8 @@ test('v0.5.0 voxel characters: distinct treadmill, swim, eat, lie, blink, and br
   const breathePose = buildParts(LOOKS.player, { breathe: 1 });
   const blinkPose = buildParts(LOOKS.player, { blink: true });
 
-  // Head box is the 10x9.2x8 skin box (x0 === -5, x1 === 5, y0 === -4.6, y1 === 4.6)
-  const findHead = (parts) => parts.find((p) => p.x0 === -5 && p.x1 === 5 && p.y0 === -4.6 && p.y1 === 4.6);
+  // Head box is the 6.75-unit cube head (x0 === -3.375, x1 === 3.375, y0 === -3.375, y1 === 3.375)
+  const findHead = (parts) => parts.find((p) => p.slot === 'head' || (p.x0 === -3.375 && p.x1 === 3.375));
 
   // Treadmill alternates vertical body bounce and leg/arm geometry
   assert.notEqual(findHead(run0).z0, findHead(run1).z0, 'treadmill alternates vertical running cadence');

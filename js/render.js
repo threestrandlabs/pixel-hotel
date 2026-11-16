@@ -1874,9 +1874,10 @@ export function drawCharacter(ctx, e, screenX, screenY, dpr = 1, room = null) {
     actionFrame: e.actionFrame || 0,
     emote: e.emote || null,
     emoteFrame: e.emoteFrame || 0,
+    expression: e.expression || null,
   };
   const lookKey = e.look ? (e.look._cachedKey || (e.look._cachedKey = JSON.stringify(e.look))) : '';
-  const key = `${e.spriteKey}:${e.color}:${isSwimsuit ? 'swim' : 'norm'}:${lookKey}:${e.emote || ''}:${Math.floor((e.emoteFrame || 0) * 2) % 12}`;
+  const key = `${e.spriteKey}:${e.color}:${isSwimsuit ? 'swim' : 'norm'}:${lookKey}:${e.emote || ''}:${Math.floor((e.emoteFrame || 0) * 2) % 12}:${e.expression || ''}`;
   const charBake = getCharacterCanvas(key, look, e.dir, pose, dpr);
   const { canvas, ox, oy, cssH } = charBake;
   const bakeScale = charBake.scale || canvas.scale || (dpr * getDetail());
@@ -1911,24 +1912,20 @@ export function drawCharacter(ctx, e, screenX, screenY, dpr = 1, room = null) {
     const t = activeCamMatrix;
     if (t) {
       ensureDeviceTransform(ctx);
-      ctx.fillStyle = 'rgba(24, 12, 36, 0.24)';
-      for (const [rx, ry] of [[19, 9.5], [14, 7]]) {
-        const ex = Math.round(t.a * (screenX + 2) + t.e);
-        const ey = Math.round(t.d * (screenY + 1) + t.f);
-        const erx = rx * (t.a / (dpr || 1));
-        const ery = ry * (t.d / (dpr || 1));
-        ctx.beginPath();
-        ctx.ellipse(ex, ey, erx, ery, 0, 0, Math.PI * 2);
-        ctx.fill();
-      }
+      ctx.fillStyle = 'rgba(42, 22, 54, 0.18)';
+      const ex = Math.round(t.a * (screenX + 1.5) + t.e);
+      const ey = Math.round(t.d * (screenY + 1) + t.f);
+      const erx = 13.5 * (t.a / (dpr || 1));
+      const ery = 6.5 * (t.d / (dpr || 1));
+      ctx.beginPath();
+      ctx.ellipse(ex, ey, erx, ery, 0, 0, Math.PI * 2);
+      ctx.fill();
     } else {
       ensureCameraTransform(ctx);
-      ctx.fillStyle = 'rgba(24, 12, 36, 0.24)';
-      for (const [rx, ry] of [[19, 9.5], [14, 7]]) {
-        ctx.beginPath();
-        ctx.ellipse(screenX + 2, screenY + 1, rx, ry, 0, 0, Math.PI * 2);
-        ctx.fill();
-      }
+      ctx.fillStyle = 'rgba(42, 22, 54, 0.18)';
+      ctx.beginPath();
+      ctx.ellipse(screenX + 1.5, screenY + 1, 13.5, 6.5, 0, 0, Math.PI * 2);
+      ctx.fill();
     }
   }
 

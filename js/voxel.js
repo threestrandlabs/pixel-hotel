@@ -1,95 +1,155 @@
-// Procedural voxel characters. Each figure is a list of axis-aligned boxes in a
-// local frame (lx = sideways, ly = forward, z = up, 1 unit = 1 voxel) that is
-// rotated a quarter-turn per facing, projected isometrically and painted face by
-// face (top / left / right), with textures (eyes, buttons, ...) mapped onto the
-// real face planes. Nothing is mirrored: turning re-orients the actual planes.
-// Parts are pure data (testable in Node); drawing only needs a canvas factory.
+// Procedural pixel-art characters in the locked library-sample style (Pass 14b).
+// Reference: /workspace/sprite-mock/agy_library/{core.py,character.py,texture.py,guide.md}
+// - Snapped 2:1 isometric orthographic raycaster (1 unit = 4*DETAIL px across, 2*DETAIL px down)
+// - Fixed 4-shade material ramps per part (top, left, right, mid-tone line; no AA, no gradients)
+// - 75% cube head (6.75/side at z 11..17.75), thin 0.75 hair cap, 18.5-unit body proportions
+// - Front-face 2:1 sloped feature stamps with white sclera, centred dark pupil + highlight, thin brows
+// - Side face skin ~18% darker same hue (#c5a17e for #f0c49a)
+// - All 11 guide 3.4 expressions exported as EXPRESSIONS
 
-import { shadeColor as sh } from './sprites.js';
-import { getDetail, registerCacheClearHook } from './pixelart.js';
+import {
+  getDetail, registerCacheClearHook,
+  hexToRgb, rgbToHex, materialRamp, skinRamp,
+  TEXTURE_RULES, characterTexel,
+} from './pixelart.js';
+import { EMOTE_EXPRESSION_MAP } from './emotes.js';
 
-export const KX = 2.2; // px per voxel step along world x / y (2:1 iso, like the tiles)
-export const KZ = 2.4; // px per voxel of height
-const DIRS = { right: [1, 0], down: [0, 1], left: [-1, 0], up: [0, -1] };
-// Same light as the room: lit from above-left, so +y faces (screen-left) match
-// the north wall, +x faces (screen-right) are shaded like the west wall/floor edge.
-const LIGHT = { top: 0.14, py: 0, px: -0.22 };
-const OUTLINE = '#2a1d2e';
+export const KX = 2.0; // CSS px per world unit step along X / Y (4px at DPR 2 / DETAIL 1, 8px at DETAIL 2)
+export const KZ = Math.sqrt(6); // Exact isometric vertical scale (matches core.py PPU = 4*sqrt(2)*DETAIL)
+
+const HS = 0.75; // 75% default head scale
+const HB = 11.0; // World z where the head begins (neck)
+const H_HALF = 4.5 * HS; // 3.375: half width/depth of the 6.75-unit cube head
+const hz = (yup) => HB + yup * HS;
+
+export const EXPRESSIONS = [
+  'neutral',
+  'happy',
+  'laughing',
+  'sad',
+  'angry',
+  'surprised',
+  'sleepy',
+  'wink',
+  'embarrassed',
+  'smug',
+  'thinking',
+];
+
+const EXPRESSION_SET = new Set(EXPRESSIONS);
 
 export const LOOKS = {
   player: {
-    skin: '#ffd9a8', hair: '#5a3826', hairStyle: 'short', eye: '#2b2230', brow: '#4a2f20', mouth: 'smile',
+    skin: '#f0c49a', hair: '#5a3826', hairStyle: 'short', eye: '#1b1230', brow: '#1b1230', mouth: 'smile',
     shirt: '#4da3ff', outfit: 'tee', pants: '#2c3e63', shoe: '#f4f4f4',
   },
   mochi: { // cheerful bellhop: pink jacket, gold buttons, pillbox hat
-    skin: '#ffdcb4', hair: '#4a2c2a', hairStyle: 'bob', eye: '#2b2230', brow: '#4a2c2a', mouth: 'smile',
+    skin: '#ffdcb4', hair: '#4a2c2a', hairStyle: 'bob', eye: '#1b1230', brow: '#4a2c2a', mouth: 'smile',
     shirt: '#ff9fc7', outfit: 'bellhop', gold: '#f6c667', cuff: '#f6c667', hat: true, pants: '#6b3a55', shoe: '#2a2030',
   },
   gus: { // grumpy old guest: bald top, white hair/mustache, glasses, cardigan
-    skin: '#f0c8a0', hair: '#e4e4ea', hairStyle: 'bald', eye: '#2b2230', brow: '#f2f2f6', mouth: 'frown',
+    skin: '#f0c8a0', hair: '#e4e4ea', hairStyle: 'bald', eye: '#1b1230', brow: '#d0d0d8', mouth: 'frown',
     shirt: '#7f93b3', under: '#f1e8d2', outfit: 'cardigan', belly: true, mustache: true, glasses: true,
     pants: '#6b5a48', shoe: '#4a3a2e',
   },
   drpix: { // eccentric scientist: lab coat, wild hair, goggles
-    skin: '#ffe0c0', hair: '#e2dcff', hairStyle: 'spiky', eye: '#2b2230', brow: '#8d86b8', mouth: 'open',
+    skin: '#ffe0c0', hair: '#e2dcff', hairStyle: 'spiky', eye: '#1b1230', brow: '#6d6698', mouth: 'open',
     shirt: '#f4f7f2', under: '#5fcf7a', outfit: 'labcoat', goggles: true, skirt: true,
     pants: '#3f5b4a', shoe: '#e8e8e8',
   },
   lola: { // lounge singer: gold gown, long plum hair, flower
-    skin: '#c98a62', hair: '#5b2a6e', hairStyle: 'long', eye: '#2b2230', brow: '#3a1c48', mouth: 'lips', lashes: true,
+    skin: '#c98a62', hair: '#5b2a6e', hairStyle: 'long', eye: '#1b1230', brow: '#3a1c48', mouth: 'lips', lashes: true,
     shirt: '#ffe08a', outfit: 'dress', skirt: true, flower: true, bareArms: true,
     pants: '#c98a62', shoe: '#c0304a',
   },
   barista_pip: { // energetic barista: espresso apron, warm brown hair
-    skin: '#f5cba7', hair: '#6e3b24', hairStyle: 'short', eye: '#2b2230', brow: '#4e2816', mouth: 'smile',
+    skin: '#f5cba7', hair: '#6e3b24', hairStyle: 'short', eye: '#1b1230', brow: '#4e2816', mouth: 'smile',
     shirt: '#e8d8c8', under: '#5c3824', outfit: 'cardigan', pants: '#3b2e2a', shoe: '#5c3824',
   },
   chef_remy: { // head chef: white jacket, tall chef toque
-    skin: '#f2c6a0', hair: '#382822', hairStyle: 'short', eye: '#2b2230', brow: '#2a1c18', mouth: 'smile',
-    shirt: '#f8f8fc', gold: '#d84040', outfit: 'bellhop', chefHat: true, pants: '#2f3542', shoe: '#1e222a',
+    skin: '#f2c6a0', hair: '#382822', hairStyle: 'short', eye: '#1b1230', brow: '#2a1c18', mouth: 'smile',
+    shirt: '#f2ede4', gold: '#d84040', outfit: 'bellhop', chefHat: true, pants: '#2f3542', shoe: '#2b2a3d',
   },
   coach_rex: { // fitness trainer: crimson athletic tee, headband
-    skin: '#d99b72', hair: '#282028', hairStyle: 'spiky', eye: '#2b2230', brow: '#1c161c', mouth: 'smile',
-    shirt: '#ff5252', outfit: 'tee', headband: '#ffffff', bareArms: true, pants: '#222836', shoe: '#ff5252',
+    skin: '#d99b72', hair: '#282028', hairStyle: 'spiky', eye: '#1b1230', brow: '#1c161c', mouth: 'smile',
+    shirt: '#ff5252', outfit: 'tee', headband: '#f2ede4', bareArms: true, pants: '#222836', shoe: '#ff5252',
   },
   marina: { // spa attendant: serene aqua wrap, long dark hair, flower
-    skin: '#f7d3b0', hair: '#2a344a', hairStyle: 'long', eye: '#2b2230', brow: '#1e2638', mouth: 'smile', lashes: true,
+    skin: '#f7d3b0', hair: '#2a344a', hairStyle: 'long', eye: '#1b1230', brow: '#1e2638', mouth: 'smile', lashes: true,
     shirt: '#5cd6c8', outfit: 'dress', flower: true, pants: '#3a8c82', shoe: '#f4efe6',
   },
-  zack: { // arcade wizard: neon purple hoodie, cyan visor goggles
-    skin: '#ffdbb8', hair: '#3a2058', hairStyle: 'spiky', eye: '#2b2230', brow: '#2a1640', mouth: 'open',
+  zack: { // arcade wizard: neon purple tee, cyan visor goggles
+    skin: '#ffdbb8', hair: '#3a2058', hairStyle: 'spiky', eye: '#1b1230', brow: '#2a1640', mouth: 'open',
     shirt: '#8c52ff', outfit: 'tee', goggles: true, pants: '#241c38', shoe: '#50f0d0',
   },
   clara: { // archivist: emerald cardigan, glasses, bob hair
-    skin: '#fce0c4', hair: '#8c442a', hairStyle: 'bob', eye: '#2b2230', brow: '#68301c', mouth: 'smile',
+    skin: '#fce0c4', hair: '#8c442a', hairStyle: 'bob', eye: '#1b1230', brow: '#68301c', mouth: 'smile',
     shirt: '#489c72', under: '#fff8e8', outfit: 'cardigan', glasses: true, pants: '#384454', shoe: '#523422',
   },
   flora: { // botanist: sage tunic, blonde long hair, flower
-    skin: '#ffd8b4', hair: '#e8b854', hairStyle: 'long', eye: '#2b2230', brow: '#b0842c', mouth: 'smile',
+    skin: '#ffd8b4', hair: '#e8b854', hairStyle: 'long', eye: '#1b1230', brow: '#8a641c', mouth: 'smile',
     shirt: '#78c466', under: '#fff4d4', outfit: 'cardigan', flower: true, pants: '#4a6b48', shoe: '#7c5434',
   },
   celeste: { // head receptionist: royal navy blazer with gold lapels & buttons, neat bob
-    skin: '#ffe0c2', hair: '#382230', hairStyle: 'bob', eye: '#2b2230', brow: '#2a1824', mouth: 'smile', lashes: true,
-    shirt: '#2e4478', gold: '#ffd268', cuff: '#ffd268', outfit: 'bellhop', pants: '#1e2c50', shoe: '#1c1824',
+    skin: '#ffe0c2', hair: '#382230', hairStyle: 'bob', eye: '#1b1230', brow: '#2a1824', mouth: 'smile', lashes: true,
+    shirt: '#2e4478', gold: '#ffd268', cuff: '#ffd268', outfit: 'bellhop', pants: '#1e2c50', shoe: '#2b2a3d',
   },
   receptionist: {
-    skin: '#ffe0c2', hair: '#382230', hairStyle: 'bob', eye: '#2b2230', brow: '#2a1824', mouth: 'smile', lashes: true,
-    shirt: '#2e4478', gold: '#ffd268', cuff: '#ffd268', outfit: 'bellhop', pants: '#1e2c50', shoe: '#1c1824',
+    skin: '#ffe0c2', hair: '#382230', hairStyle: 'bob', eye: '#1b1230', brow: '#2a1824', mouth: 'smile', lashes: true,
+    shirt: '#2e4478', gold: '#ffd268', cuff: '#ffd268', outfit: 'bellhop', pants: '#1e2c50', shoe: '#2b2a3d',
   },
 };
 
-// ---------- model ----------
+export function resolveExpression(pose = {}, look = {}) {
+  if (pose.expression && EXPRESSION_SET.has(pose.expression)) {
+    return pose.expression;
+  }
+  if (pose.blink || pose.lie || pose.action === 'lie' || pose.action === 'spa_massage') {
+    return 'sleepy';
+  }
+  if (pose.emote && EMOTE_EXPRESSION_MAP[pose.emote]) {
+    return EMOTE_EXPRESSION_MAP[pose.emote];
+  }
+  if (pose.action === 'eat' || pose.action === 'swim') return 'happy';
+  if (pose.action === 'treadmill') return 'angry';
+
+  switch (look?.mouth) {
+    case 'frown': return 'sad';
+    case 'open': return 'surprised';
+    case 'lips': return 'neutral';
+    case 'smile': return 'happy';
+    default: return 'neutral';
+  }
+}
+
+// Legacy-compatible head texture callback for direct unit-test inspection
+function makeHeadTexCallback(look, pose) {
+  const expr = resolveExpression(pose, look);
+  return (g, W, H, fc, face) => {
+    if (face === 'left' || face === 'right') {
+      const r = skinRamp(look.skin || '#f0c49a');
+      g.fillStyle = r.right;
+      g.fillRect(0, 0, W, H);
+      g.fillStyle = r.line;
+      g.fillRect(0, 0, 1, H);
+      return;
+    }
+    if (face !== 'front') return;
+    g.fillStyle = '#f2ede4';
+    const eyeH = expr === 'sleepy' ? 0.4 : (expr === 'surprised' ? 1.8 : 1.5);
+    g.fillRect(1.5, 3.0, 2.0, eyeH);
+    g.fillRect(6.0, 3.0, 2.0, eyeH);
+    g.fillStyle = look.eye || '#1b1230';
+    g.fillRect(1.9, 3.2, 1.2, eyeH * 0.8);
+    g.fillRect(6.4, 3.2, 1.2, eyeH * 0.8);
+  };
+}
 
 /**
- * pose: {
- *   stride?: -1|0|1,
- *   sit?: boolean,
- *   lie?: boolean,
- *   blink?: boolean,
- *   breathe?: 0|1,
- *   action?: null|'treadmill'|'swim'|'eat'|'use'|'lie',
- *   actionFrame?: 0|1|2|3,
- * } -> boxes in local space
+ * Builds the character's 3D boxes in local space:
+ *   x = sideways (-left/far, +right/near in 'down' facing)
+ *   y = forward (-back, +front)
+ *   z = vertical height from ground (0 = soles, 18.5 = top of hair cap)
  */
 export function buildParts(look, pose = {}) {
   const {
@@ -103,573 +163,1009 @@ export function buildParts(look, pose = {}) {
     emote = null,
     emoteFrame = 0,
   } = pose;
+
   const isSwim = action === 'swim';
   const isLie = lie || action === 'lie' || action === 'spa_massage';
   const isTreadmill = action === 'treadmill';
   const isEat = action === 'eat';
   const isUse = action === 'use';
-  const idleBreathe = (!sit && !isLie && !isSwim && !isTreadmill && stride === 0 && breathe) ? 0.45 : 0;
-  const emoteDanceBounce = emote === 'dance' ? Math.sin(emoteFrame * 3) * 0.7 : 0;
-  const emoteLaughBounce = emote === 'laugh' ? Math.abs(Math.sin(emoteFrame * 4)) * 0.7 : 0;
+  const idleBreathe = (!sit && !isLie && !isSwim && !isTreadmill && stride === 0 && breathe) ? 0.35 : 0;
+  const emoteDanceBounce = emote === 'dance' ? Math.sin(emoteFrame * 3) * 0.5 : 0;
+  const emoteLaughBounce = emote === 'laugh' ? Math.abs(Math.sin(emoteFrame * 4)) * 0.5 : 0;
 
   const dz = isSwim
-    ? -5.4
+    ? -4.2
     : isLie
-      ? -3.2
+      ? -2.6
       : isTreadmill
-        ? (actionFrame % 2 === 0 ? 0.75 : -0.15)
+        ? (actionFrame % 2 === 0 ? 0.55 : -0.15)
         : sit
-          ? -1
-          : (idleBreathe * 0.6 + emoteDanceBounce + emoteLaughBounce);
+          ? -0.8
+          : (idleBreathe * 0.5 + emoteDanceBounce + emoteLaughBounce);
 
   const P = [];
-  const add = (x0, x1, y0, y1, z0, z1, color, tex) => P.push({ x0, x1, y0, y1, z0, z1, color, tex });
-  const skirt = look.skirt && !sit && !isLie && !isSwim;
-  const lower = look.bareArms ? look.skin : look.shirt;
+  let nextGroup = 1;
+  const add = (x0, x1, y0, y1, z0, z1, color, opts = {}) => {
+    const group = opts.group !== undefined ? opts.group : nextGroup++;
+    P.push({
+      x0, x1, y0, y1, z0, z1,
+      color,
+      mat: opts.mat || 'cloth',
+      slot: opts.slot || null,
+      group,
+      dz: opts.dz || 0,
+      tex: opts.tex || null,
+    });
+  };
+
+  const skirt = (look.skirt || look.outfit === 'dress') && !sit && !isLie && !isSwim;
+  const sleeveColor = look.bareArms ? look.skin : look.shirt;
+  const sleeveMat = look.bareArms ? 'skin' : 'shirt';
   const effStride = isTreadmill
-    ? (actionFrame % 2 === 0 ? 1.35 : -1.35)
+    ? (actionFrame % 2 === 0 ? 1.25 : -1.25)
     : emote === 'dance'
-      ? (Math.sin(emoteFrame * 2.5) > 0 ? 1.1 : -1.1)
+      ? (Math.sin(emoteFrame * 2.5) > 0 ? 1.0 : -1.0)
       : stride;
 
-  // legs: thigh / shin / shoe (submerged and omitted during swimming so waterline stays clean)
+  // 1. Shoes (z: 0..1.5) & Legs (z: 1.5..5.0) — straddling centre at x = ±1.2
   if (!isSwim) {
     for (const s of [-1, 1]) {
-      const [a, b] = s > 0 ? [0.15, 3.35] : [-3.35, -0.15];
-      const o = effStride * s * 1.7;
+      const xc = 1.2 * s;
+      const x0 = xc - 1.1;
+      const x1 = xc + 1.1;
+      const o = effStride * s * 1.1;
+      const legGroup = nextGroup++;
+      const shoeGroup = nextGroup++;
+
       if (isLie) {
-        add(a, b, 0.2, 5.2, 4.0, 6.4, look.skirt ? look.shirt : look.pants);
-        add(a, b, 5.0, 7.6, 3.8, 6.1, look.pants);
-        add(a, b, 7.2, 9.0, 3.6, 6.6, look.shoe, soleTex);
+        add(x0, x1, 0.2, 4.8, 2.6, 4.6, look.skirt ? look.shirt : look.pants, { mat: 'pants', slot: 'leg', group: legGroup });
+        add(x0, x1, 4.8, 6.4, 2.4, 4.8, look.shoe, { mat: 'shoe', slot: 'shoe', group: shoeGroup });
       } else if (sit) {
-        add(a, b, -2.2, 4.4, 3.5, 6, look.skirt ? look.shirt : look.pants);
-        add(a, b, 2.6, 4.4, 1.6, 3.5, look.pants);
-        add(a, b, 2.4, 6, 0, 1.6, look.shoe, soleTex);
+        // Seated pose with bent knees (guide 8.5): thigh forward, shin hanging down
+        add(x0, x1, -1.3, 2.8, 3.0, 4.5, look.skirt ? look.shirt : look.pants, { mat: 'pants', slot: 'leg', group: legGroup });
+        add(x0, x1, 1.4, 2.9, 1.2, 3.0, look.pants, { mat: 'pants', slot: 'leg', group: legGroup });
+        add(x0, x1, 1.3, 3.6, 0.0, 1.2, look.shoe, { mat: 'shoe', slot: 'shoe', group: shoeGroup });
       } else {
-        const lift = o > 0.5 ? (isTreadmill ? 1.45 : 0.5) : 0;
-        if (!skirt) add(a, b, -1.7 + o * 0.5, 1.7 + o * 0.5, 3.6 + lift * 0.4, 7, look.pants);
-        add(a, b, -1.7 + o, 1.7 + o, 1.6 + lift, skirt ? 3.8 : 3.6 + lift * 0.4, look.pants);
-        add(a, b, -1.7 + o, 3.6 + o, lift, 1.6 + lift, look.shoe, soleTex);
+        const lift = o > 0.3 ? (isTreadmill ? 0.9 : 0.35) : 0;
+        const legTop = skirt ? 3.5 : 5.0;
+        add(x0, x1, -1.3 + o, 1.3 + o, 1.5 + lift, legTop + lift * 0.3, look.pants, { mat: 'pants', slot: 'leg', group: legGroup });
+        // Shoe sticks out 0.4 forward of the leg (-1.5 to +1.9 = 3.4 deep)
+        add(x0, x1, -1.5 + o, 1.9 + o, lift, 1.5 + lift, look.shoe, { mat: 'shoe', slot: 'shoe', group: shoeGroup });
       }
     }
   }
-  if (skirt) { // dress / coat tails hang over the upper legs
-    add(-4.2, 4.2, -3.2, 3.2, 5.2, 7, look.shirt, torsoTex(look));
-    add(-4.8, 4.8, -3.8, 3.8, 3.8, 5.2, look.shirt, torsoTex(look, true));
+
+  // Skirt / coat hem over upper legs
+  if (skirt) {
+    const skirtGroup = nextGroup++;
+    add(-2.7, 2.7, -1.9, 1.9, 3.3 + dz, 5.1 + dz, look.shirt, { mat: 'shirt', slot: 'skirt', group: skirtGroup, dz });
   }
 
-  // torso + collar/neck detail
-  const tf = look.belly ? 3.1 : 2.4;
-  add(-3.5, 3.5, -2.4, tf, 7 + dz, 15 + dz + idleBreathe, look.shirt, torsoTex(look));
-  add(-1.8, 1.8, -1.6, 1.8, 14.6 + dz + idleBreathe, 15.6 + dz + idleBreathe, sh(look.skin, -0.05));
+  // 2. Torso: 5.0 wide (x: -2.5..2.5) x 3.4 deep (y: -1.7..1.7) x 6.0 tall (z: 5.0..11.0)
+  const torsoFront = look.belly ? 2.15 : 1.7;
+  const torsoGroup = nextGroup++;
+  add(-2.5, 2.5, -1.7, torsoFront, 5.0 + dz, 11.0 + dz + idleBreathe, look.shirt, {
+    mat: 'shirt',
+    slot: 'torso',
+    group: torsoGroup,
+    dz: dz + idleBreathe * 0.5,
+  });
 
-  // arms & activity props
+  // 3. Arms: 1.9 wide (xc = ±3.45 -> [-4.4, -2.5] and [2.5, 4.4]), hands end at z = 5.5
   for (const s of [-1, 1]) {
-    const [a, b] = s > 0 ? [3.5, 5.4] : [-5.4, -3.5];
-    const o = -effStride * s * 1.5;
-    const cuff = look.cuff ? cuffTex(look.cuff) : null;
+    const xc = 3.45 * s;
+    const ax0 = xc - 0.95;
+    const ax1 = xc + 0.95;
+    const hx0 = xc - 0.85;
+    const hx1 = xc + 0.85;
+    const o = -effStride * s * 1.0;
+    const armGroup = nextGroup++;
+    const handGroup = nextGroup++;
+
     if (isSwim) {
-      // Alternating freestyle/breaststroke swim stroke along the water surface
-      const strokePhase = ((actionFrame + (s > 0 ? 0 : 2)) % 4);
-      const reachY = strokePhase === 0 ? 2.2 : strokePhase === 1 ? 0.6 : strokePhase === 2 ? -1.4 : 0.4;
-      const reachZ = strokePhase === 0 ? 9.6 : strokePhase === 1 ? 8.2 : strokePhase === 2 ? 8.4 : 9.8;
-      add(a, b, -1.2 + reachY * 0.4, 1.6 + reachY * 0.4, reachZ + dz, reachZ + 3.4 + dz, look.bareArms ? look.skin : look.shirt);
-      add(a, b, 1.0 + reachY, 4.4 + reachY, reachZ - 0.8 + dz, reachZ + 1.4 + dz, lower, cuff);
-      add(a + 0.15, b - 0.15, 4.2 + reachY, 5.8 + reachY, reachZ - 0.8 + dz, reachZ + 1.0 + dz, look.skin);
+      const strokePhase = (actionFrame + (s > 0 ? 0 : 2)) % 4;
+      const reachY = strokePhase === 0 ? 1.6 : strokePhase === 1 ? 0.4 : strokePhase === 2 ? -1.0 : 0.3;
+      const reachZ = strokePhase === 0 ? 7.6 : strokePhase === 1 ? 6.6 : strokePhase === 2 ? 6.8 : 7.8;
+      add(ax0, ax1, -0.9 + reachY * 0.5, 1.3 + reachY * 0.5, reachZ + dz, reachZ + 2.6 + dz, sleeveColor, { mat: sleeveMat, slot: 'sleeve', group: armGroup });
+      add(hx0, hx1, 1.0 + reachY, 2.8 + reachY, reachZ - 0.4 + dz, reachZ + 1.2 + dz, look.skin, { mat: 'skin', slot: 'hand', group: handGroup });
     } else if (isEat && s > 0) {
-      // Right arm lifts a gourmet cup/bowl toward the mouth on odd actionFrames
       const liftToMouth = (actionFrame % 2) === 1;
-      const armZ = sit ? 9.6 : 10.8;
-      add(a, b, -1.2, 1.6, armZ, armZ + 4.8, look.bareArms ? look.skin : look.shirt);
-      const foreY0 = liftToMouth ? 1.2 : 0.6;
-      const foreY1 = liftToMouth ? 4.8 : 4.2;
-      const foreZ0 = liftToMouth ? 13.8 + dz : 10.4 + dz;
-      const foreZ1 = foreZ0 + 2.2;
-      add(a - 0.4, b - 0.2, foreY0, foreY1, foreZ0, foreZ1, lower, cuff);
-      add(a - 0.3, b - 0.3, foreY1, foreY1 + 1.3, foreZ0, foreZ0 + 1.7, look.skin);
-      // Voxel cup / gourmet plate held in hand
-      const cupX0 = a - 1.4, cupX1 = a + 0.6;
-      const cupY0 = foreY1 + 0.2, cupY1 = foreY1 + 2.2;
-      add(cupX0, cupX1, cupY0, cupY1, foreZ0 + 0.4, foreZ0 + 2.6, '#fff8ee');
-      add(cupX0 + 0.2, cupX1 - 0.2, cupY0 + 0.2, cupY1 - 0.2, foreZ0 + 2.4, foreZ0 + 3.0, '#e07a48');
+      const armZ = sit ? 6.8 : 7.4;
+      add(ax0, ax1, -0.9, 1.3, armZ + dz, 10.9 + dz, sleeveColor, { mat: sleeveMat, slot: 'sleeve', group: armGroup });
+      const handY0 = liftToMouth ? 1.0 : 0.4;
+      const handY1 = liftToMouth ? 3.0 : 2.4;
+      const handZ0 = liftToMouth ? 9.6 + dz : 7.2 + dz;
+      add(hx0, hx1, handY0, handY1, handZ0, handZ0 + 1.6, look.skin, { mat: 'skin', slot: 'hand', group: handGroup });
+      // Held cup prop
+      add(hx0 - 0.6, hx1 + 0.2, handY1, handY1 + 1.5, handZ0 + 0.2, handZ0 + 1.9, '#f2ede4', { mat: 'Cup', slot: 'prop' });
     } else if (isTreadmill) {
-      // Bent athletic pumping arms
-      add(a, b, -1.4 + o * 0.4, 1.4 + o * 0.4, 10.8 + dz, 14.8 + dz, look.bareArms ? look.skin : look.shirt);
-      add(a, b, 0.4 + o * 0.8, 3.8 + o * 0.8, 9.6 + dz, 11.8 + dz, lower, cuff);
-      add(a + 0.2, b - 0.2, 3.6 + o * 0.8, 4.9 + o * 0.8, 9.8 + dz, 11.6 + dz, look.skin);
+      add(ax0, ax1, -1.0 + o * 0.4, 1.2 + o * 0.4, 7.6 + dz, 10.9 + dz, sleeveColor, { mat: sleeveMat, slot: 'sleeve', group: armGroup });
+      add(hx0, hx1, 0.3 + o * 0.7, 2.4 + o * 0.7, 6.6 + dz, 8.2 + dz, look.skin, { mat: 'skin', slot: 'hand', group: handGroup });
     } else if (isUse) {
-      const tap = ((actionFrame + (s > 0 ? 0 : 1)) % 2) * 0.9;
-      add(a, b, -1.2, 1.4, 10.6 + dz, 14.8 + dz, look.bareArms ? look.skin : look.shirt);
-      add(a, b, 0.6, 4.0, 9.2 + dz + tap, 11.2 + dz + tap, lower, cuff);
-      add(a + 0.2, b - 0.2, 3.8, 5.1, 9.2 + dz + tap, 10.9 + dz + tap, look.skin);
+      const tap = ((actionFrame + (s > 0 ? 0 : 1)) % 2) * 0.65;
+      add(ax0, ax1, -0.9, 1.2, 7.5 + dz, 10.9 + dz, sleeveColor, { mat: sleeveMat, slot: 'sleeve', group: armGroup });
+      add(hx0, hx1, 0.6, 2.6, 6.4 + dz + tap, 8.0 + dz + tap, look.skin, { mat: 'skin', slot: 'hand', group: handGroup });
     } else if (isLie) {
-      add(a, b, -1.6, 2.2, 6.2, 9.6, look.bareArms ? look.skin : look.shirt);
-      add(a, b, 1.8, 4.4, 5.4, 7.6, lower, cuff);
-      add(a + 0.2, b - 0.2, 4.2, 5.4, 5.4, 7.2, look.skin);
+      add(ax0, ax1, -1.1, 1.5, 4.6, 7.4, sleeveColor, { mat: sleeveMat, slot: 'sleeve', group: armGroup });
+      add(hx0, hx1, 1.2, 3.0, 4.2, 5.8, look.skin, { mat: 'skin', slot: 'hand', group: handGroup });
     } else if (sit) {
-      add(a, b, -1.4, 1.4, 9, 14, look.bareArms ? look.skin : look.shirt);
-      add(a, b, -0.2, 3.6, 7, 9, lower, cuff);
-      add(a + 0.2, b - 0.2, 3.6, 4.9, 7, 8.6, look.skin);
+      add(ax0, ax1, -1.0, 1.1, 6.8 + dz, 10.5 + dz, sleeveColor, { mat: sleeveMat, slot: 'sleeve', group: armGroup });
+      add(hx0, hx1, 0.4, 2.4, 5.4 + dz, 7.0 + dz, look.skin, { mat: 'skin', slot: 'hand', group: handGroup });
     } else if (emote === 'wave' && s > 0) {
-      const wShift = Math.sin((emoteFrame || 0) * 3) * 1.5;
-      add(a, b, -0.6, 1.4, 11.5 + dz, 16.5 + dz, look.bareArms ? look.skin : look.shirt);
-      add(a + wShift, b + wShift, -0.2, 1.8, 16.2 + dz, 20.8 + dz, lower, cuff);
-      add(a + 0.2 + wShift, b - 0.2 + wShift, 0, 1.6, 20.8 + dz, 22.4 + dz, look.skin);
+      const wShift = Math.sin((emoteFrame || 0) * 3) * 0.9;
+      add(ax0, ax1, -0.8, 1.1, 8.2 + dz, 11.8 + dz, sleeveColor, { mat: sleeveMat, slot: 'sleeve', group: armGroup });
+      add(hx0 + wShift, hx1 + wShift, -0.5, 1.2, 11.8 + dz, 14.8 + dz, look.skin, { mat: 'skin', slot: 'hand', group: handGroup });
     } else if (emote === 'cheer') {
-      const cBounce = Math.sin((emoteFrame || 0) * 2) * 0.5;
-      add(a, b, -1.0, 1.0, 11.5 + dz, 16.5 + dz, look.bareArms ? look.skin : look.shirt);
-      add(a, b, -0.8, 1.2, 16.2 + dz, 21.0 + dz + cBounce, lower, cuff);
-      add(a + 0.2, b - 0.2, -0.6, 1.0, 21.0 + dz + cBounce, 22.8 + dz + cBounce, look.skin);
+      const cBounce = Math.sin((emoteFrame || 0) * 2) * 0.4;
+      add(ax0, ax1, -0.8, 1.0, 8.2 + dz, 11.8 + dz, sleeveColor, { mat: sleeveMat, slot: 'sleeve', group: armGroup });
+      add(hx0, hx1, -0.6, 1.0, 11.8 + dz, 15.0 + dz + cBounce, look.skin, { mat: 'skin', slot: 'hand', group: handGroup });
     } else if (emote === 'clap') {
-      const cShift = Math.abs(Math.sin((emoteFrame || 0) * 4)) * 0.8;
-      const cx0 = s > 0 ? (1.2 - cShift) : (-3.0 + cShift);
-      const cx1 = s > 0 ? (3.0 - cShift) : (-1.2 + cShift);
-      add(a, b, -1.0, 1.2, 10.5 + dz, 14.5 + dz, look.bareArms ? look.skin : look.shirt);
-      add(cx0, cx1, 1.2, 3.8, 10.5 + dz, 12.8 + dz, lower, cuff);
-      add(cx0 + 0.2, cx1 - 0.2, 3.6, 4.8, 10.5 + dz, 12.8 + dz, look.skin);
+      const cShift = Math.abs(Math.sin((emoteFrame || 0) * 4)) * 0.6;
+      const cx0 = s > 0 ? (0.8 - cShift) : (-2.2 + cShift);
+      const cx1 = s > 0 ? (2.2 - cShift) : (-0.8 + cShift);
+      add(ax0, ax1, -0.8, 1.0, 7.5 + dz, 10.8 + dz, sleeveColor, { mat: sleeveMat, slot: 'sleeve', group: armGroup });
+      add(cx0, cx1, 1.2, 2.8, 7.4 + dz, 9.2 + dz, look.skin, { mat: 'skin', slot: 'hand', group: handGroup });
     } else if (emote === 'thumbsup' && s > 0) {
-      add(a, b, -1.2, 1.4, 10.5 + dz, 14.5 + dz, look.bareArms ? look.skin : look.shirt);
-      add(a, b, 0.4, 3.8, 11.0 + dz, 13.2 + dz, lower, cuff);
-      add(a + 0.2, b - 0.2, 3.6, 4.8, 11.0 + dz, 13.0 + dz, look.skin);
-      add(a + 0.2, b - 0.2, 3.8, 4.4, 13.0 + dz, 14.8 + dz, look.skin);
+      add(ax0, ax1, -0.9, 1.1, 7.5 + dz, 10.8 + dz, sleeveColor, { mat: sleeveMat, slot: 'sleeve', group: armGroup });
+      add(hx0, hx1, 0.8, 2.8, 7.8 + dz, 9.5 + dz, look.skin, { mat: 'skin', slot: 'hand', group: handGroup });
+      add(hx0 + 0.2, hx1 - 0.2, 2.2, 2.8, 9.5 + dz, 10.7 + dz, look.skin, { mat: 'skin', slot: 'hand', group: handGroup });
     } else if (emote === 'heart') {
-      const hx = s > 0 ? 0.8 : -2.6;
-      add(a, b, -1.0, 1.0, 12 + dz, 16.8 + dz, look.bareArms ? look.skin : look.shirt);
-      add(hx, hx + 1.8, 0, 1.8, 16.8 + dz, 21.8 + dz, lower, cuff);
-      add(hx + 0.2, hx + 1.6, 0.2, 1.6, 21.8 + dz, 23.2 + dz, look.skin);
+      const hx = s > 0 ? 0.5 : -1.9;
+      add(ax0, ax1, -0.8, 0.9, 8.4 + dz, 12.2 + dz, sleeveColor, { mat: sleeveMat, slot: 'sleeve', group: armGroup });
+      add(hx, hx + 1.4, -0.2, 1.2, 12.2 + dz, 15.2 + dz, look.skin, { mat: 'skin', slot: 'hand', group: handGroup });
     } else if (emote === 'dance') {
-      const dArm = Math.sin((emoteFrame || 0) * 3 + s * 1.6) * 1.8;
-      add(a, b, -1.4 + dArm * 0.4, 1.4 + dArm * 0.4, 10.8 + dz, 14.8 + dz, look.bareArms ? look.skin : look.shirt);
-      add(a, b, 0.4 + dArm * 0.8, 3.8 + dArm * 0.8, 9.6 + dz, 11.8 + dz, lower, cuff);
-      add(a + 0.2, b - 0.2, 3.6 + dArm * 0.8, 4.9 + dArm * 0.8, 9.8 + dz, 11.6 + dz, look.skin);
+      const dArm = Math.sin((emoteFrame || 0) * 3 + s * 1.6) * 1.2;
+      add(ax0, ax1, -1.0 + dArm * 0.4, 1.1 + dArm * 0.4, 7.6 + dz, 10.9 + dz, sleeveColor, { mat: sleeveMat, slot: 'sleeve', group: armGroup });
+      add(hx0, hx1, 0.2 + dArm * 0.7, 2.2 + dArm * 0.7, 6.6 + dz, 8.4 + dz, look.skin, { mat: 'skin', slot: 'hand', group: handGroup });
     } else {
-      const sway = idleBreathe ? s * 0.15 : 0;
-      add(a + sway, b + sway, -1.4 + o * 0.5, 1.4 + o * 0.5, 11.2 + idleBreathe * 0.5, 15 + idleBreathe, look.bareArms ? look.skin : look.shirt);
-      add(a + sway, b + sway, -1.2 + o, 1.2 + o, 8.7 + idleBreathe * 0.4, 11.2 + idleBreathe * 0.5, lower, cuff);
-      add(a + 0.2 + sway, b - 0.2 + sway, -1 + o, 1 + o, 7.5 + idleBreathe * 0.3, 8.7 + idleBreathe * 0.4, look.skin);
+      // Standard standing / walking arm (character.py lines 67-69: sleeve 7.4..10.9, hand 5.5..7.4)
+      add(ax0, ax1, -1.1 + o * 0.7, 1.1 + o * 0.7, 7.4 + dz + idleBreathe * 0.3, 10.9 + dz + idleBreathe * 0.5, sleeveColor, {
+        mat: sleeveMat,
+        slot: 'sleeve',
+        group: armGroup,
+      });
+      add(hx0, hx1, -0.95 + o, 0.95 + o, 5.5 + dz + idleBreathe * 0.2, 7.4 + dz + idleBreathe * 0.3, look.skin, {
+        mat: 'skin',
+        slot: 'hand',
+        group: handGroup,
+      });
     }
   }
 
-  // head: skin box with the face painted on its front & side planes, plus 3D nose / ears
-  const hdz = dz + idleBreathe * 0.6;
-  add(-5, 5, -4.6, 4.6, 15 + hdz, 23 + hdz, look.skin, headTex(look, { blink: blink || isLie || emote === 'sleep', action, actionFrame, emote, emoteFrame }));
+  // 4. Head: 75% cube (6.75 per side: x, y in [-3.375, 3.375], z in [11.0, 17.75])
+  const hdz = dz + idleBreathe * 0.5;
   const z = (v) => v + hdz;
-  add(-0.65, 0.65, 4.6, 5.35, z(17.2), z(18.5), sh(look.skin, -0.03));
-  const hairy = ['bob', 'long', 'ponytail', 'curls'].includes(look.hairStyle);
-  if (!hairy) for (const s of [-1, 1]) add(s > 0 ? 5 : -5.6, s > 0 ? 5.6 : -5, -0.6, 1, z(17.8), z(20), sh(look.skin, -0.05));
-  hairBoxes(look, add, z);
+  const h = H_HALF; // 3.375
+  const headGroup = nextGroup++;
+  add(-h, h, -h, h, z(HB), z(hz(9)), look.skin, {
+    mat: 'skin',
+    slot: 'head',
+    group: headGroup,
+    dz: hdz,
+    tex: makeHeadTexCallback(look, pose),
+  });
+
+  // 5. Hair (thin 0.75 cap at z 17.75..18.5 + front fringe down to hz(7.7) = 16.775, adapted per style)
+  const hairGroup = nextGroup++;
+  buildHairBoxes(look, add, z, h, hairGroup);
+
+  // 6. NPC & Avatar Accessories
   if (look.mustache) {
-    for (const s of [-1, 1]) {
-      add(s > 0 ? 0.8 : -2.8, s > 0 ? 2.8 : -0.8, 4.6, 5.4, z(16.9), z(18.2), look.hair, voxTex(7));
-      add(s > 0 ? 2.8 : -3.4, s > 0 ? 3.4 : -2.8, 4.6, 5.3, z(16.2), z(17.6), look.hair, voxTex(9));
-      add(s > 0 ? 0.6 : -4.3, s > 0 ? 4.3 : -0.6, 4.6, 5.3, z(20), z(21), look.hair, voxTex(3)); // bushy brows
-    }
+    const mGroup = nextGroup++;
+    add(-1.6, 1.6, h - 0.1, h + 0.35, z(12.6), z(13.35), look.hair, { mat: 'hair', slot: 'mustache', group: mGroup });
   }
+
   const acc = look.accessory;
   const accColor = look.accessoryColor || '#2a2030';
   if (look.glasses || acc === 'glasses') {
-    for (const s of [-1, 1]) add(s > 0 ? 5 : -5.3, s > 0 ? 5.3 : -5, -1, 4.6, z(19.3), z(19.8), accColor);
+    const gGroup = nextGroup++;
+    for (const s of [-1, 1]) {
+      add(s > 0 ? h : -h - 0.2, s > 0 ? h + 0.2 : -h, -0.4, h, z(14.1), z(14.6), accColor, { mat: 'acc', slot: 'glasses_side', group: gGroup });
+    }
   }
   if (acc === 'cap') {
-    add(-5.3, 5.3, -4.9, 4.9, z(22.6), z(24.8), accColor);
-    add(-4.6, 4.6, 4.6, 7.2, z(22.2), z(23.2), accColor);
-    add(-0.7, 0.7, -0.7, 0.7, z(24.8), z(25.4), sh(accColor, -0.2));
+    const cGroup = nextGroup++;
+    add(-h - 0.2, h + 0.2, -h - 0.2, h + 0.2, z(17.5), z(18.9), accColor, { mat: 'acc', slot: 'cap', group: cGroup });
+    add(-h + 0.3, h - 0.3, h, h + 1.6, z(17.2), z(17.75), accColor, { mat: 'acc', slot: 'cap_brim', group: cGroup });
   }
   if (acc === 'headphones') {
-    add(-5.6, 5.6, -0.8, 0.8, z(24.2), z(25.2), accColor);
+    const hpGroup = nextGroup++;
+    add(-h - 0.35, h + 0.35, -0.5, 0.5, z(18.4), z(19.0), accColor, { mat: 'acc', slot: 'headphones', group: hpGroup });
     for (const s of [-1, 1]) {
-      const ex0 = s > 0 ? 5.0 : -6.2;
-      const ex1 = s > 0 ? 6.2 : -5.0;
-      add(ex0, ex1, -1.8, 1.8, z(17.0), z(21.0), accColor);
-      add(s > 0 ? 4.8 : -5.2, s > 0 ? 5.2 : -4.8, -1.4, 1.4, z(17.4), z(20.6), '#1a1820');
+      const ex0 = s > 0 ? h : -h - 0.75;
+      const ex1 = s > 0 ? h + 0.75 : -h;
+      add(ex0, ex1, -1.1, 1.1, z(13.0), z(15.8), accColor, { mat: 'acc', slot: 'headphones', group: hpGroup });
     }
   }
   if (look.headband) {
-    add(-5.4, 5.4, -4.8, 5.1, z(21.4), z(22.5), look.headband);
+    add(-h - 0.22, h + 0.22, -h - 0.22, h + 0.22, z(16.1), z(16.75), look.headband, { mat: 'acc', slot: 'headband' });
   }
-  if (look.hat) { // pillbox hat with a gold band and button
-    add(-4, 4, -3.8, 3.8, z(24.3), z(25.4), look.gold);
-    add(-3.7, 3.7, -3.5, 3.5, z(25.4), z(28), look.shirt, voxTex(5));
-    add(-0.7, 0.7, -0.7, 0.7, z(28), z(28.8), look.gold);
+  if (look.hat) { // Bellhop pillbox hat
+    const hatBandGroup = nextGroup++;
+    const hatCrownGroup = nextGroup++;
+    add(-2.5, 2.5, -2.5, 2.5, z(18.5), z(19.2), look.gold || '#f6c667', { mat: 'gold', slot: 'hat_band', group: hatBandGroup });
+    add(-2.3, 2.3, -2.3, 2.3, z(19.2), z(20.9), look.shirt, { mat: 'shirt', slot: 'hat_crown', group: hatCrownGroup });
+    add(-0.5, 0.5, -0.5, 0.5, z(20.9), z(21.4), look.gold || '#f6c667', { mat: 'gold', slot: 'hat_top', group: hatBandGroup });
   }
-  if (look.chefHat) { // tall white chef toque
-    add(-4.4, 4.4, -4.2, 4.2, z(24.2), z(25.6), '#e8e8f0');
-    add(-4.8, 4.8, -4.5, 4.5, z(25.6), z(29.5), '#ffffff', voxTex(4));
+  if (look.chefHat) { // Tall white chef toque
+    const chefBandGroup = nextGroup++;
+    const chefCrownGroup = nextGroup++;
+    add(-2.8, 2.8, -2.8, 2.8, z(18.5), z(19.4), '#e8e8f0', { mat: 'acc', slot: 'chef_band', group: chefBandGroup });
+    add(-3.2, 3.2, -3.2, 3.2, z(19.4), z(21.8), '#f2ede4', { mat: 'acc', slot: 'chef_crown', group: chefCrownGroup });
   }
   if (look.goggles) {
-    add(-5, 5, 4.6, 5, z(21), z(22.3), '#2f3a4a');
+    const gogStrapGroup = nextGroup++;
+    const gogLensGroup = nextGroup++;
+    add(-h - 0.22, h + 0.22, -h - 0.22, h + 0.22, z(15.6), z(16.5), '#2f3a4a', { mat: 'acc', slot: 'goggles_strap', group: gogStrapGroup });
     for (const s of [-1, 1]) {
-      add(s > 0 ? 5 : -5.4, s > 0 ? 5.4 : -5, -1.5, 4.6, z(21), z(22.3), '#2f3a4a');
-      add(s > 0 ? 1.1 : -4.3, s > 0 ? 4.3 : -1.1, 5, 5.9, z(20.6), z(23), '#8fe36b', lensTex);
+      const gx0 = s > 0 ? 0.5 : -2.6;
+      const gx1 = s > 0 ? 2.6 : -0.5;
+      add(gx0, gx1, h, h + 0.45, z(15.4), z(16.7), '#8fe36b', { mat: 'acc', slot: 'goggles_lens', group: gogLensGroup });
     }
   }
   if (look.flower) {
-    add(-6.3, -5.6, 0.2, 3, z(21.2), z(23.6), '#ff5f8a');
-    add(-6.7, -6.3, 1, 2.2, z(22), z(22.8), '#ffd24a');
+    add(-h - 0.55, -h - 0.05, 0.2, 1.8, z(15.8), z(17.4), '#ff5f8a', { mat: 'acc', slot: 'flower' });
+    add(-h - 0.75, -h - 0.45, 0.6, 1.4, z(16.2), z(17.0), '#ffd24a', { mat: 'gold', slot: 'flower_center' });
   }
+
   return P;
 }
 
-function hairBoxes(look, add, z) {
-  const hc = look.hair, v = voxTex(11);
-  const hb = (...a) => add(...a.slice(0, 6), hc, v);
-  const st = look.hairStyle;
-  if (st === 'bald') { // rim of hair around the sides and back only
-    hb(5, 5.5, -4.6, 0.8, z(17.5), z(21.5)); hb(-5.5, -5, -4.6, 0.8, z(17.5), z(21.5)); hb(-5.5, 5.5, -5.1, -4.6, z(17.5), z(21.5));
+function buildHairBoxes(look, add, z, h, hairGroup) {
+  const hc = look.hair || '#5a3826';
+  const st = look.hairStyle || 'short';
+  const hb = (x0, x1, y0, y1, z0, z1, slot = 'hair') => add(x0, x1, y0, y1, z0, z1, hc, { mat: 'hair', slot, group: hairGroup });
+
+  if (st === 'bald') {
+    // Fringe of hair around sides and back only (top and forehead bare)
+    hb(h - 0.1, h + 0.25, -h - 0.1, 0.6, z(13.2), z(15.8));
+    hb(-h - 0.25, -h + 0.1, -h - 0.1, 0.6, z(13.2), z(15.8));
+    hb(-h - 0.25, h + 0.25, -h - 0.25, -h + 0.1, z(13.2), z(15.8));
     return;
   }
-  hb(-5.5, 5.5, -5.1, 5.1, z(23), z(24.3)); // cap
-  add(-0.3, 0.3, -4.9, 4.9, z(24.3), z(24.7), sh(hc, 0.22)); // fine centre-parting sheen
-  const long = st === 'long' || st === 'bob';
-  const down = st === 'long' ? 15 : st === 'bob' ? 16 : 20.5;
-  hb(5, 5.5, -4.6, long ? 3 : 1.8, z(down), z(23)); hb(-5.5, -5, -4.6, long ? 3 : 1.8, z(down), z(23));
-  hb(-5.5, 5.5, -5.1, -4.6, z(st === 'long' ? 15 : st === 'bob' ? 15.4 : 18.5), z(23));
-  if (st === 'long') hb(-4.6, 4.6, -4.6, -2.6, z(9.5), z(15));
-  if (st === 'spiky') {
-    hb(5, 6.3, -4.6, -1.5, z(20), z(23.5)); hb(-6.3, -5, -4.6, -1.5, z(20), z(23.5));
-    for (const [x, y, h] of [[-3.5, -2.5, 2.6], [0, -1, 3.6], [3.2, -2.8, 2.4], [-2.8, 2.2, 2], [2.6, 2.4, 2.4], [0.2, 3.4, 1.8]]) {
-      hb(x - 0.95, x + 0.95, y - 0.95, y + 0.95, z(24.3), z(24.3 + h));
+
+  // Approved Pass 14b thin hair cap (0.75 thick at z 17.75..18.5) + short front fringe (hz(7.7)..hz(9))
+  hb(-h - 0.15, h + 0.15, -h - 0.15, h + 0.15, z(hz(9)), z(hz(9) + 0.75), 'hair_cap');
+  hb(-h - 0.05, h + 0.05, h - 0.4, h + 0.05, z(hz(7.7)), z(hz(9)), 'hair_fringe');
+  // Back nape hair inset on x so it is 100% occluded behind head in 'down'/'right' views and visible in back views
+  hb(-h + 0.35, h - 0.35, -h - 0.1, -h + 0.3, z(13.5), z(hz(9)), 'hair_back');
+
+  if (st === 'bob') {
+    hb(h - 0.2, h + 0.25, -h - 0.15, 1.6, z(12.0), z(hz(9)));
+    hb(-h - 0.25, -h + 0.2, -h - 0.15, 1.6, z(12.0), z(hz(9)));
+    hb(-h - 0.2, h + 0.2, -h - 0.25, -h + 0.2, z(12.0), z(hz(9)));
+  } else if (st === 'long') {
+    hb(h - 0.2, h + 0.3, -h - 0.15, 1.6, z(9.6), z(hz(9)));
+    hb(-h - 0.3, -h + 0.2, -h - 0.15, 1.6, z(9.6), z(hz(9)));
+    hb(-h - 0.1, h + 0.1, -h - 0.35, -h + 0.3, z(8.0), z(hz(9)));
+  } else if (st === 'spiky') {
+    for (const [sx, sy, sh] of [
+      [-2.1, -1.5, 1.3], [0.0, -0.6, 1.8], [2.1, -1.6, 1.3],
+      [-1.7, 1.4, 1.1], [1.7, 1.4, 1.2],
+    ]) {
+      hb(sx - 0.75, sx + 0.75, sy - 0.75, sy + 0.75, z(hz(9) + 0.75), z(hz(9) + 0.75 + sh));
     }
   } else if (st === 'ponytail') {
-    hb(-1.8, 1.8, -6.6, -4.6, z(19), z(24)); // high ponytail puff extending back
-    hb(-1.4, 1.4, -7.2, -5.0, z(16), z(20.5)); // tail drop
-    add(-1.2, 1.2, -5.2, -4.6, z(21.5), z(23), '#ff5f8a'); // hair-tie band
-    hb(-5, 1.5, 4.6, 5.1, z(21.2), z(23)); hb(1.5, 5, 4.6, 5.1, z(22), z(23));
+    add(-0.85, 0.85, -h - 0.45, -h - 0.05, z(15.4), z(16.5), '#ff5f8a', { mat: 'acc', slot: 'hair_tie' });
+    hb(-1.2, 1.2, -h - 1.5, -h - 0.2, z(14.2), z(17.2));
+    hb(-0.95, 0.95, -h - 1.8, -h - 0.5, z(11.6), z(14.5));
   } else if (st === 'curls') {
-    for (const [cx, cy, cz] of [
-      [-4.5, -2, 23.5], [4.5, -2, 23.5], [-3, 3, 23.8], [3, 3, 23.8],
-      [-5.5, 0, 20], [5.5, 0, 20], [-5.2, -3.5, 18], [5.2, -3.5, 18],
+    for (const [cx, cy, cz, ch] of [
+      [-2.4, -1.2, 18.2, 1.2], [2.4, -1.2, 18.2, 1.2],
+      [-1.6, 1.6, 18.2, 1.1], [1.6, 1.6, 18.2, 1.1],
+      [-h - 0.3, -0.4, 14.2, 2.8], [h + 0.3, -0.4, 14.2, 2.8],
     ]) {
-      hb(cx - 1.2, cx + 1.2, cy - 1.2, cy + 1.2, z(cz), z(cz + 2.4));
+      hb(cx - 0.85, cx + 0.85, cy - 0.85, cy + 0.85, z(cz), z(cz + ch));
     }
-    hb(-5, 1.5, 4.6, 5.1, z(21), z(23)); hb(1.5, 5, 4.6, 5.1, z(21.5), z(23));
-  } else if (st === 'long') {
-    hb(-5, 2, 4.6, 5.1, z(21), z(23)); hb(2, 5, 4.6, 5.1, z(22), z(23));
-  } else {
-    hb(-5, 1.5, 4.6, 5.1, z(st === 'bob' ? 20.8 : 21.2), z(23)); hb(1.5, 5, 4.6, 5.1, z(22), z(23));
   }
 }
 
-// ---------- textures: tex(g, W, H, fc, face, part) in face units ----------
+// ---------- Orthographic Raycast & Pixel-Art Rasteriser ----------
 
-function soleTex(g, W, H, fc) {
-  g.fillStyle = fc('#2a2030');
-  g.fillRect(0, H - 0.55, W, 0.55);
-  g.fillStyle = 'rgba(255,255,255,0.22)';
-  g.fillRect(0.2, H - 0.85, W - 0.4, 0.25);
-  g.fillStyle = 'rgba(0,0,0,0.18)';
-  g.fillRect(0.15, H - 0.3, W - 0.3, 0.08); // fine welt stitch line
+// Pure 3D quarter-turn rotations mapping local (lx=sideways, ly=forward) to core.py world (wx, wy):
+// In core.py: +wx goes screen-left-and-down (lit 'left' face), +wy goes screen-right-and-down (shaded 'right' face).
+const DIR_BASIS = {
+  down: { rx: 0, ry: 1, fx: 1, fy: 0 },   // wx = +ly (front on screen-left), wy = +lx (right side on screen-right)
+  left: { rx: 1, ry: 0, fx: 0, fy: -1 },  // wx = +lx, wy = -ly
+  up: { rx: 0, ry: -1, fx: -1, fy: 0 },   // wx = -ly, wy = -lx
+  right: { rx: -1, ry: 0, fx: 0, fy: 1 }, // wx = -lx, wy = +ly (front on screen-right)
+};
+
+function worldBoxCore(part, dir) {
+  const b = DIR_BASIS[dir] || DIR_BASIS.down;
+  const w = (lx, ly) => [lx * b.rx + ly * b.fx, lx * b.ry + ly * b.fy];
+  const c0 = w(part.x0, part.y0);
+  const c1 = w(part.x1, part.y0);
+  const c2 = w(part.x0, part.y1);
+  const c3 = w(part.x1, part.y1);
+  const wx0 = Math.min(c0[0], c1[0], c2[0], c3[0]);
+  const wx1 = Math.max(c0[0], c1[0], c2[0], c3[0]);
+  const wy0 = Math.min(c0[1], c1[1], c2[1], c3[1]);
+  const wy1 = Math.max(c0[1], c1[1], c2[1], c3[1]);
+  return { wx0, wx1, wy0, wy1, wz0: part.z0, wz1: part.z1, basis: b };
 }
 
-function voxTex(seed) {
-  const STEP = 0.5; // half-voxel grain: doubles the resolvable hair/fabric texture detail
-  return (g, W, H) => { // per-voxel sheen + faint grid so hair reads as stacked voxels
-    for (let i = 0; i < W / STEP; i++) {
-      for (let j = 0; j < H / STEP; j++) {
-        const r = (i * 31 + j * 17 + seed * 13) % 5;
-        if (r > 1) continue;
-        g.fillStyle = r ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.16)';
-        g.fillRect(i * STEP, j * STEP, Math.min(STEP, W - i * STEP), Math.min(STEP, H - j * STEP));
-      }
+const projectCss = (wx, wy, wz) => [(wy - wx) * KX, (wx + wy) * (KX * 0.5) - wz * KZ];
+
+// Evaluates torso outfit details in local torso coordinates (lx, ly, lz) using only material ramps.
+function evalTorsoColor(look, lx, ly, lz, bandIdx, ramps) {
+  const bandKey = bandIdx === 0 ? 'top' : (bandIdx === 1 ? 'left' : 'right');
+  const shirtRmp = ramps.shirt;
+  const o = look.outfit || 'tee';
+  const isFront = ly > 1.2;
+
+  if (o === 'tee') {
+    // Pass 14b calm accent: single horizontal waist crease (texture.py character('shirt_torso'))
+    if (TEXTURE_RULES.cloth?.enabled !== false && bandIdx !== 0 && lz >= 6.4 && lz <= 6.6) {
+      return shirtRmp.right;
     }
-    g.strokeStyle = 'rgba(0,0,0,0.13)'; g.lineWidth = 0.08;
-    g.beginPath();
-    for (let i = 1; i < W; i++) { g.moveTo(i, 0); g.lineTo(i, H); }
-    for (let j = 1; j < H; j++) { g.moveTo(0, j); g.lineTo(W, j); }
-    g.stroke();
-  };
-}
+    return shirtRmp[bandKey];
+  }
 
-function cuffTex(color) {
-  return (g, W, H, fc) => {
-    g.fillStyle = fc(color); g.fillRect(0, H - 0.8, W, 0.8);
-    g.fillStyle = 'rgba(0,0,0,0.15)'; g.fillRect(0, H - 0.85, W, 0.07); // seam line
-  };
-}
-
-function lensTex(g, W, H, fc, face) {
-  if (face !== 'front') return;
-  g.fillStyle = fc('#bff3ff'); g.fillRect(0.4, 0.4, W - 0.8, H - 0.8);
-  g.fillStyle = 'rgba(255,255,255,0.8)'; g.fillRect(0.7, 0.6, 0.8, 0.8);
-  g.fillStyle = 'rgba(255,255,255,0.4)'; g.fillRect(1.6, 1.3, 0.35, 0.35); // secondary sparkle
-}
-
-function headTex(look, pose = {}) {
-  const { blink = false, action = null, actionFrame = 0 } = pose;
-  return (g, W, H, fc, face) => {
-    if (face === 'top' && look.hairStyle === 'bald') { // comb-over strands on the bald top
-      g.fillStyle = fc(look.hair);
-      for (const [y, a, w] of [[1.2, 2, 6], [2.2, 1.7, 6.6], [3.2, 1.5, 7], [4.2, 1.8, 6.4], [5.2, 2, 6]]) g.fillRect(a, y, w, 0.28);
-      return;
-    }
-    if (face === 'left' || face === 'right') {
-      // Side temple hair sideburn & warm cheek contour (no duplicate side-eye on 3/4 view)
-      g.fillStyle = fc(look.hair);
-      g.fillRect(0, 0, W * 0.42, 2.6);
-      g.fillStyle = 'rgba(0,0,0,0.14)';
-      for (let k = 0; k < 3; k++) g.fillRect(W * 0.1 + k * W * 0.1, 0, 0.07, 2.6); // fine individual hair strands
-      g.fillStyle = 'rgba(255,105,125,0.26)';
-      g.fillRect(W - 2.4, 5.1, 1.5, 0.85);
-      g.fillStyle = 'rgba(255,255,255,0.18)';
-      g.fillRect(W - 2.0, 3.6, 0.8, 0.45);
-      return;
-    }
-    if (face !== 'front') return;
-
-    // Rosy cheek blush + warm specular dot
-    g.fillStyle = 'rgba(255,105,125,0.38)';
-    g.fillRect(0.65, 5.25, 2.0, 1.05);
-    g.fillRect(7.35, 5.25, 2.0, 1.05);
-    g.fillStyle = 'rgba(255,230,235,0.45)';
-    g.fillRect(0.95, 5.4, 0.55, 0.35);
-    g.fillRect(8.4, 5.4, 0.55, 0.35);
-
-    const eh = look.glasses ? 1.6 : 2.15;
-    for (const ex of [1.55, 5.95]) {
-      // Subtle upper-eyelid crease for volumetric depth
-      g.fillStyle = fc(sh(look.skin, -0.16));
-      g.fillRect(ex, 2.65, 2.5, 0.32);
-
-      if (blink) {
-        // Closed eyelid with gentle lash curve
-        g.fillStyle = fc(sh(look.skin, -0.08));
-        g.fillRect(ex, 3.0, 2.5, eh * 0.75);
-        g.fillStyle = look.eye;
-        g.fillRect(ex - 0.1, 3.85, 2.7, 0.48);
-        g.fillRect(ex < 5 ? ex - 0.35 : ex + 2.45, 3.65, 0.35, 0.45);
-      } else {
-        // Open eye: sclera, iris outer tone, deep pupil core, and dual catchlights
-        g.fillStyle = fc('#ffffff');
-        g.fillRect(ex, 3.0, 2.5, eh);
-        g.fillStyle = sh(look.eye, 0.18);
-        g.fillRect(ex + 0.45, 3.0, 1.6, eh);
-        g.fillStyle = look.eye;
-        g.fillRect(ex + 0.7, 3.15, 1.15, eh - 0.25);
-        g.fillStyle = '#ffffff';
-        g.fillRect(ex + 0.55, 3.1, 0.68, 0.68);
-        g.fillStyle = 'rgba(255,255,255,0.75)';
-        g.fillRect(ex + 1.45, 3.95, 0.38, 0.38);
-        g.fillStyle = 'rgba(255,255,255,0.3)';
-        g.fillRect(ex + 0.85, 3.35, 0.24, 0.24); // secondary fine catchlight
-      }
-
-      if (look.lashes) {
-        g.fillStyle = look.eye;
-        g.fillRect(ex - 0.1, 2.55, 2.7, 0.45);
-        g.fillRect(ex < 5 ? ex - 0.45 : ex + 2.5, 2.85, 0.42, 0.52);
-        for (const lt of [0.2, 1.1, 2.0]) g.fillRect(ex + lt, 2.28, 0.12, 0.32); // individual fine lash strokes
-        g.fillStyle = look.brow;
-        g.fillRect(ex, 1.95, 2.5, 0.4);
-      } else if (!look.mustache) {
-        g.fillStyle = look.brow;
-        const browTilt = look.mouth === 'frown' || action === 'treadmill';
-        if (browTilt) {
-          g.fillRect(ex - 0.1, ex < 5 ? 2.05 : 2.25, 1.35, 0.48);
-          g.fillRect(ex + 1.25, ex < 5 ? 2.25 : 2.05, 1.35, 0.48);
-        } else {
-          const lift = action === 'eat' || look.mouth === 'open' ? -0.15 : 0;
-          g.fillRect(ex - 0.1, 2.08 + lift, 2.7, 0.48);
+  if (o === 'bellhop') {
+    const goldRmp = ramps.gold;
+    if (lz >= 10.35) return goldRmp[bandKey];
+    if (lz <= 5.55) return ramps.pants.line;
+    if (isFront) {
+      if (Math.abs(lx) < 0.18) return shirtRmp.line;
+      const ax = Math.abs(lx);
+      if (ax >= 0.75 && ax <= 1.25) {
+        if ((lz >= 6.3 && lz <= 6.8) || (lz >= 7.7 && lz <= 8.2) || (lz >= 9.1 && lz <= 9.6)) {
+          return goldRmp.top;
         }
       }
     }
+    return shirtRmp[bandKey];
+  }
 
+  if (o === 'cardigan') {
+    if (isFront) {
+      const ax = Math.abs(lx);
+      if (ax < 0.85) return ramps.under[bandKey];
+      if (ax < 1.1) return shirtRmp.line;
+    }
+    if (bandIdx !== 0 && lz >= 6.4 && lz <= 6.6) return shirtRmp.right;
+    return shirtRmp[bandKey];
+  }
+
+  if (o === 'labcoat') {
+    if (isFront) {
+      if (lz > 8.4 && Math.abs(lx) < (lz - 8.4) * 0.45) return ramps.under[bandKey];
+      if (lz <= 8.4 && Math.abs(lx) < 0.18) return shirtRmp.line;
+    }
+    return shirtRmp[bandKey];
+  }
+
+  if (o === 'hoodie') {
+    if (isFront) {
+      const ax = Math.abs(lx);
+      if (ax >= 0.45 && ax <= 0.7 && lz >= 8.8 && lz <= 10.5) return ramps.gold.top;
+      if (ax <= 1.45 && lz >= 5.6 && lz <= 7.0) return shirtRmp.right;
+    }
+    if (lz <= 5.5) return shirtRmp.right;
+    return shirtRmp[bandKey];
+  }
+
+  if (o === 'dress') {
+    if (isFront && lz >= 10.1 && Math.abs(lx) < 1.1) return ramps.skin[bandKey];
+    if (lz >= 5.6 && lz <= 6.3) return ramps.gold[bandKey];
+    return shirtRmp[bandKey];
+  }
+
+  if (o === 'swimsuit') {
+    if (isFront && lz >= 10.0 && Math.abs(lx) < 1.1) return ramps.skin[bandKey];
+    if (isFront && Math.abs(lx) < 0.35) return ramps.gold.top;
+    return shirtRmp[bandKey];
+  }
+
+  return shirtRmp[bandKey];
+}
+
+// Stamps projected face features onto the head's front isometric plane (2:1 slope).
+// Matches core.py apply_face_stamps() at n=4 (DETAIL=2) and scales cleanly to n=2 (DETAIL=1).
+function applyFaceStamps(colorGrid, pidGrid, W, H, headIdx, dir, look, pose, n, X0, Y0, hdz) {
+  if (headIdx < 0 || (dir !== 'down' && dir !== 'right')) return;
+
+  // Find horizontal reference edge of the head box
+  let xMin = W;
+  let xMax = -1;
+  for (let i = 0; i < W * H; i++) {
+    if (pidGrid[i] === headIdx) {
+      const x = i % W;
+      if (x < xMin) xMin = x;
+      if (x > xMax) xMax = x;
+    }
+  }
+  if (xMax < xMin) return;
+
+  const isDown = dir === 'down';
+  const xRef = isDown ? xMin : xMax;
+  const slopeStep = (x) => (isDown ? Math.floor((x - xRef) / 2) : Math.floor((xRef - x) / 2));
+
+  const paintPx = (x, y, hexColor) => {
+    if (!hexColor || x < 0 || x >= W || y < 0 || y >= H) return;
+    const idx = y * W + x;
+    if (pidGrid[idx] === headIdx) {
+      colorGrid[idx] = hexColor;
+    }
+  };
+
+  // Derive face feature colors with clear contrast across all skin tones (guide 3.5 & 4.3)
+  const skinRgb = hexToRgb(look.skin || '#f0c49a');
+  const skinLuma = (skinRgb[0] * 299 + skinRgb[1] * 587 + skinRgb[2] * 114) / 1000;
+  const S = '#f2ede4'; // off-white sclera
+  const P = look.eye || '#1b1230'; // pupil
+  const HI = '#fff4e8'; // 1px/2x2 upper catchlight
+  const BROW = look.brow || P;
+  const MOUTH = look.mouth === 'lips'
+    ? '#c0304a'
+    : (skinLuma < 125 ? '#351915' : (skinLuma < 165 ? '#5e2c28' : '#8a4a4a'));
+  const TONGUE = '#d9707a';
+  const BLUSH = skinLuma < 140 ? '#7a3a2e' : '#e89a8a';
+  const TEAR = '#bfe3ff';
+
+  const expr = resolveExpression(pose, look);
+  // Explicit expression vs default idle smile:
+  // Locked style update: player's idle face matches pass 13/14b face_8x.png (white sclera, centred pupil + highlight, thin brows, mouth).
+  const isExplicitExpr = Boolean(pose.expression || pose.emote || pose.action || pose.blink);
+
+  const projectWorld = (lx, ly, wz) => {
+    const b = DIR_BASIS[dir];
+    const wx = lx * b.rx + ly * b.fx;
+    const wy = lx * b.ry + ly * b.fy;
+    const px = X0 + (wy - wx) * 2 * n - 0.5;
+    const py = Y0 + (wx + wy) * n - wz * n * KZ - 0.5;
+    return [px, py];
+  };
+
+  const ff = H_HALF + 0.03;
+  const eyeZ = hdz + hz(expr === 'sad' ? 3.9 : 4.1);
+  const mouthZ = hdz + hz(1.9);
+
+  // Scale factor: isHiRes for n>=3 (DETAIL=2, 10x12 eye map from core.py), 6x6 even-width eye map for n<=2 (DETAIL=1)
+  const isHiRes = n >= 3;
+  const ew = isHiRes ? 10 : 6;
+  const eh = isHiRes ? 12 : 6;
+
+  const buildEyeGrid = (sideSgn) => {
+    const isNearEye = (isDown && sideSgn > 0) || (!isDown && sideSgn < 0);
+    // Sleepy / closed line eye
+    if (expr === 'sleepy') {
+      const rows = Array.from({ length: eh }, () => new Array(ew).fill(null));
+      const midV = Math.floor(eh / 2);
+      for (let u = 0; u < ew; u++) {
+        rows[midV][u] = P;
+        if (isHiRes) rows[midV + 1][u] = P;
+      }
+      return rows;
+    }
+    // Happy arc eye (∩) for laughing or wink's winking eye
+    if (expr === 'laughing' || (expr === 'wink' && isNearEye)) {
+      const rows = Array.from({ length: eh }, () => new Array(ew).fill(null));
+      const midV = Math.floor(eh / 2);
+      for (let u = 0; u < ew; u++) {
+        const isArch = isHiRes ? (u >= 2 && u <= 7) : (u >= 1 && u <= 3);
+        const v = isArch ? midV - (isHiRes ? 2 : 1) : midV;
+        rows[v][u] = P;
+        if (isHiRes) rows[v + 1][u] = P;
+      }
+      return rows;
+    }
+
+    // Standard open eye with white sclera on left & right, centred dark pupil, and highlight
+    if (isHiRes) {
+      // Exact 10x12 eye_map from core.py lines 411-424
+      const map = [
+        [S, S, S, S, S, S, S, S, S, S],
+        [S, S, S, S, S, S, S, S, S, S],
+        [S, S, P, P, HI, HI, P, P, S, S],
+        [S, S, P, P, HI, HI, P, P, S, S],
+        [S, S, P, P, P, P, P, P, S, S],
+        [S, S, P, P, P, P, P, P, S, S],
+        [S, S, P, P, P, P, P, P, S, S],
+        [S, S, P, P, P, P, P, P, S, S],
+        [S, S, P, P, P, P, P, P, S, S],
+        [S, S, P, P, P, P, P, P, S, S],
+        [S, S, S, S, S, S, S, S, S, S],
+        [S, S, S, S, S, S, S, S, S, S],
+      ];
+      if (expr === 'smug') {
+        // Half-lidded: top 3 rows covered by eyelid
+        map[0] = new Array(10).fill(null);
+        map[1] = new Array(10).fill(null);
+        map[2] = new Array(10).fill(P);
+      } else if (expr === 'thinking') {
+        // Pupil shifted slightly toward one side while keeping sclera border
+        for (let v = 2; v <= 9; v++) {
+          const hiRow = v === 2 || v === 3;
+          map[v] = [S, P, P, hiRow ? HI : P, hiRow ? HI : P, P, P, S, S, S];
+        }
+      } else if (expr === 'embarrassed') {
+        // Slightly smaller pupil core
+        map[2] = [S, S, S, S, S, S, S, S, S, S];
+        map[9] = [S, S, S, S, S, S, S, S, S, S];
+      }
+      return map;
+    }
+
+    // 1x detail (n <= 2): 6x6 even-stair eye map (1 col sclera left, 4 col centred pupil + highlight, 1 col sclera right)
+    const map1x = [
+      [S, S, S, S, S, S],
+      [S, P, HI, P, P, S],
+      [S, P, P, P, P, S],
+      [S, P, P, P, P, S],
+      [S, P, P, P, P, S],
+      [S, S, S, S, S, S],
+    ];
+    if (expr === 'smug') {
+      map1x[0] = [null, null, null, null, null, null];
+      map1x[1] = [P, P, P, P, P, P];
+    } else if (expr === 'thinking') {
+      map1x[1] = [S, HI, P, P, S, S];
+      map1x[2] = [S, P, P, P, S, S];
+      map1x[3] = [S, P, P, P, S, S];
+      map1x[4] = [S, P, P, P, S, S];
+    }
+    return map1x;
+  };
+
+  // Paint eyes & brows
+  for (const sgn of [-1, 1]) {
+    const isNearEye = (isDown && sgn > 0) || (!isDown && sgn < 0);
+    const lx = 2.1 * sgn * HS;
+    const [cx, cy] = projectWorld(lx, ff, eyeZ);
+
+    const x0 = xRef + 2 * Math.round((cx - ew / 2 - xRef) / 2);
+    const xMid = x0 + Math.floor(ew / 2);
+    const stMid = slopeStep(xMid);
+    const y0 = Math.round(cy - eh / 2 - stMid);
+
+    const eyeMap = buildEyeGrid(sgn);
+    for (let u = 0; u < ew; u++) {
+      const x = x0 + u;
+      const st = slopeStep(x);
+      for (let v = 0; v < eh; v++) {
+        paintPx(x, y0 + st + v, eyeMap[v][u]);
+      }
+    }
+
+    // Surprised: extra sclera row top & bottom (+15% taller eye)
+    if (expr === 'surprised') {
+      for (let u = 0; u < ew; u++) {
+        const x = x0 + u;
+        const st = slopeStep(x);
+        paintPx(x, y0 + st - 1, S);
+        paintPx(x, y0 + st + eh, S);
+      }
+    }
+
+    // Sad tear drop under near eye
+    if (expr === 'sad' && isNearEye) {
+      const tx = x0 + Math.floor(ew / 2);
+      const tst = slopeStep(tx);
+      paintPx(tx, y0 + tst + eh + 1, TEAR);
+      if (isHiRes) {
+        paintPx(tx + 1, y0 + tst + eh + 1, TEAR);
+        paintPx(tx, y0 + tst + eh + 2, TEAR);
+        paintPx(tx + 1, y0 + tst + eh + 2, TEAR);
+      }
+    }
+
+    // Embarrassed sweat drop near temple
+    if (expr === 'embarrassed' && isNearEye) {
+      const sx = x0 + ew + (isHiRes ? 1 : 0);
+      const sst = slopeStep(sx);
+      paintPx(sx, y0 + sst, TEAR);
+      paintPx(sx, y0 + sst + 1, TEAR);
+    }
+
+    // Blush pixels on cheeks for happy (explicit), laughing, wink, embarrassed
+    if ((expr === 'happy' && isExplicitExpr) || expr === 'laughing' || expr === 'wink' || expr === 'embarrassed') {
+      const bx0 = sgn < 0 ? x0 - (isHiRes ? 2 : 1) : x0 + ew - (isHiRes ? 2 : 1);
+      const bw = isHiRes ? 4 : 2;
+      for (let bu = 0; bu < bw; bu++) {
+        const bx = bx0 + bu;
+        const bst = slopeStep(bx);
+        paintPx(bx, y0 + bst + eh + (isHiRes ? 1 : 0), BLUSH);
+        if (isHiRes) paintPx(bx, y0 + bst + eh + 2, BLUSH);
+      }
+    }
+
+    // Thin brows (core.py lines 446-452: 8px wide at n=4, 4px wide at n=2, 1px tall, middle arched 1px)
+    const bw = isHiRes ? 8 : 4;
+    const baseGap = isHiRes ? 3 : 2;
+    let browLift = 0;
+    if (expr === 'surprised') browLift = isHiRes ? -2 : -1;
+    else if (expr === 'laughing' || (expr === 'happy' && isExplicitExpr)) browLift = -1;
+    else if (expr === 'sleepy') browLift = 1;
+    else if ((expr === 'wink' || expr === 'smug' || expr === 'thinking') && isNearEye) browLift = isHiRes ? -2 : -1;
+
+    const y0B = y0 - baseGap + browLift;
+    for (let u = 0; u < bw; u++) {
+      const x = x0 + 1 + u;
+      const st = slopeStep(x);
+      const isInner = (sgn < 0 && u >= bw / 2) || (sgn > 0 && u < bw / 2);
+      let dy = 0;
+      if (expr === 'angry') {
+        dy = isInner ? 1 : 0; // slanted inward and down
+      } else if (expr === 'sad' || expr === 'embarrassed') {
+        dy = isInner ? -1 : 0; // slanted inward and up
+      } else {
+        // Default thin arch from core.py: middle half lifted by 1px (connected 4px arch at 1x)
+        const isMid = isHiRes ? (u >= 2 && u <= 5) : (u >= 1);
+        dy = isMid ? -1 : 0;
+      }
+      paintPx(x, y0B + st + dy, BROW);
+    }
+
+    // Optional front glasses frame around each eye
     if (look.glasses || look.accessory === 'glasses') {
-      const gColor = look.accessoryColor || '#3a3340';
-      g.strokeStyle = gColor; g.lineWidth = 0.35;
-      g.strokeRect(1.3, 2.5, 3.2, 2.5); g.strokeRect(5.5, 2.5, 3.2, 2.5);
-      g.fillStyle = gColor; g.fillRect(4.5, 3.4, 1, 0.35);
-      g.fillStyle = 'rgba(255,255,255,0.35)';
-      g.fillRect(1.7, 2.8, 0.5, 0.5); g.fillRect(5.9, 2.8, 0.5, 0.5); // lens glint
+      const gCol = look.accessoryColor || '#3a3340';
+      const fw = ew + (isHiRes ? 2 : 1);
+      const fh = eh + (isHiRes ? 2 : 1);
+      const fx0 = x0 - (isHiRes ? 1 : 0);
+      const fy0 = y0 - (isHiRes ? 1 : 0);
+      for (let u = 0; u < fw; u++) {
+        const x = fx0 + u;
+        const st = slopeStep(x);
+        paintPx(x, fy0 + st, gCol);
+        paintPx(x, fy0 + st + fh - 1, gCol);
+      }
     }
+  }
 
-    if (look.mustache) return;
-    // fine philtrum shadow above the mouth
-    g.fillStyle = 'rgba(0,0,0,0.07)';
-    g.fillRect(4.7, 5.85, 0.6, 0.45);
-    const m = action === 'eat'
-      ? (actionFrame % 2 === 1 ? 'chew' : 'smile')
-      : action === 'treadmill'
-        ? 'pant'
-        : look.mouth;
+  // Mouth (skip if covered by mustache)
+  if (look.mustache) return;
 
-    if (m === 'lips') {
-      g.fillStyle = '#c0304a'; g.fillRect(3.75, 6.45, 2.5, 0.9);
-      g.fillStyle = '#ff8da1'; g.fillRect(4.15, 6.55, 1.5, 0.3);
-    } else if (m === 'open' || m === 'pant') {
-      g.fillStyle = '#5a1f2c'; g.fillRect(3.95, 6.35, 2.1, 1.15);
-      g.fillStyle = '#ffffff'; g.fillRect(4.15, 6.35, 1.7, 0.3);
-      g.fillStyle = '#e0707a'; g.fillRect(4.25, 7.0, 1.5, 0.45);
-    } else if (m === 'chew') {
-      g.fillStyle = '#9e4450'; g.fillRect(4.1, 6.55, 1.8, 0.75);
-      g.fillStyle = 'rgba(255,120,135,0.45)'; g.fillRect(6.4, 5.9, 1.1, 0.9);
-    } else {
-      g.fillStyle = '#a8505a';
-      g.fillRect(3.85, 6.68, 2.3, 0.5);
-      g.fillRect(3.55, m === 'frown' ? 7.0 : 6.38, 0.42, 0.42);
-      g.fillRect(6.03, m === 'frown' ? 7.0 : 6.38, 0.42, 0.42);
+  const [cxM, cyM] = projectWorld(0, ff, mouthZ);
+  const mw = isHiRes ? 10 : 6;
+  const mh = isHiRes ? 2 : 1;
+  const x0M = xRef + 2 * Math.round((cxM - mw / 2 - xRef) / 2);
+  const xMidM = x0M + Math.floor(mw / 2);
+  const stMidM = slopeStep(xMidM);
+  const y0M = Math.round(cyM - mh / 2 - stMidM);
+
+  if (expr === 'laughing') {
+    // Open mouth with tongue
+    const omH = isHiRes ? 5 : 3;
+    for (let u = 0; u < mw; u++) {
+      const x = x0M + u;
+      const st = slopeStep(x);
+      for (let v = 0; v < omH; v++) {
+        const isTongue = v >= Math.floor(omH / 2) && u >= Math.floor(mw * 0.2) && u < Math.ceil(mw * 0.8);
+        paintPx(x, y0M + st + v, isTongue ? TONGUE : MOUTH);
+      }
     }
-  };
-}
-
-function torsoTex(look, skirtTier = false) {
-  return (g, W, H, fc, face) => {
-    if (face !== 'front') return;
-    const mid = W / 2, o = look.outfit;
-    if (skirtTier) { // skirt tier: just the hem and the coat's front opening
-      g.fillStyle = fc(sh(look.shirt, -0.25)); g.fillRect(0, H - 0.4, W, 0.4);
-      if (o === 'labcoat') g.fillRect(mid - 0.1, 0, 0.2, H);
-      return;
+  } else if (expr === 'surprised') {
+    // Small round "O" mouth
+    const ow = isHiRes ? 4 : 2;
+    const oh = isHiRes ? 4 : 2;
+    const ox0 = xMidM - Math.floor(ow / 2);
+    for (let u = 0; u < ow; u++) {
+      const x = ox0 + u;
+      const st = slopeStep(x);
+      for (let v = 0; v < oh; v++) {
+        paintPx(x, y0M + st + v, MOUTH);
+      }
     }
-    if (o === 'tee') {
-      g.fillStyle = fc(look.skin); g.fillRect(mid - 1.3, 0, 2.6, 0.9);
-      g.fillStyle = fc('#ffffff'); g.fillRect(mid - 0.9, 2.8, 1.8, 1.8);
-      g.fillStyle = fc(sh(look.pants, 0.1)); g.fillRect(0, H - 1.2, W, 1.2);
-      g.fillStyle = fc('#f6c667'); g.fillRect(mid - 0.5, H - 1.1, 1.0, 0.9);
-      g.fillStyle = 'rgba(0,0,0,0.08)'; g.fillRect(1.1, 0.9, 0.15, H - 2.1); g.fillRect(W - 1.25, 0.9, 0.15, H - 2.1); // side seams
-    } else if (o === 'hoodie') {
-      g.fillStyle = fc(sh(look.shirt, -0.16)); g.fillRect(mid - 1.8, H - 3.2, 3.6, 2.2);
-      g.fillStyle = fc(sh(look.shirt, -0.26)); g.fillRect(mid - 1.8, H - 3.2, 0.3, 2.2); g.fillRect(mid + 1.5, H - 3.2, 0.3, 2.2);
-      g.fillStyle = fc('#ffffff'); g.fillRect(mid - 0.8, 1.0, 0.2, 2.0); g.fillRect(mid + 0.6, 1.0, 0.2, 2.0);
-      g.fillStyle = fc(sh(look.shirt, -0.2)); g.fillRect(0, H - 0.8, W, 0.8);
-    } else if (o === 'bellhop') {
-      g.fillStyle = fc(look.gold); g.fillRect(0, 0, W, 0.7);
-      g.fillStyle = 'rgba(255,255,255,0.3)'; g.fillRect(0, 0.7, W, 0.1); // braid piping highlight
-      g.fillStyle = fc(sh(look.shirt, -0.25)); g.fillRect(mid - 0.1, 0.7, 0.2, H);
-      g.fillStyle = fc(look.gold);
-      for (const a of [mid - 1.3, mid + 1.3]) for (const b of [1.8, 3.4, 5, 6.6]) g.fillRect(a - 0.35, b, 0.7, 0.7);
-      g.fillStyle = 'rgba(255,255,255,0.35)';
-      for (const a of [mid - 1.3, mid + 1.3]) for (const b of [1.8, 3.4, 5, 6.6]) g.fillRect(a - 0.12, b + 0.1, 0.22, 0.22); // button highlight
-      g.fillStyle = fc('#2a2030'); g.fillRect(0, H - 1, W, 1);
-    } else if (o === 'cardigan') {
-      g.fillStyle = fc(look.under); g.fillRect(mid - 1.2, 0, 2.4, H);
-      g.fillStyle = 'rgba(0,0,0,0.08)';
-      for (let ry = 0.4; ry < H; ry += 0.8) g.fillRect(mid - 1.2, ry, 2.4, 0.1); // ribbed knit texture
-      g.fillStyle = fc('#6b4a2e'); for (const b of [2, 4, 6]) g.fillRect(mid - 0.3, b, 0.6, 0.6);
-      g.fillStyle = fc(sh(look.shirt, -0.2)); g.fillRect(mid - 1.2, 0, 0.3, H); g.fillRect(mid + 0.9, 0, 0.3, H);
-      g.fillRect(0.5, 5, 1.6, 1.4); g.fillRect(W - 2.1, 5, 1.6, 1.4);
-    } else if (o === 'labcoat') {
-      g.fillStyle = fc(look.under); g.beginPath(); g.moveTo(mid - 1.5, 0); g.lineTo(mid + 1.5, 0); g.lineTo(mid, 3.2); g.closePath(); g.fill();
-      g.fillStyle = fc(sh(look.shirt, -0.3)); g.fillRect(mid - 0.1, 3.2, 0.2, H);
-      g.fillStyle = fc(sh(look.shirt, -0.15)); g.fillRect(0.6, 5, 1.7, 1.5); g.fillRect(W - 2.3, 5, 1.7, 1.5);
-      g.fillStyle = fc('#4da3ff'); g.fillRect(W - 2.3, 4.4, 0.4, 1); g.fillStyle = fc('#e04a4a'); g.fillRect(1, 1.8, 1.2, 0.7);
-      g.strokeStyle = 'rgba(0,0,0,0.15)'; g.lineWidth = 0.08;
-      g.beginPath(); g.moveTo(mid - 1.5, 0); g.lineTo(mid, 3.2); g.lineTo(mid + 1.5, 0); g.stroke(); // lapel stitch line
-    } else if (o === 'dress') {
-      g.fillStyle = fc(look.skin); g.fillRect(mid - 1.6, 0, 3.2, 1.1); g.fillRect(mid - 1, 1.1, 2, 0.5);
-      g.fillStyle = fc('#ffffff'); for (const [a, b] of [[-1.8, 1.4], [-1.2, 2], [-0.4, 2.3], [0.4, 2.3], [1.2, 2], [1.8, 1.4]]) g.fillRect(mid + a - 0.25, b, 0.5, 0.5);
-      g.fillStyle = fc('#c0304a'); g.fillRect(0, 5.4, W, 0.8);
-      g.fillStyle = 'rgba(255,255,255,0.18)'; g.fillRect(mid - 2.2, 2.6, 0.9, H - 2.8); // fabric sheen highlight
-    } else if (o === 'swimsuit') {
-      g.fillStyle = fc(sh(look.shirt, -0.22)); g.fillRect(mid - 1.4, -0.2, 2.8, 1.1); // scoop neckline trim
-      g.fillStyle = fc('#ffffff'); g.fillRect(mid - 0.35, 1.0, 0.7, H - 1.2); // racing stripe
-      g.fillStyle = 'rgba(255,255,255,0.18)'; g.fillRect(0.6, 1.2, 1.1, H - 2); // fabric sheen highlight
+  } else if (expr === 'sleepy' || expr === 'thinking') {
+    // Small off-centre line mouth
+    const sw = isHiRes ? 6 : 3;
+    const sx0 = x0M + (expr === 'sleepy' ? (isHiRes ? 3 : 1) : 0);
+    for (let u = 0; u < sw; u++) {
+      const x = sx0 + u;
+      const st = slopeStep(x);
+      for (let v = 0; v < mh; v++) {
+        paintPx(x, y0M + st + v, MOUTH);
+      }
     }
-  };
-}
-
-// ---------- rendering ----------
-
-function worldBox(part, dir) {
-  const [fx, fy] = DIRS[dir];
-  const rx = fy, ry = -fx; // right-hand side of the facing direction (a pure rotation, never a mirror)
-  const w = (lx, ly) => [lx * rx + ly * fx, lx * ry + ly * fy];
-  const cs = [w(part.x0, part.y0), w(part.x1, part.y0), w(part.x0, part.y1), w(part.x1, part.y1)];
-  const X = cs.map((c) => c[0]), Y = cs.map((c) => c[1]);
-  return { w, R: [rx, ry], F: [fx, fy], X0: Math.min(...X), X1: Math.max(...X), Y0: Math.min(...Y), Y1: Math.max(...Y) };
-}
-const project = (X, Y, Z) => [(X - Y) * KX, (X + Y) * KX / 2 - Z * KZ];
-
-// local face a part shows on the world normal n, with its local origin / u-axis / v-axis
-function faceOf(part, wb, n) {
-  const lx = n[0] * wb.R[0] + n[1] * wb.R[1];
-  const ly = n[0] * wb.F[0] + n[1] * wb.F[1];
-  const { x0, x1, y0, y1, z0, z1 } = part;
-  const name = lx === 1 ? 'right' : lx === -1 ? 'left' : ly === 1 ? 'front' : 'back';
-  const at = {
-    front: (a, b) => [x0 + a, y1, z1 - b], back: (a, b) => [x0 + a, y0, z1 - b],
-    right: (a, b) => [x1, y0 + a, z1 - b], left: (a, b) => [x0, y0 + a, z1 - b],
-  }[name];
-  const side = name === 'front' || name === 'back';
-  return { name, at, W: side ? x1 - x0 : y1 - y0, H: z1 - z0 };
+  } else if (expr === 'embarrassed') {
+    // Wavy mouth
+    for (let u = 0; u < mw; u++) {
+      const x = x0M + u;
+      const st = slopeStep(x);
+      const wave = ((Math.floor(u / (isHiRes ? 2 : 1))) % 2 === 0) ? 0 : -1;
+      for (let v = 0; v < mh; v++) {
+        paintPx(x, y0M + st + v + wave, MOUTH);
+      }
+    }
+  } else {
+    // Line / smile / frown / smirk mouth along the 2:1 slope
+    // Note: when !isExplicitExpr and expr === 'happy' (default idle player), keep the exact straight 2:1 line from face_8x.png!
+    for (let u = 0; u < mw; u++) {
+      const x = x0M + u;
+      const st = slopeStep(x);
+      const isLeftEnd = isHiRes ? (u < 2) : (u === 0);
+      const isRightEnd = isHiRes ? (u >= mw - 2) : (u === mw - 1);
+      let curve = 0;
+      if (expr === 'happy' && isExplicitExpr) {
+        if (isLeftEnd || isRightEnd) curve = -1;
+      } else if (expr === 'sad' || expr === 'angry') {
+        if (isLeftEnd || isRightEnd) curve = 1;
+      } else if (expr === 'wink' || expr === 'smug') {
+        if (isRightEnd) curve = -1;
+      }
+      for (let v = 0; v < mh; v++) {
+        paintPx(x, y0M + st + v + curve, MOUTH);
+      }
+    }
+  }
 }
 
 /**
- * Draws one pose to a canvas at native `scale` (e.g., devicePixelRatio).
- * `makeCanvas(w,h)` supplies canvases.
- * Returns { canvas, ox, oy, scale } — (ox,oy) is the figure's ground centre in CSS pixels.
+ * Draws one character pose to a canvas at native `scale`.
+ * Returns { canvas, ox, oy, cssW, cssH, scale } — (ox, oy) is the figure's ground centre in CSS pixels.
  */
 export function renderCharacter(look, dir, pose, makeCanvas, scale = 1) {
-  const parts = buildParts(look, pose).map((p) => ({ p, wb: worldBox(p, dir) }));
-  let minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9;
-  for (const { p, wb } of parts) {
-    for (const X of [wb.X0, wb.X1]) for (const Y of [wb.Y0, wb.Y1]) for (const Z of [p.z0, p.z1]) {
-      const [sx, sy] = project(X, Y, Z);
-      minX = Math.min(minX, sx); maxX = Math.max(maxX, sx); minY = Math.min(minY, sy); maxY = Math.max(maxY, sy);
-    }
-  }
-  const M = 3;
-  const ox = Math.ceil(-minX) + M, oy = Math.ceil(-minY) + M;
-  const cssW = Math.ceil(maxX - minX) + 2 * M + 1;
-  const cssH = Math.ceil(maxY - minY) + 2 * M + 1;
-  const W = Math.round(cssW * scale), H = Math.round(cssH * scale);
-  const body = makeCanvas(W, H);
-  const g = body.getContext('2d');
-  const base = [scale, 0, 0, scale, 0, 0];
-  const cen = (q) => q.wb.X0 + q.wb.X1 + q.wb.Y0 + q.wb.Y1 + q.p.z0 + q.p.z1;
-  parts.sort((a, b) => cen(a) - cen(b)); // nearer-to-camera boxes (larger x+y+z) paint last
+  const safePose = pose || {};
+  const rawParts = buildParts(look, safePose);
+  const boxes = rawParts.map((p) => ({ p, wb: worldBoxCore(p, dir) }));
 
-  for (const q of parts) {
-    const { p, wb } = q;
-    for (const [fname, n, light] of [['top'], ['py', [0, 1], LIGHT.py], ['px', [1, 0], LIGHT.px]]) {
-      let pt, Wd, Hd, name;
-      if (fname === 'top') {
-        name = 'top'; Wd = p.x1 - p.x0; Hd = p.y1 - p.y0;
-        pt = (a, b) => [p.x0 + a, p.y0 + b, p.z1];
-      } else {
-        const f = faceOf(p, wb, n);
-        ({ name, W: Wd, H: Hd } = f);
-        pt = f.at;
+  // Compute CSS pixel bounding box
+  let minX = 1e9;
+  let maxX = -1e9;
+  let minY = 1e9;
+  let maxY = -1e9;
+  for (const { wb } of boxes) {
+    for (const wx of [wb.wx0, wb.wx1]) {
+      for (const wy of [wb.wy0, wb.wy1]) {
+        for (const wz of [wb.wz0, wb.wz1]) {
+          const [sx, sy] = projectCss(wx, wy, wz);
+          if (sx < minX) minX = sx;
+          if (sx > maxX) maxX = sx;
+          if (sy < minY) minY = sy;
+          if (sy > maxY) maxY = sy;
+        }
       }
-      const L = fname === 'top' ? LIGHT.top : light;
-      const scr = (a, b) => {
-        const [lx, ly, z] = pt(a, b);
-        const [X, Y] = wb.w(lx, ly);
-        const [sx, sy] = project(X, Y, z);
-        return [sx + ox, sy + oy];
-      };
-      const c = [scr(0, 0), scr(Wd, 0), scr(Wd, Hd), scr(0, Hd)];
-      const fc = (hex) => sh(hex, L);
-      g.setTransform(...base);
-      g.fillStyle = g.strokeStyle = fc(p.color);
-      g.lineWidth = 1;
-      g.beginPath(); c.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y))); g.closePath(); g.fill(); g.stroke();
-      if (p.tex) {
-        const o = c[0], u = scr(1, 0), v = scr(0, 1);
-        g.save();
-        g.setTransform(
-          (u[0] - o[0]) * scale, (u[1] - o[1]) * scale,
-          (v[0] - o[0]) * scale, (v[1] - o[1]) * scale,
-          o[0] * scale, o[1] * scale
-        );
-        g.beginPath(); g.rect(0, 0, Wd, Hd); g.clip();
-        p.tex(g, Wd, Hd, fc, name, p);
-        g.restore();
-      }
-      g.setTransform(...base);
-      g.strokeStyle = 'rgba(30,14,40,0.28)'; g.lineWidth = 0.65;
-      g.beginPath(); c.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y))); g.closePath(); g.stroke();
     }
   }
 
-  // dark silhouette outline around the whole figure at native device pixel radius
+  const M = 2;
+  const ox = Math.ceil(-minX) + M;
+  const oy = Math.ceil(-minY) + M;
+  const cssW = Math.ceil(maxX - minX) + 2 * M;
+  const cssH = Math.ceil(maxY - minY) + 2 * M;
+
+  const S = Math.max(1, Math.round(scale * 100) / 100);
+  const W = Math.max(1, Math.round(cssW * S));
+  const H = Math.max(1, Math.round(cssH * S));
+
   const out = makeCanvas(W, H);
-  const og = out.getContext('2d');
-  const d = Math.max(1, Math.round(scale));
-  for (const [dx, dy] of [[-d, 0], [d, 0], [0, -d], [0, d], [-d, -d], [d, d], [-d, d], [d, -d]]) og.drawImage(body, dx, dy);
-  og.globalCompositeOperation = 'source-in';
-  og.fillStyle = OUTLINE; og.fillRect(0, 0, W, H);
-  og.globalCompositeOperation = 'source-over';
-  og.drawImage(body, 0, 0);
+  const ctx = out.getContext('2d');
+  if (typeof ctx.setTransform === 'function') {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+  }
+
+  // Precompute fixed 4-shade material ramps for this character
+  const ramps = {
+    skin: skinRamp(look.skin || '#f0c49a'),
+    hair: materialRamp(look.hair || '#5a3826'),
+    shirt: materialRamp(look.shirt || '#4da3ff'),
+    pants: materialRamp(look.pants || '#2c3e63'),
+    shoe: materialRamp(look.shoe || '#f4f4f4'),
+    gold: materialRamp(look.gold || '#f6c667'),
+    under: materialRamp(look.under || '#f2ede4'),
+  };
+
+  for (let k = 0; k < boxes.length; k++) {
+    const { p } = boxes[k];
+    if (p.mat === 'skin') p.rmp = ramps.skin;
+    else if (p.mat === 'hair') p.rmp = ramps.hair;
+    else if (p.mat === 'shirt') p.rmp = ramps.shirt;
+    else if (p.mat === 'pants') p.rmp = ramps.pants;
+    else if (p.mat === 'shoe') p.rmp = ramps.shoe;
+    else if (p.mat === 'gold') p.rmp = ramps.gold;
+    else p.rmp = materialRamp(p.color);
+  }
+
+  // Pixel-art raycast resolution n:
+  // n = S (so at scale=2 / DETAIL=1, n=2 => 1 unit = 4px across, 2px down;
+  // at scale=4 / DETAIL=2, n=4 => 1 unit = 8px across, 4px down, matching core.py).
+  const n = S;
+  const X0 = Math.round(ox * n);
+  const Y0 = Math.round(oy * n);
+
+  // Camera constants matching core.py (AZ=45, EL=30)
+  const ppu = 2 * n * Math.SQRT2;
+  const cx = Math.sqrt(6) / 4;
+  const cy = cx;
+  const cz = 0.5;
+  const rx = -Math.SQRT1_2;
+  const ry = Math.SQRT1_2;
+  const upx = -0.5 * Math.SQRT1_2;
+  const upy = upx;
+  const upz = Math.sqrt(3) / 2;
+
+  const uMin = -(X0 + 0.5) / ppu;
+  const vMax = (Y0 + 0.5) / ppu;
+
+  const invDx = -1 / cx;
+  const invDy = -1 / cy;
+  const invDz = -2.0; // -1 / cz
+
+  const totalPx = W * H;
+  const pidGrid = new Int16Array(totalPx).fill(-1);
+  const bestGrid = new Float32Array(totalPx).fill(1e9);
+  const bandGrid = new Uint8Array(totalPx);
+
+  let headIdx = -1;
+  let headHdz = 0;
+
+  // Orthographic ray-box intersection bounded to each box's 2D screen AABB
+  for (let k = 0; k < boxes.length; k++) {
+    const { p, wb } = boxes[k];
+    if (p.slot === 'head') {
+      headIdx = k;
+      headHdz = p.dz || 0;
+    }
+
+    // 2D pixel bounding box of this 3D box
+    const pxMin = Math.max(0, Math.floor(X0 + (wb.wy0 - wb.wx1) * 2 * n - 1));
+    const pxMax = Math.min(W - 1, Math.ceil(X0 + (wb.wy1 - wb.wx0) * 2 * n + 1));
+    const pyMin = Math.max(0, Math.floor(Y0 + (wb.wx0 + wb.wy0) * n - wb.wz1 * n * KZ - 1));
+    const pyMax = Math.min(H - 1, Math.ceil(Y0 + (wb.wx1 + wb.wy1) * n - wb.wz0 * n * KZ + 1));
+
+    const stepOx = rx / ppu;
+    const stepOy = ry / ppu;
+
+    for (let py = pyMin; py <= pyMax; py++) {
+      const v = vMax - (py + 0.5) / ppu;
+      const baseOx = v * upx + 220 * cx;
+      const baseOy = v * upy + 220 * cy;
+      const Oz = v * upz + 220 * cz;
+
+      const tz1 = (wb.wz1 - Oz) * invDz;
+      const tz0 = (wb.wz0 - Oz) * invDz;
+      const tzEnter = tz1 < tz0 ? tz1 : tz0;
+      const tzExit = tz1 > tz0 ? tz1 : tz0;
+
+      const uStart = uMin + (pxMin + 0.5) / ppu;
+      let Ox = uStart * rx + baseOx;
+      let Oy = uStart * ry + baseOy;
+      const rowOffset = py * W;
+
+      for (let px = pxMin; px <= pxMax; px++) {
+        const tx1 = (wb.wx1 - Ox) * invDx;
+        const tx0 = (wb.wx0 - Ox) * invDx;
+        const txEnter = tx1 < tx0 ? tx1 : tx0;
+        const txExit = tx1 > tx0 ? tx1 : tx0;
+
+        const ty1 = (wb.wy1 - Oy) * invDy;
+        const ty0 = (wb.wy0 - Oy) * invDy;
+        const tyEnter = ty1 < ty0 ? ty1 : ty0;
+        const tyExit = ty1 > ty0 ? ty1 : ty0;
+
+        const te = txEnter > tyEnter
+          ? (txEnter > tzEnter ? txEnter : tzEnter)
+          : (tyEnter > tzEnter ? tyEnter : tzEnter);
+        const tx = txExit < tyExit
+          ? (txExit < tzExit ? txExit : tzExit)
+          : (tyExit < tzExit ? tyExit : tzExit);
+
+        const idx = rowOffset + px;
+        if (te <= tx && te < bestGrid[idx]) {
+          bestGrid[idx] = te;
+          pidGrid[idx] = k;
+          bandGrid[idx] = te === tzEnter ? 0 : (te === txEnter ? 1 : 2);
+        }
+
+        Ox += stepOx;
+        Oy += stepOy;
+      }
+    }
+  }
+
+  // Base 3-tone shading + Pass 14b calm-accent pattern hooks
+  const colorGrid = new Array(totalPx).fill(null);
+  const basis = DIR_BASIS[dir] || DIR_BASIS.down;
+
+  for (let py = 0; py < H; py++) {
+    const v = vMax - (py + 0.5) / ppu;
+    const baseOx = v * upx + 220 * cx;
+    const baseOy = v * upy + 220 * cy;
+    const Oz = v * upz + 220 * cz;
+    const rowOffset = py * W;
+
+    for (let px = 0; px < W; px++) {
+      const idx = rowOffset + px;
+      const k = pidGrid[idx];
+      if (k < 0) continue;
+
+      const { p } = boxes[k];
+      const b = bandGrid[idx];
+      const rmp = p.rmp;
+      const bandKey = b === 0 ? 'top' : (b === 1 ? 'left' : 'right');
+
+      if (p.slot === 'torso') {
+        const u = uMin + (px + 0.5) / ppu;
+        const te = bestGrid[idx];
+        const hx = u * rx + baseOx - te * cx;
+        const hy = u * ry + baseOy - te * cy;
+        const hzHit = Oz - te * cz;
+        const lx = hx * basis.rx + hy * basis.ry;
+        const ly = hx * basis.fx + hy * basis.fy;
+        const lz = hzHit - (p.dz || 0);
+        colorGrid[idx] = evalTorsoColor(look, lx, ly, lz, b, ramps);
+      } else if (p.slot === 'hair_cap' && b === 0 && TEXTURE_RULES.hair?.enabled !== false) {
+        const u = uMin + (px + 0.5) / ppu;
+        const te = bestGrid[idx];
+        const hx = u * rx + baseOx - te * cx;
+        const hy = u * ry + baseOy - te * cy;
+        const iu = Math.floor(hx * n);
+        const iv = Math.floor(hy * n);
+        const tk = characterTexel('hair_cap', iu, iv, 'top', { detail: n >= 3 ? 2 : 1, cu: 0, cv: 0 });
+        colorGrid[idx] = tk ? rmp[tk] : rmp.top;
+      } else {
+        colorGrid[idx] = rmp[bandKey];
+      }
+    }
+  }
+
+  // Outline pass:
+  // 1) Interior depth outline (core.py lines 284-294: farther pixel next to nearer different group -> its own line color)
+  // 2) Outer silhouette outline (boundary pixel next to transparency -> its own mid-tone line color, never near-black)
+  const outColors = colorGrid.slice();
+  const DIRS4 = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+
+  for (let py = 0; py < H; py++) {
+    const rowOffset = py * W;
+    for (let px = 0; px < W; px++) {
+      const idx = rowOffset + px;
+      const k = pidGrid[idx];
+      if (k < 0) continue;
+
+      const myGroup = boxes[k].p.group;
+      const myBest = bestGrid[idx];
+      let isOutline = false;
+
+      for (let d = 0; d < 4; d++) {
+        const nx = px + DIRS4[d][0];
+        const ny = py + DIRS4[d][1];
+        if (nx < 0 || nx >= W || ny < 0 || ny >= H) {
+          isOutline = true;
+          break;
+        }
+        const nIdx = ny * W + nx;
+        const nk = pidGrid[nIdx];
+        if (nk < 0) {
+          isOutline = true;
+          break;
+        }
+        if (boxes[nk].p.group !== myGroup && bestGrid[nIdx] < myBest - 0.5) {
+          isOutline = true;
+          break;
+        }
+      }
+
+      if (isOutline) {
+        outColors[idx] = boxes[k].p.rmp.line;
+      }
+    }
+  }
+
+  // Stamp front-plane 2:1 sloped face features onto the head
+  applyFaceStamps(outColors, pidGrid, W, H, headIdx, dir, look, safePose, n, X0, Y0, headHdz);
+
+  // Emit horizontal pixel runs to canvas (zero anti-aliasing, works on both DOM canvas and Node test stubs)
+  for (let py = 0; py < H; py++) {
+    const rowOffset = py * W;
+    let px = 0;
+    while (px < W) {
+      const col = outColors[rowOffset + px];
+      if (!col) {
+        px++;
+        continue;
+      }
+      let runEnd = px + 1;
+      while (runEnd < W && outColors[rowOffset + runEnd] === col) {
+        runEnd++;
+      }
+      ctx.fillStyle = col;
+      ctx.fillRect(px, py, runEnd - px, 1);
+      px = runEnd;
+    }
+  }
+
   out.scale = scale;
   return { canvas: out, ox, oy, cssW, cssH, scale };
 }
@@ -689,9 +1185,11 @@ registerCacheClearHook(clearCharacterCache);
 
 /** Cached figure canvas for a look / facing / pose / scale. */
 export function getCharacterCanvas(key, look, dir, pose, scale = 1) {
+  const safePose = pose || {};
   const detail = getDetail();
   const effectiveScale = scale * detail;
-  const k = `${key}|${dir}|${pose.stride || 0}|${pose.sit ? 1 : 0}|${pose.lie ? 1 : 0}|${pose.blink ? 1 : 0}|${pose.breathe || 0}|${pose.action || ''}|${pose.actionFrame || 0}|${pose.emote || ''}|${Math.floor((pose.emoteFrame || 0) * 2) % 12}|${effectiveScale}`;
+  const expr = resolveExpression(safePose, look);
+  const k = `${key}|${dir}|${safePose.stride || 0}|${safePose.sit ? 1 : 0}|${safePose.lie ? 1 : 0}|${safePose.blink ? 1 : 0}|${safePose.breathe || 0}|${safePose.action || ''}|${safePose.actionFrame || 0}|${safePose.emote || ''}|${Math.floor((safePose.emoteFrame || 0) * 2) % 12}|${expr}|${effectiveScale}`;
   const cached = cache.get(k);
   if (cached !== undefined) {
     cache.delete(k);
@@ -702,8 +1200,11 @@ export function getCharacterCanvas(key, look, dir, pose, scale = 1) {
     const oldestKey = cache.keys().next().value;
     cache.delete(oldestKey);
   }
-  const rendered = renderCharacter(look, dir, pose, (w, h) => {
-    const c = document.createElement('canvas'); c.width = w; c.height = h; return c;
+  const rendered = renderCharacter(look, dir, safePose, (w, h) => {
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    return c;
   }, effectiveScale);
   cache.set(k, rendered);
   return rendered;

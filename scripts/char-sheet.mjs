@@ -121,15 +121,18 @@ async function main() {
       let curY = 45 * scale;
 
       // Helper to render and stamp one character
+      const bakeScale = scale * targetDetail;
       const renderAndStamp = (look, dir, pose, x, y) => {
-        const ren = renderCharacter(look, dir, pose, makeCanvas, scale);
-        // ren.canvas has native dimensions (cssW * scale, cssH * scale)
-        // ren.ox, ren.oy are in CSS px -> ground point on ren.canvas is (ox * scale, oy * scale)
+        const ren = renderCharacter(look, dir, pose, makeCanvas, bakeScale);
+        // ren.canvas has native dimensions (cssW * bakeScale, cssH * bakeScale)
+        // ren.ox, ren.oy are in CSS px -> ground point on sheet is (ox * scale, oy * scale)
         const groundX = x + cellW / 2;
         const groundY = y + cellH - 18 * scale;
         const drawX = Math.round(groundX - ren.ox * scale);
         const drawY = Math.round(groundY - ren.oy * scale);
-        sctx.drawImage(ren.canvas, drawX, drawY);
+        const drawW = Math.round(ren.canvas.width / targetDetail);
+        const drawH = Math.round(ren.canvas.height / targetDetail);
+        sctx.drawImage(ren.canvas, drawX, drawY, drawW, drawH);
         return ren;
       };
 
@@ -184,8 +187,8 @@ async function main() {
         sctx.fillText(expr, cx + cellW / 2, cy + cellH - 6 * scale);
       }
 
-      // Crop player idle down at DPR 2 for char_8x and face_8x
-      const playerRen = renderCharacter(LOOKS.player, 'down', { stride: 0, sit: false, lie: false, blink: false, breathe: 0 }, makeCanvas, scale);
+      // Crop player idle down at bakeScale for char_8x and face_8x
+      const playerRen = renderCharacter(LOOKS.player, 'down', { stride: 0, sit: false, lie: false, blink: false, breathe: 0 }, makeCanvas, bakeScale);
       const pCan = playerRen.canvas;
       const pCtx = pCan.getContext('2d');
       const pImg = pCtx.getImageData(0, 0, pCan.width, pCan.height);
