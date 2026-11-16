@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 
+## [0.12.7] - 2026-11-16
+
+### Fixed
+
+- **Pool Deck Swim & Caustics Overlay Camera Alignment (`js/render.js`, `tests/logic.test.mjs`)**:
+  - After `blitDeviceAligned` left the canvas in device transform, Marina's swim waterline collar, foam wake rings and splash droplets (and the pool caustics shimmer ellipse) were drawn in unscaled device space and appeared far off at the bottom-left, below the building. Restored the camera transform via `ensureCameraTransform` before those vector overlays, and also before treadmill belt/sweat and dining aroma wisps which had the same pattern.
+
+
 ## [0.12.6] - 2026-11-16
 
 ### Fixed
