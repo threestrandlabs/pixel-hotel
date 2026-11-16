@@ -13,9 +13,11 @@ import {
   renderRoom, computeOrigin, screenToTile, tileToScreen, worldToScreen, hitTestNpc, getItemIconDataUrl,
   DEFAULT_ZOOM, MIN_ZOOM, MAX_ZOOM, clampZoom, zoomAtPoint, centerCameraOnTile, deadzoneCameraTarget,
   renderSkylineToCanvas, getCachedIsoCityLayout, computeCityVehicles, drawCityVehicles,
-  nearCityLayerTransform, warmUpRoomSprites,
+  nearCityLayerTransform, warmUpRoomSprites, clearSpriteCache, warmupRoomCache,
 } from './render.js';
-import { FpsMonitor, resolveBackgroundDetail } from './adaptiveQuality.js';
+import { FpsMonitor, resolveBackgroundDetail, resolveSpriteDetail } from './adaptiveQuality.js';
+import { setDetail, getDetail } from './pixelart.js';
+import { clearCharacterCache } from './voxel.js';
 import { audio, formatTime, trackForRoom } from './audio.js';
 import {
   initMultiplayerUI, getRemoteMultiplayerEntities, tickMultiplayer, notifyLocalChat, publishOwnRoomSnapshot,
@@ -1828,6 +1830,7 @@ function frame(now) {
   );
   const lowQualityTriggered = fpsMonitor.recordFrame(now);
   const qualityMode = resolveBackgroundDetail(state.settings.backgroundDetail, lowQualityTriggered, isMobile);
+  applySpriteDetail(isMobile, lowQualityTriggered);
 
   updateBackground(now, room, ui.cssW, ui.cssH, ui.phase, ui.camera, qualityMode);
 
@@ -2673,7 +2676,45 @@ function syncSettingsState() {
   if (!['auto', 'high', 'low'].includes(String(state.settings.backgroundDetail).toLowerCase())) {
     state.settings.backgroundDetail = 'auto';
   }
+  if (!['auto', 'high', 'low'].includes(String(state.settings.spriteDetail).toLowerCase())) {
+    state.settings.spriteDetail = 'auto';
+  }
   state.settings.muted = !!(state.settings.musicMuted && state.settings.sfxMuted);
+}
+
+let lastAppliedSpriteDetail = null;
+function applySpriteDetail(isMobile, lowQualityTriggered, force = false) {
+  const targetDetail = resolveSpriteDetail(state.settings.spriteDetail, lowQualityTriggered, isMobile);
+  if (force || targetDetail !== lastAppliedSpriteDetail) {
+    lastAppliedSpriteDetail = targetDetail;
+    setDetail(targetDetail);
+    clearSpriteCache();
+    clearCharacterCache();
+    if (typeof warmupRoomCache === 'function' && typeof currentRoomDef === 'function') {
+      const room = currentRoomDef();
+      const runtime = typeof currentRoomRuntime === 'function' ? currentRoomRuntime() : null;
+      if (room) {
+        const placed = runtime ? placedFurnitureWithFootprint(runtime) : [];
+        warmupRoomCache(room, placed, window.devicePixelRatio || 1);
+      }
+    }
+  }
+}
+
+function setSpriteDetailSetting(mode) {
+  const norm = ['auto', 'high', 'low'].includes(String(mode).toLowerCase())
+    ? String(mode).toLowerCase()
+    : 'auto';
+  state.settings.spriteDetail = norm;
+  saveState(window.localStorage, state);
+  refreshAudioUi();
+  const isMobile = (typeof window !== 'undefined') && (
+    ('ontouchstart' in window) ||
+    ('navigator' in window && navigator.maxTouchPoints > 0) ||
+    (ui.cssW <= 600 && (window.devicePixelRatio || 1) > 1)
+  );
+  const lowQualityTriggered = fpsMonitor ? fpsMonitor.isTriggered() : false;
+  applySpriteDetail(isMobile, lowQualityTriggered, true);
 }
 
 function refreshFollowCameraButton() {
@@ -2890,6 +2931,12 @@ function refreshAudioUi() {
     btnBg.textContent = mode.charAt(0).toUpperCase() + mode.slice(1);
   }
 
+  const btnSprite = document.getElementById('btnSpriteDetail');
+  if (btnSprite) {
+    const mode = state.settings.spriteDetail || 'auto';
+    btnSprite.textContent = mode.charAt(0).toUpperCase() + mode.slice(1);
+  }
+
   refreshMusicPlayer();
 }
 
@@ -2993,6 +3040,11 @@ document.getElementById('btnBgDetail')?.addEventListener('click', () => {
   state.settings.backgroundDetail = cycle[current] || 'auto';
   saveState(window.localStorage, state);
   refreshAudioUi();
+});
+document.getElementById('btnSpriteDetail')?.addEventListener('click', () => {
+  const current = state.settings.spriteDetail || 'auto';
+  const cycle = { auto: 'high', high: 'low', low: 'auto' };
+  setSpriteDetailSetting(cycle[current] || 'auto');
 });
 document.getElementById('btnWeatherEffectsToggle')?.addEventListener('click', () => {
   state.settings.weatherEffects = !(state.settings.weatherEffects !== false);
@@ -3248,6 +3300,8 @@ window.__pixelHotel = Object.assign(window.__pixelHotel || {}, {
     saveState(window.localStorage, state);
     refreshAudioUi();
   },
+  getSpriteDetail: () => state.settings.spriteDetail || 'auto',
+  setSpriteDetail: (mode) => setSpriteDetailSetting(mode),
   getRemoteMultiplayer: () => getRemoteMultiplayerEntities(performance.now()),
   walkTo: (x, y) => tryWalkPlayer(x, y),
   openAvatarCreator: () => openAvatarModal(),

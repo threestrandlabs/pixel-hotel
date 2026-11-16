@@ -6,6 +6,7 @@
 // Parts are pure data (testable in Node); drawing only needs a canvas factory.
 
 import { shadeColor as sh } from './sprites.js';
+import { getDetail, registerCacheClearHook } from './pixelart.js';
 
 export const KX = 2.2; // px per voxel step along world x / y (2:1 iso, like the tiles)
 export const KZ = 2.4; // px per voxel of height
@@ -669,30 +670,41 @@ export function renderCharacter(look, dir, pose, makeCanvas, scale = 1) {
   og.fillStyle = OUTLINE; og.fillRect(0, 0, W, H);
   og.globalCompositeOperation = 'source-over';
   og.drawImage(body, 0, 0);
+  out.scale = scale;
   return { canvas: out, ox, oy, cssW, cssH, scale };
 }
 
+export const MAX_CHARACTER_CACHE_SIZE = 256;
 const cache = new Map();
+
+export function clearCharacterCache() {
+  cache.clear();
+}
+
+export function getCharacterCacheSize() {
+  return cache.size;
+}
+
+registerCacheClearHook(clearCharacterCache);
+
 /** Cached figure canvas for a look / facing / pose / scale. */
 export function getCharacterCanvas(key, look, dir, pose, scale = 1) {
-  const k = [
-    key,
-    dir,
-    pose.stride || 0,
-    pose.sit ? 1 : 0,
-    pose.lie ? 1 : 0,
-    pose.blink ? 1 : 0,
-    pose.breathe || 0,
-    pose.action || '',
-    pose.actionFrame || 0,
-    pose.emote || '',
-    Math.floor((pose.emoteFrame || 0) * 2) % 12,
-    scale,
-  ].join('|');
-  if (!cache.has(k)) {
-    cache.set(k, renderCharacter(look, dir, pose, (w, h) => {
-      const c = document.createElement('canvas'); c.width = w; c.height = h; return c;
-    }, scale));
+  const detail = getDetail();
+  const effectiveScale = scale * detail;
+  const k = `${key}|${dir}|${pose.stride || 0}|${pose.sit ? 1 : 0}|${pose.lie ? 1 : 0}|${pose.blink ? 1 : 0}|${pose.breathe || 0}|${pose.action || ''}|${pose.actionFrame || 0}|${pose.emote || ''}|${Math.floor((pose.emoteFrame || 0) * 2) % 12}|${effectiveScale}`;
+  const cached = cache.get(k);
+  if (cached !== undefined) {
+    cache.delete(k);
+    cache.set(k, cached);
+    return cached;
   }
-  return cache.get(k);
+  if (cache.size >= MAX_CHARACTER_CACHE_SIZE) {
+    const oldestKey = cache.keys().next().value;
+    cache.delete(oldestKey);
+  }
+  const rendered = renderCharacter(look, dir, pose, (w, h) => {
+    const c = document.createElement('canvas'); c.width = w; c.height = h; return c;
+  }, effectiveScale);
+  cache.set(k, rendered);
+  return rendered;
 }

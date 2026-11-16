@@ -52,3 +52,16 @@ export function resolveBackgroundDetail(setting = 'auto', isLowQualityTriggered 
   if (isMobile || isLowQualityTriggered) return 'low';
   return 'high';
 }
+
+export function resolveSpriteDetail(setting = 'auto', isLowQualityTriggered = false, isMobile = false) {
+  const norm = String(setting || 'auto').toLowerCase();
+  if (norm === 'high') return 2;
+  if (norm === 'low') return 1;
+  // auto mode: DETAIL=2 on desktop/high-end; phones and low fps always DETAIL=1
+  if (isMobile || isLowQualityTriggered) return 1;
+  return 2;
+}
+
+export function resolveSpriteDetailMode(setting = 'auto', isLowQualityTriggered = false, isMobile = false) {
+  return resolveSpriteDetail(setting, isLowQualityTriggered, isMobile) === 2 ? 'high' : 'low';
+}

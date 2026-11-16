@@ -11,6 +11,7 @@ import {
   FURNITURE_BUILDERS, shadeColor, getSeatConfig, SEAT_CONFIGS,
 } from './sprites.js';
 import { LOOKS, getCharacterCanvas } from './voxel.js';
+import { getDetail, registerCacheClearHook } from './pixelart.js';
 
 export { getSeatConfig, SEAT_CONFIGS };
 
@@ -1874,8 +1875,11 @@ export function drawCharacter(ctx, e, screenX, screenY, dpr = 1, room = null) {
     emote: e.emote || null,
     emoteFrame: e.emoteFrame || 0,
   };
-  const key = `${e.spriteKey}:${e.color}:${isSwimsuit ? 'swim' : 'norm'}:${e.look ? JSON.stringify(e.look) : ''}:${e.emote || ''}:${Math.floor((e.emoteFrame || 0) * 2) % 12}`;
-  const { canvas, ox, oy, cssH } = getCharacterCanvas(key, look, e.dir, pose, dpr);
+  const lookKey = e.look ? (e.look._cachedKey || (e.look._cachedKey = JSON.stringify(e.look))) : '';
+  const key = `${e.spriteKey}:${e.color}:${isSwimsuit ? 'swim' : 'norm'}:${lookKey}:${e.emote || ''}:${Math.floor((e.emoteFrame || 0) * 2) % 12}`;
+  const charBake = getCharacterCanvas(key, look, e.dir, pose, dpr);
+  const { canvas, ox, oy, cssH } = charBake;
+  const bakeScale = charBake.scale || canvas.scale || (dpr * getDetail());
 
   // Faint mirrored reflection of avatar in the gym mirror wall
   if (room?.id === 'gym' && e.y <= 3.4 && e.x >= 2 && e.x <= 12) {
@@ -1883,7 +1887,7 @@ export function drawCharacter(ctx, e, screenX, screenY, dpr = 1, room = null) {
     ctx.globalAlpha = 0.25;
     ctx.translate(screenX, screenY - 26);
     ctx.scale(-0.85, 0.85);
-    blitDeviceAligned(ctx, canvas, -ox, -oy, dpr);
+    blitDeviceAligned(ctx, canvas, -ox, -oy, bakeScale);
     ctx.restore();
   }
 
@@ -1931,7 +1935,7 @@ export function drawCharacter(ctx, e, screenX, screenY, dpr = 1, room = null) {
   const charY = screenY + (e.seatYOffset || 0);
   const dx = screenX - ox;
   const dy = charY - oy;
-  blitDeviceAligned(ctx, canvas, dx, dy, dpr);
+  blitDeviceAligned(ctx, canvas, dx, dy, bakeScale);
 
   // 4-Layer Swimming Waterline Mask, Wake Ripples & Splash Droplets
   if (e.action === 'swim') {
@@ -2003,6 +2007,8 @@ export function warmUpRoomSprites(room, placedFurniture, dpr = 1) {
     }
   }
 }
+
+export const warmupRoomCache = warmUpRoomSprites;
 
 export function furnitureCanvas(itemId, rot = 0, dpr = 1, off = false, layer = 'all') {
   const r = ((rot % 4) + 4) % 4;
@@ -2882,3 +2888,16 @@ function roundRect(ctx, x, y, w, h, r) {
   ctx.arcTo(x, y, x + w, y, r);
   ctx.closePath();
 }
+
+export function clearSpriteCache() {
+  canvasCache.clear();
+  itemIconCache.clear();
+  floorLayerCache = { key: '', canvas: null, minX: 0, minY: 0 };
+  wallLayerCache = { key: '', canvas: null, minX: 0, minY: 0 };
+  poolWaterLayerCache = { key: '', canvas: null, minX: 0, minY: 0, maxX: 0, maxY: 0 };
+  lightMapCache = { key: '', canvas: null, minX: 0, minY: 0 };
+  cutawayCache = { key: '', canvas: null };
+  cutawayOverCache = { key: '', canvas: null };
+}
+
+registerCacheClearHook(clearSpriteCache);

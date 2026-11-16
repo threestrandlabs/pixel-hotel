@@ -67,6 +67,7 @@ export function createDefaultState() {
       shuffle: false,
       followCamera: false,
       backgroundDetail: 'auto',
+      spriteDetail: 'auto',
       weatherEffects: true,
     },
   };
@@ -709,6 +710,11 @@ export function loadState(storage) {
     mergedSettings.backgroundDetail = String(rawSettings.backgroundDetail).toLowerCase();
   } else {
     mergedSettings.backgroundDetail = 'auto';
+  }
+  if (['auto', 'high', 'low'].includes(String(rawSettings.spriteDetail).toLowerCase())) {
+    mergedSettings.spriteDetail = String(rawSettings.spriteDetail).toLowerCase();
+  } else {
+    mergedSettings.spriteDetail = 'auto';
   }
   mergedSettings.muted = !!(mergedSettings.musicMuted && mergedSettings.sfxMuted);
   return {
