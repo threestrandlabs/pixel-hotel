@@ -213,23 +213,32 @@ function towards(h, t, amt) {
 const rampCache = new Map();
 
 // Fixed 4-tone hue-shifted material ramp: top=highlight, left=base, right=shadow, line=mid-tone outline.
+// Preserves hue within a few degrees, never boosts HSL saturation, and guarantees top > left > right > line lightness.
 export function materialRamp(hexcol) {
   const norm = String(hexcol).toLowerCase();
   if (rampCache.has(norm)) return rampCache.get(norm);
   const [r, g, b] = hexToRgb(norm);
   const [h, l, s] = rgbToHls(r, g, b);
+  const C = s * (1 - Math.abs(2 * l - 1));
 
-  const mk = (hh, ds, dl, minl = 0.045) => {
-    const nl = Math.max(minl, Math.min(0.97, l + dl));
-    const ns = Math.max(0.0, Math.min(1.0, s + ds));
-    return hlsToRgb(hh, nl, ns);
+  const shadeAtL = (nl, hTarget, hAmt, cScale = 0.98) => {
+    const ratio = l > 1e-6 ? Math.min(1, nl / l) : 0;
+    const nC = C * ratio * cScale;
+    const denom = 1 - Math.abs(2 * nl - 1);
+    const ns = denom > 1e-6 ? Math.min(s * cScale, nC / denom) : 0;
+    const nh = C > 0.12 ? towards(h, hTarget, hAmt) : h;
+    return hlsToRgb(nh, nl, ns);
   };
 
-  const topRgb = mk(towards(h, 0.15, 0.022), -0.05, +0.085);
+  const topL = Math.min(0.995, Math.max(l + 0.018, l + (0.995 - l) * 0.24));
+  const rightL = Math.max(0.016, Math.min(l - 0.015, l * 0.702));
+  const lineL = Math.max(0.006, Math.min(rightL - 0.012, l * 0.61));
+
+  const topH = C > 0.12 ? towards(h, 0.15, 0.008) : h;
+  const topRgb = hlsToRgb(topH, topL, Math.max(0, s - 0.05));
   const leftRgb = [r, g, b];
-  const shadowDl = -Math.min(0.20, Math.max(0.06, l * 0.22));
-  const rightRgb = mk(towards(h, 0.72, 0.035), +0.04, shadowDl, 0.09);
-  const lineRgb = midToneOutline([r, g, b], 0.70);
+  const rightRgb = shadeAtL(rightL, 0.72, 0.002, 0.96);
+  const lineRgb = shadeAtL(lineL, 0.72, 0.005, 0.94);
 
   const result = {
     top: rgbToHex(topRgb),
@@ -350,15 +359,16 @@ export function upholsteryTexel(iu, iv, base = 'left', { seed = 19, isRim = fals
   return null;
 }
 
-// Port of texture.py character(): small highlight cluster on hair_cap top, single waist crease on shirt_torso.
-export function characterTexel(slot, iu, iv, base = 'left', { detail = DETAIL, cu = 0, cv = 0, hz = 0 } = {}) {
+// Port of texture.py character(): small highlight cluster on hair_cap top, subtle broken 1-row waist crease on shirt_torso.
+export function characterTexel(slot, iu, iv, base = 'left', { detail = DETAIL, cu = 0, cv = 0, hz = 0, lx } = {}) {
   if (slot === 'hair_cap' && base === 'top') {
     const du = iu - cu;
     const dv = iv - cv;
     return (du * du + dv * dv) <= 2 * (detail || 1) ? 'top' : null;
   }
-  if (slot === 'shirt_torso' && (base === 'left' || base === 'right')) {
-    return (hz >= 6.4 && hz <= 6.6) ? 'right' : null;
+  if (slot === 'shirt_torso' && base === 'left') {
+    const inCreaseX = lx === undefined || (lx >= -1.45 && lx <= -0.45) || (lx >= 0.55 && lx <= 1.25);
+    return (hz >= 6.45 && hz <= 6.55 && inCreaseX) ? 'right' : null;
   }
   return null;
 }

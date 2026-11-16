@@ -175,6 +175,91 @@ test('pixelart: material ramp produces fixed 4-shade ramp matching guide specifi
   assert.ok(lr > 150 && lg > 120, 'Outline must be mid-tone shade of base');
 });
 
+test('pixelart: materialRamp keeps hue within ~10 degrees, never increases HSL saturation by > 0.1, and each shade is darker than the previous', () => {
+  const rgbToHsl = ([r, g, b]) => {
+    const nr = r / 255;
+    const ng = g / 255;
+    const nb = b / 255;
+    const max = Math.max(nr, ng, nb);
+    const min = Math.min(nr, ng, nb);
+    let h = 0;
+    let s = 0;
+    const l = (max + min) / 2;
+    if (max !== min) {
+      const d = max - min;
+      s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+      switch (max) {
+        case nr: h = (ng - nb) / d + (ng < nb ? 6 : 0); break;
+        case ng: h = (nb - nr) / d + 2; break;
+        case nb: h = (nr - ng) / d + 4; break;
+      }
+      h /= 6;
+    }
+    return [h * 360, s, l];
+  };
+  const hueDiff = (a, b) => Math.abs(((a - b + 540) % 360) - 180);
+
+  // Collect all LOOK colours plus a grid of RGB test colours
+  const testColors = new Set([
+    '#4da3ff', '#ff9fc7', '#f6c667', '#f0c49a', '#5a3826', '#2c3e63', '#f4f4f4',
+    '#e4e4ea', '#7f93b3', '#f1e8d2', '#c4b5fd', '#f4f7f2', '#5fcf7a', '#ffe08a',
+    '#c0304a', '#f2ede4', '#ff5252', '#5cd6c8', '#8c52ff', '#50f0d0', '#fff8e8',
+    '#78c466', '#ffd268', '#2e4478', '#1e2c50', '#222836', '#282028', '#ff6f61',
+  ]);
+  for (const look of Object.values(LOOKS)) {
+    for (const k of ['skin', 'hair', 'shirt', 'pants', 'shoe', 'gold', 'under', 'headband', 'accessoryColor']) {
+      if (typeof look[k] === 'string' && look[k].startsWith('#')) testColors.add(look[k]);
+    }
+  }
+  for (let r = 20; r <= 240; r += 44) {
+    for (let g = 20; g <= 240; g += 44) {
+      for (let b = 20; b <= 240; b += 44) {
+        testColors.add(rgbToHex([r, g, b]));
+      }
+    }
+  }
+
+  for (const hex of testColors) {
+    const rmp = materialRamp(hex);
+    const shades = [rmp.topRgb, rmp.leftRgb, rmp.rightRgb, rmp.lineRgb];
+    const hsls = shades.map(rgbToHsl);
+    const [hBase, sBase] = hsls[1];
+
+    for (let i = 0; i < shades.length; i++) {
+      const [hi, si, li] = hsls[i];
+      // Hue within ~10 degrees for chromatic colours
+      if (sBase > 0.06 && si > 0.06) {
+        assert.ok(
+          hueDiff(hi, hBase) <= 10.5,
+          `Hue drift for ${hex} shade ${i} (${rgbToHex(shades[i])}) was ${hueDiff(hi, hBase).toFixed(2)} deg (> 10)`,
+        );
+      }
+      // Saturation never increases over base (and step-to-step never increases by more than 0.1)
+      assert.ok(
+        si <= sBase + 1e-6,
+        `Saturation increased over base for ${hex} shade ${i}: base=${sBase.toFixed(3)}, shade=${si.toFixed(3)}`,
+      );
+      if (i > 0) {
+        const [, sPrev, lPrev] = hsls[i - 1];
+        assert.ok(
+          si - sPrev <= 0.1,
+          `Step saturation increased for ${hex} shade ${i - 1}->${i}: ${sPrev.toFixed(3)}->${si.toFixed(3)}`,
+        );
+        assert.ok(
+          li < lPrev,
+          `Shade ${i} (${rgbToHex(shades[i])}, L=${li.toFixed(3)}) must be darker than shade ${i - 1} (${rgbToHex(shades[i - 1])}, L=${lPrev.toFixed(3)}) for ${hex}`,
+        );
+      }
+    }
+  }
+
+  // Player shirt (#4da3ff) right shade is ~#3672b3-ish (#3771b2), never electric #0449ff
+  const blueRmp = materialRamp('#4da3ff');
+  assert.notEqual(blueRmp.right, '#0449ff');
+  const [br, bg, bb] = blueRmp.rightRgb;
+  assert.ok(Math.abs(br - 0x36) <= 6 && Math.abs(bg - 0x72) <= 6 && Math.abs(bb - 0xb3) <= 6, `Expected #3672b3-ish, got ${blueRmp.right}`);
+});
+
 test('pixelart: skinRamp produces ~18% darker side face (#c5a17e for #f0c49a) in identical hue', () => {
   const sr = skinRamp('#f0c49a');
   assert.equal(sr.left, '#f0c49a');

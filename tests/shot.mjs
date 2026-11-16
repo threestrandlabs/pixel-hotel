@@ -1,17 +1,26 @@
 // One-off Playwright screenshot script (not part of npm test). Captures
-// Lobby/Restaurant/Pool/My Room/street views at a given DPR into a target dir.
-// Usage: node tests/shot.mjs <prefix> <outDir>
+// Lobby/Restaurant/Pool/My Room/street views at a given DPR into a target dir,
+// and supports forcing Sprite Detail (--detail=low|high|both) to save
+// lobby_low.png, lobby_high.png, restaurant_low.png, restaurant_high.png.
+// Usage: node tests/shot.mjs <prefix> <outDir> [--detail=low|high|both]
 import { chromium } from 'playwright';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import fs from 'node:fs';
 import http from 'node:http';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
 const PORT = 8736;
 const BASE_URL = `http://localhost:${PORT}`;
-const [, , PREFIX = 'shot', OUT_DIR = '/tmp'] = process.argv;
+const posArgs = [];
+let detailArg = 'both';
+for (const a of process.argv.slice(2)) {
+  if (a.startsWith('--detail=')) detailArg = a.split('=')[1].toLowerCase();
+  else posArgs.push(a);
+}
+const [PREFIX = 'shot', OUT_DIR = '/tmp'] = posArgs;
 
 function waitForServer(url, timeoutMs = 10000) {
   const start = Date.now();
@@ -27,6 +36,7 @@ function waitForServer(url, timeoutMs = 10000) {
 }
 
 async function main() {
+  fs.mkdirSync(OUT_DIR, { recursive: true });
   const server = spawn('python3', ['-m', 'http.server', String(PORT)], { cwd: ROOT, stdio: 'ignore' });
   const killServer = () => { try { server.kill(); } catch (e) { /* ignore */ } };
   process.on('exit', killServer);
@@ -40,6 +50,11 @@ async function main() {
     await page.waitForFunction(() => window.__pixelHotel, null, { timeout: 8000 });
     await page.keyboard.press('Escape');
     await page.waitForTimeout(300);
+
+    if (detailArg === 'low' || detailArg === 'high') {
+      await page.evaluate((m) => window.__pixelHotel.setSpriteDetail(m), detailArg);
+      await page.waitForTimeout(200);
+    }
 
     const shots = [
       { name: 'lobby', room: 'lobby' },
@@ -63,6 +78,25 @@ async function main() {
     await page.waitForTimeout(400);
     await page.screenshot({ path: path.join(OUT_DIR, `${PREFIX}-street.png`) });
     console.log('captured street');
+
+    // Reset zoom and capture lobby & restaurant at forced Low and High Sprite Detail
+    await page.goto(BASE_URL, { waitUntil: 'load' });
+    await page.waitForFunction(() => window.__pixelHotel, null, { timeout: 8000 });
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(300);
+
+    const modes = (detailArg === 'low' || detailArg === 'high') ? [detailArg] : ['low', 'high'];
+    for (const mode of modes) {
+      await page.evaluate((m) => window.__pixelHotel.setSpriteDetail(m), mode);
+      await page.waitForTimeout(250);
+      for (const room of ['lobby', 'restaurant']) {
+        await page.evaluate((r) => window.__pixelHotel.takeElevator(r), room);
+        await page.waitForTimeout(500);
+        const outFile = path.join(OUT_DIR, `${room}_${mode}.png`);
+        await page.screenshot({ path: outFile });
+        console.log(`captured ${room}_${mode}.png`);
+      }
+    }
   } finally {
     if (browser) await browser.close().catch(() => {});
     killServer();

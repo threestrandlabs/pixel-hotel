@@ -1999,7 +1999,7 @@ export function warmUpRoomSprites(room, placedFurniture, dpr = 1) {
   for (const dir of ['down', 'up', 'left', 'right']) {
     for (const stride of [0, 1, -1]) {
       const pose = { stride, sit: false, lie: false, blink: false, breathe: 0 };
-      const key = `player:${baseLook.shirt || '#2b7fff'}:norm:${JSON.stringify(baseLook)}::0`;
+      const key = `player:${baseLook.shirt || '#2b7fff'}:norm:${JSON.stringify(baseLook)}::0:`;
       getCharacterCanvas(key, baseLook, dir, pose, scale);
     }
   }

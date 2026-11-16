@@ -53,7 +53,7 @@ export const LOOKS = {
     pants: '#6b5a48', shoe: '#4a3a2e',
   },
   drpix: { // eccentric scientist: lab coat, wild hair, goggles
-    skin: '#ffe0c0', hair: '#e2dcff', hairStyle: 'spiky', eye: '#1b1230', brow: '#6d6698', mouth: 'open',
+    skin: '#ffe0c0', hair: '#c4b5fd', hairStyle: 'spiky', eye: '#1b1230', brow: '#6d6698', mouth: 'open',
     shirt: '#f4f7f2', under: '#5fcf7a', outfit: 'labcoat', goggles: true, skirt: true,
     pants: '#3f5b4a', shoe: '#e8e8e8',
   },
@@ -192,6 +192,8 @@ export function buildParts(look, pose = {}) {
       color,
       mat: opts.mat || 'cloth',
       slot: opts.slot || null,
+      face: opts.face || null,
+      flushHead: Boolean(opts.flushHead),
       group,
       dz: opts.dz || 0,
       tex: opts.tex || null,
@@ -347,116 +349,133 @@ export function buildParts(look, pose = {}) {
 
   // 5. Hair (thin 0.75 cap at z 17.75..18.5 + front fringe down to hz(7.7) = 16.775, adapted per style)
   const hairGroup = nextGroup++;
-  buildHairBoxes(look, add, z, h, hairGroup);
+  buildHairBoxes(look, add, z, h, hairGroup, headGroup);
 
   // 6. NPC & Avatar Accessories
   if (look.mustache) {
-    const mGroup = nextGroup++;
-    add(-1.6, 1.6, h - 0.1, h + 0.35, z(12.6), z(13.35), look.hair, { mat: 'hair', slot: 'mustache', group: mGroup });
+    add(-1.2, 1.2, h - 0.1, h + 0.02, z(12.55), z(13.05), look.hair, {
+      mat: 'hair', slot: 'mustache', face: '+y', flushHead: true, group: headGroup,
+    });
   }
 
   const acc = look.accessory;
-  const accColor = look.accessoryColor || '#2a2030';
+  const accColor = look.accessoryColor || '#3a3340';
   if (look.glasses || acc === 'glasses') {
-    const gGroup = nextGroup++;
     for (const s of [-1, 1]) {
-      add(s > 0 ? h : -h - 0.2, s > 0 ? h + 0.2 : -h, -0.4, h, z(14.1), z(14.6), accColor, { mat: 'acc', slot: 'glasses_side', group: gGroup });
+      add(
+        s > 0 ? h - 0.1 : -h - 0.04,
+        s > 0 ? h + 0.04 : -h + 0.1,
+        -0.3,
+        h,
+        z(14.2),
+        z(14.55),
+        accColor,
+        { mat: 'acc', slot: 'glasses_side', face: s > 0 ? '+x' : '-x', flushHead: true, group: headGroup },
+      );
     }
   }
   if (acc === 'cap') {
     const cGroup = nextGroup++;
-    add(-h - 0.2, h + 0.2, -h - 0.2, h + 0.2, z(17.5), z(18.9), accColor, { mat: 'acc', slot: 'cap', group: cGroup });
-    add(-h + 0.3, h - 0.3, h, h + 1.6, z(17.2), z(17.75), accColor, { mat: 'acc', slot: 'cap_brim', group: cGroup });
+    add(-h - 0.12, h + 0.12, -h - 0.12, h + 0.12, z(17.0), z(18.6), accColor, { mat: 'acc', slot: 'cap', group: cGroup });
+    add(-h + 0.4, h - 0.4, h, h + 1.4, z(17.0), z(17.5), accColor, { mat: 'acc', slot: 'cap_brim', group: cGroup });
   }
   if (acc === 'headphones') {
     const hpGroup = nextGroup++;
-    add(-h - 0.35, h + 0.35, -0.5, 0.5, z(18.4), z(19.0), accColor, { mat: 'acc', slot: 'headphones', group: hpGroup });
+    add(-h - 0.15, h + 0.15, -0.5, 0.5, z(18.4), z(18.95), accColor, { mat: 'acc', slot: 'headphones', group: hpGroup });
     for (const s of [-1, 1]) {
-      const ex0 = s > 0 ? h : -h - 0.75;
-      const ex1 = s > 0 ? h + 0.75 : -h;
-      add(ex0, ex1, -1.1, 1.1, z(13.0), z(15.8), accColor, { mat: 'acc', slot: 'headphones', group: hpGroup });
+      const ex0 = s > 0 ? h - 0.1 : -h - 0.25;
+      const ex1 = s > 0 ? h + 0.25 : -h + 0.1;
+      add(ex0, ex1, -0.9, 0.9, z(13.4), z(15.6), accColor, { mat: 'acc', slot: 'headphones', group: hpGroup });
     }
   }
   if (look.headband) {
-    add(-h - 0.22, h + 0.22, -h - 0.22, h + 0.22, z(16.1), z(16.75), look.headband, { mat: 'acc', slot: 'headband' });
+    add(-h - 0.09, h + 0.09, -h - 0.09, h + 0.09, z(15.85), z(16.55), look.headband, {
+      mat: 'acc', slot: 'headband', flushHead: true, group: hairGroup,
+    });
   }
-  if (look.hat) { // Bellhop pillbox hat
-    const hatBandGroup = nextGroup++;
-    const hatCrownGroup = nextGroup++;
-    add(-2.5, 2.5, -2.5, 2.5, z(18.5), z(19.2), look.gold || '#f6c667', { mat: 'gold', slot: 'hat_band', group: hatBandGroup });
-    add(-2.3, 2.3, -2.3, 2.3, z(19.2), z(20.9), look.shirt, { mat: 'shirt', slot: 'hat_crown', group: hatCrownGroup });
-    add(-0.5, 0.5, -0.5, 0.5, z(20.9), z(21.4), look.gold || '#f6c667', { mat: 'gold', slot: 'hat_top', group: hatBandGroup });
+  if (look.hat) { // Bellhop pillbox hat: gold base band + flat-topped pink crown
+    const hatGroup = nextGroup++;
+    add(-2.5, 2.5, -2.5, 2.5, z(18.3), z(18.85), look.gold || '#f6c667', { mat: 'gold', slot: 'hat_band', group: hatGroup });
+    add(-2.45, 2.45, -2.45, 2.45, z(18.85), z(20.35), look.shirt, { mat: 'shirt', slot: 'hat_crown', group: hatGroup });
   }
-  if (look.chefHat) { // Tall white chef toque
-    const chefBandGroup = nextGroup++;
-    const chefCrownGroup = nextGroup++;
-    add(-2.8, 2.8, -2.8, 2.8, z(18.5), z(19.4), '#e8e8f0', { mat: 'acc', slot: 'chef_band', group: chefBandGroup });
-    add(-3.2, 3.2, -3.2, 3.2, z(19.4), z(21.8), '#f2ede4', { mat: 'acc', slot: 'chef_crown', group: chefCrownGroup });
+  if (look.chefHat) { // Tall white chef toque: fitted headband base + wider puffed crown (guide 5.6)
+    const chefGroup = nextGroup++;
+    add(-h - 0.04, h + 0.04, -h - 0.04, h + 0.04, z(16.9), z(18.3), '#e2e0ea', { mat: 'acc', slot: 'chef_band', group: chefGroup });
+    add(-h - 0.35, h + 0.35, -h - 0.35, h + 0.35, z(18.3), z(21.3), '#f5f2eb', { mat: 'acc', slot: 'chef_crown', group: chefGroup });
   }
   if (look.goggles) {
-    const gogStrapGroup = nextGroup++;
-    const gogLensGroup = nextGroup++;
-    add(-h - 0.22, h + 0.22, -h - 0.22, h + 0.22, z(15.6), z(16.5), '#2f3a4a', { mat: 'acc', slot: 'goggles_strap', group: gogStrapGroup });
+    const gogGroup = nextGroup++;
+    // Thin side/front strap flush to head (leaves hair clearly visible above and behind)
+    add(-h - 0.09, h + 0.09, -0.6, h + 0.09, z(15.7), z(16.25), '#2f3a4a', {
+      mat: 'acc', slot: 'goggles_strap', flushHead: true, group: gogGroup,
+    });
     for (const s of [-1, 1]) {
-      const gx0 = s > 0 ? 0.5 : -2.6;
-      const gx1 = s > 0 ? 2.6 : -0.5;
-      add(gx0, gx1, h, h + 0.45, z(15.4), z(16.7), '#8fe36b', { mat: 'acc', slot: 'goggles_lens', group: gogLensGroup });
+      const gx0 = s > 0 ? 0.45 : -2.45;
+      const gx1 = s > 0 ? 2.45 : -0.45;
+      add(gx0, gx1, h - 0.05, h + 0.18, z(15.45), z(16.45), '#8fe36b', {
+        mat: 'acc', slot: 'goggles_lens', face: '+y', group: gogGroup,
+      });
     }
   }
   if (look.flower) {
-    add(-h - 0.55, -h - 0.05, 0.2, 1.8, z(15.8), z(17.4), '#ff5f8a', { mat: 'acc', slot: 'flower' });
-    add(-h - 0.75, -h - 0.45, 0.6, 1.4, z(16.2), z(17.0), '#ffd24a', { mat: 'gold', slot: 'flower_center' });
+    const flowerGroup = nextGroup++;
+    for (const [s, fc] of [[1, '+x'], [-1, '-x']]) {
+      const fx0 = s > 0 ? h : -h - 0.14;
+      const fx1 = s > 0 ? h + 0.14 : -h;
+      const cx0 = s > 0 ? h : -h - 0.16;
+      const cx1 = s > 0 ? h + 0.16 : -h;
+      add(fx0, fx1, -0.2, 1.1, z(15.6), z(16.9), '#ff5f8a', { mat: 'acc', slot: 'flower', face: fc, group: flowerGroup });
+      add(cx0, cx1, 0.15, 0.75, z(15.95), z(16.55), '#ffd24a', { mat: 'gold', slot: 'flower_center', face: fc, group: flowerGroup });
+    }
   }
 
   return P;
 }
 
-function buildHairBoxes(look, add, z, h, hairGroup) {
+function buildHairBoxes(look, add, z, h, hairGroup, headGroup) {
   const hc = look.hair || '#5a3826';
   const st = look.hairStyle || 'short';
-  const hb = (x0, x1, y0, y1, z0, z1, slot = 'hair') => add(x0, x1, y0, y1, z0, z1, hc, { mat: 'hair', slot, group: hairGroup });
+  const hb = (x0, x1, y0, y1, z0, z1, slot = 'hair', grp = hairGroup, face = null, flushHead = false) =>
+    add(x0, x1, y0, y1, z0, z1, hc, { mat: 'hair', slot, group: grp, face, flushHead });
 
   if (st === 'bald') {
-    // Fringe of hair around sides and back only (top and forehead bare)
-    hb(h - 0.1, h + 0.25, -h - 0.1, 0.6, z(13.2), z(15.8));
-    hb(-h - 0.25, -h + 0.1, -h - 0.1, 0.6, z(13.2), z(15.8));
-    hb(-h - 0.25, h + 0.25, -h - 0.25, -h + 0.1, z(13.2), z(15.8));
+    // Thin horseshoe fringe wrapping the back and sides flush to the head (top and forehead bare)
+    hb(-h - 0.05, h + 0.05, -h - 0.05, -0.3, z(14.0), z(15.1), 'hair', headGroup, null, true);
     return;
   }
 
-  // Approved Pass 14b thin hair cap (0.75 thick at z 17.75..18.5) + short front fringe (hz(7.7)..hz(9))
-  hb(-h - 0.15, h + 0.15, -h - 0.15, h + 0.15, z(hz(9)), z(hz(9) + 0.75), 'hair_cap');
-  hb(-h - 0.05, h + 0.05, h - 0.4, h + 0.05, z(hz(7.7)), z(hz(9)), 'hair_fringe');
-  // Back nape hair inset on x so it is 100% occluded behind head in 'down'/'right' views and visible in back views
-  hb(-h + 0.35, h - 0.35, -h - 0.1, -h + 0.3, z(13.5), z(hz(9)), 'hair_back');
+  // Hiding rule (guide 5.5): full hats (chef toque, cap) hide the top hair cap and front fringe
+  if (look.chefHat || look.accessory === 'cap') {
+    hb(-h - 0.05, h + 0.05, -h - 0.05, -0.2, z(13.8), z(17.0), 'hair_back', hairGroup, '-y', true);
+    return;
+  }
 
-  if (st === 'bob') {
-    hb(h - 0.2, h + 0.25, -h - 0.15, 1.6, z(12.0), z(hz(9)));
-    hb(-h - 0.25, -h + 0.2, -h - 0.15, 1.6, z(12.0), z(hz(9)));
-    hb(-h - 0.2, h + 0.2, -h - 0.25, -h + 0.2, z(12.0), z(hz(9)));
+  // Approved Pass 14b thin hair cap (0.75 thick at z 17.75..18.5; 1.15 thick on spiky) + short front fringe
+  const capTop = st === 'spiky' ? 1.15 : 0.75;
+  hb(-h - 0.15, h + 0.15, -h - 0.15, h + 0.15, z(hz(9)), z(hz(9) + capTop), 'hair_cap');
+  hb(-h - 0.05, h + 0.05, h - 0.4, h + 0.05, z(hz(7.7)), z(hz(9)), 'hair_fringe');
+
+  if (st === 'short') {
+    // Back nape hair visible when back of head faces camera ('left'/'up'), hidden in 'down'/'right'
+    hb(-h - 0.05, h + 0.05, -h - 0.05, -0.2, z(13.5), z(hz(9)), 'hair_back', hairGroup, '-y', true);
+  } else if (st === 'bob') {
+    // Single continuous 3D box wrapping back and sides down to jaw level (zero corner seams)
+    hb(-h - 0.08, h + 0.08, -h - 0.08, 0.8, z(12.2), z(hz(9)), 'hair_bob');
   } else if (st === 'long') {
-    hb(h - 0.2, h + 0.3, -h - 0.15, 1.6, z(9.6), z(hz(9)));
-    hb(-h - 0.3, -h + 0.2, -h - 0.15, 1.6, z(9.6), z(hz(9)));
-    hb(-h - 0.1, h + 0.1, -h - 0.35, -h + 0.3, z(8.0), z(hz(9)));
+    // Coplanar upper wrap + lower shoulder cascade (zero corner seams)
+    hb(-h - 0.08, h + 0.08, -h - 0.08, 0.8, z(11.0), z(hz(9)), 'hair_long');
+    hb(-h - 0.08, h + 0.08, -h - 0.08, -0.4, z(8.8), z(11.0), 'hair_long');
   } else if (st === 'spiky') {
-    for (const [sx, sy, sh] of [
-      [-2.1, -1.5, 1.3], [0.0, -0.6, 1.8], [2.1, -1.6, 1.3],
-      [-1.7, 1.4, 1.1], [1.7, 1.4, 1.2],
-    ]) {
-      hb(sx - 0.75, sx + 0.75, sy - 0.75, sy + 0.75, z(hz(9) + 0.75), z(hz(9) + 0.75 + sh));
-    }
+    // Full back+side hair flush to head down to z(13.6) so hair is visible both above AND below headband/goggles
+    hb(-h - 0.04, h + 0.04, -h - 0.04, 0.4, z(13.6), z(hz(9)), 'hair_spiky_base', hairGroup, null, true);
   } else if (st === 'ponytail') {
-    add(-0.85, 0.85, -h - 0.45, -h - 0.05, z(15.4), z(16.5), '#ff5f8a', { mat: 'acc', slot: 'hair_tie' });
-    hb(-1.2, 1.2, -h - 1.5, -h - 0.2, z(14.2), z(17.2));
-    hb(-0.95, 0.95, -h - 1.8, -h - 0.5, z(11.6), z(14.5));
+    hb(-h - 0.05, h + 0.05, -h - 0.05, -0.2, z(13.5), z(hz(9)), 'hair_back', hairGroup, '-y', true);
+    add(-0.85, 0.85, -h - 0.35, -h - 0.02, z(15.4), z(16.4), '#ff5f8a', { mat: 'acc', slot: 'hair_tie' });
+    hb(-1.1, 1.1, -h - 1.2, -h - 0.15, z(14.2), z(17.0));
+    hb(-0.9, 0.9, -h - 1.4, -h - 0.35, z(11.8), z(14.5));
   } else if (st === 'curls') {
-    for (const [cx, cy, cz, ch] of [
-      [-2.4, -1.2, 18.2, 1.2], [2.4, -1.2, 18.2, 1.2],
-      [-1.6, 1.6, 18.2, 1.1], [1.6, 1.6, 18.2, 1.1],
-      [-h - 0.3, -0.4, 14.2, 2.8], [h + 0.3, -0.4, 14.2, 2.8],
-    ]) {
-      hb(cx - 0.85, cx + 0.85, cy - 0.85, cy + 0.85, z(cz), z(cz + ch));
-    }
+    hb(-h - 0.08, h + 0.08, -h - 0.08, 0.6, z(13.6), z(hz(9)));
+    hb(-h + 0.25, h - 0.25, -h + 0.25, h - 0.2, z(hz(9) + 0.75), z(hz(9) + 1.45));
   }
 }
 
@@ -488,25 +507,29 @@ function worldBoxCore(part, dir) {
 const projectCss = (wx, wy, wz) => [(wy - wx) * KX, (wx + wy) * (KX * 0.5) - wz * KZ];
 
 // Evaluates torso outfit details in local torso coordinates (lx, ly, lz) using only material ramps.
-function evalTorsoColor(look, lx, ly, lz, bandIdx, ramps) {
+function evalTorsoColor(look, lx, ly, lz, bandIdx, ramps, n = 2) {
   const bandKey = bandIdx === 0 ? 'top' : (bandIdx === 1 ? 'left' : 'right');
   const shirtRmp = ramps.shirt;
   const o = look.outfit || 'tee';
   const isFront = ly > 1.2;
 
   if (o === 'tee') {
-    // Pass 14b calm accent: single horizontal waist crease (texture.py character('shirt_torso'))
-    if (TEXTURE_RULES.cloth?.enabled !== false && bandIdx !== 0 && lz >= 6.4 && lz <= 6.6) {
-      return shirtRmp.right;
+    // Pass 14b calm accent: subtle 1-row broken waist crease in mid shade (right, not line)
+    if (TEXTURE_RULES.cloth?.enabled !== false && bandIdx === 1 && isFront) {
+      const iv = Math.round(lz * n * KZ);
+      const ivCrease = Math.round(6.5 * n * KZ);
+      if (iv === ivCrease && ((lx >= -1.45 && lx <= -0.45) || (lx >= 0.55 && lx <= 1.25))) {
+        return shirtRmp.right;
+      }
     }
     return shirtRmp[bandKey];
   }
 
   if (o === 'bellhop') {
     const goldRmp = ramps.gold;
-    if (lz >= 10.35) return goldRmp[bandKey];
     if (lz <= 5.55) return ramps.pants.line;
     if (isFront) {
+      if (lz >= 10.2 && Math.abs(lx) <= 1.55) return goldRmp[bandKey];
       if (Math.abs(lx) < 0.18) return shirtRmp.line;
       const ax = Math.abs(lx);
       if (ax >= 0.75 && ax <= 1.25) {
@@ -524,7 +547,6 @@ function evalTorsoColor(look, lx, ly, lz, bandIdx, ramps) {
       if (ax < 0.85) return ramps.under[bandKey];
       if (ax < 1.1) return shirtRmp.line;
     }
-    if (bandIdx !== 0 && lz >= 6.4 && lz <= 6.6) return shirtRmp.right;
     return shirtRmp[bandKey];
   }
 
@@ -563,7 +585,7 @@ function evalTorsoColor(look, lx, ly, lz, bandIdx, ramps) {
 
 // Stamps projected face features onto the head's front isometric plane (2:1 slope).
 // Matches core.py apply_face_stamps() at n=4 (DETAIL=2) and scales cleanly to n=2 (DETAIL=1).
-function applyFaceStamps(colorGrid, pidGrid, W, H, headIdx, dir, look, pose, n, X0, Y0, hdz) {
+function applyFaceStamps(colorGrid, pidGrid, boxes, W, H, headIdx, dir, look, pose, n, X0, Y0, hdz) {
   if (headIdx < 0 || (dir !== 'down' && dir !== 'right')) return;
 
   // Find horizontal reference edge of the head box
@@ -585,7 +607,8 @@ function applyFaceStamps(colorGrid, pidGrid, W, H, headIdx, dir, look, pose, n, 
   const paintPx = (x, y, hexColor) => {
     if (!hexColor || x < 0 || x >= W || y < 0 || y >= H) return;
     const idx = y * W + x;
-    if (pidGrid[idx] === headIdx) {
+    const k = pidGrid[idx];
+    if (k === headIdx || (k >= 0 && (boxes[k].p.slot === 'mustache' || boxes[k].p.slot === 'glasses_side'))) {
       colorGrid[idx] = hexColor;
     }
   };
@@ -798,24 +821,48 @@ function applyFaceStamps(colorGrid, pidGrid, W, H, headIdx, dir, look, pose, n, 
       paintPx(x, y0B + st + dy, BROW);
     }
 
-    // Optional front glasses frame around each eye
+    // Optional front glasses frame around each eye (thin projected 2:1 rim + vertical sides)
     if (look.glasses || look.accessory === 'glasses') {
       const gCol = look.accessoryColor || '#3a3340';
-      const fw = ew + (isHiRes ? 2 : 1);
-      const fh = eh + (isHiRes ? 2 : 1);
-      const fx0 = x0 - (isHiRes ? 1 : 0);
-      const fy0 = y0 - (isHiRes ? 1 : 0);
-      for (let u = 0; u < fw; u++) {
-        const x = fx0 + u;
+      for (let u = -1; u <= ew; u++) {
+        const x = x0 + u;
         const st = slopeStep(x);
-        paintPx(x, fy0 + st, gCol);
-        paintPx(x, fy0 + st + fh - 1, gCol);
+        paintPx(x, y0 + st - 1, gCol);
+        paintPx(x, y0 + st + eh, gCol);
+      }
+      for (let v = 0; v < eh; v++) {
+        const xL = x0 - 1;
+        const xR = x0 + ew;
+        paintPx(xL, y0 + slopeStep(xL) + v, gCol);
+        paintPx(xR, y0 + slopeStep(xR) + v, gCol);
       }
     }
   }
 
-  // Mouth (skip if covered by mustache)
-  if (look.mustache) return;
+  // Nose bridge & temple connector for glasses
+  if (look.glasses || look.accessory === 'glasses') {
+    const gCol = look.accessoryColor || '#3a3340';
+    const [cxL] = projectWorld(-2.1 * HS, ff, eyeZ);
+    const [cxR, cyR] = projectWorld(2.1 * HS, ff, eyeZ);
+    const x0L = xRef + 2 * Math.round((cxL - ew / 2 - xRef) / 2);
+    const x0R = xRef + 2 * Math.round((cxR - ew / 2 - xRef) / 2);
+    const xMidR = x0R + Math.floor(ew / 2);
+    const y0R = Math.round(cyR - eh / 2 - slopeStep(xMidR));
+    const bridgeV = isHiRes ? 3 : 1;
+    const bxStart = Math.min(x0L, x0R) + ew;
+    const bxEnd = Math.max(x0L, x0R) - 1;
+    for (let x = bxStart; x <= bxEnd; x++) {
+      paintPx(x, y0R + slopeStep(x) + bridgeV, gCol);
+    }
+    // Connect outer rim of near eye to side temple arm at the head ridge
+    const ridgeX = Math.round(X0 - 0.5);
+    const nearOuter = isDown ? (Math.max(x0L, x0R) + ew) : (Math.min(x0L, x0R) - 1);
+    const cStart = Math.min(nearOuter, ridgeX);
+    const cEnd = Math.max(nearOuter, ridgeX);
+    for (let x = cStart; x <= cEnd; x++) {
+      paintPx(x, y0R + slopeStep(x) + bridgeV, gCol);
+    }
+  }
 
   const [cxM, cyM] = projectWorld(0, ff, mouthZ);
   const mw = isHiRes ? 10 : 6;
@@ -824,6 +871,25 @@ function applyFaceStamps(colorGrid, pidGrid, W, H, headIdx, dir, look, pose, n, 
   const xMidM = x0M + Math.floor(mw / 2);
   const stMidM = slopeStep(xMidM);
   const y0M = Math.round(cyM - mh / 2 - stMidM);
+
+  // Thin projected mustache along 2:1 slope (for gus)
+  if (look.mustache) {
+    const mRmp = materialRamp(look.hair || '#e4e4ea');
+    const musW = isHiRes ? 12 : 6;
+    const musH = isHiRes ? 3 : 2;
+    const mx0 = xRef + 2 * Math.round((cxM - musW / 2 - xRef) / 2);
+    const my0 = y0M - (isHiRes ? 2 : 1);
+    for (let u = 0; u < musW; u++) {
+      const x = mx0 + u;
+      const st = slopeStep(x);
+      const isEnd = isHiRes ? (u <= 1 || u >= musW - 2) : (u === 0 || u === musW - 1);
+      const droop = isEnd ? 1 : 0;
+      for (let v = 0; v < musH; v++) {
+        paintPx(x, my0 + st + v + droop, v === 0 ? mRmp.top : mRmp.left);
+      }
+    }
+    return;
+  }
 
   if (expr === 'laughing') {
     // Open mouth with tongue
@@ -990,6 +1056,10 @@ export function renderCharacter(look, dir, pose, makeCanvas, scale = 1) {
 
   let headIdx = -1;
   let headHdz = 0;
+  let hitMinX = W;
+  let hitMaxX = -1;
+  let hitMinY = H;
+  let hitMaxY = -1;
 
   // Orthographic ray-box intersection bounded to each box's 2D screen AABB
   for (let k = 0; k < boxes.length; k++) {
@@ -998,12 +1068,21 @@ export function renderCharacter(look, dir, pose, makeCanvas, scale = 1) {
       headIdx = k;
       headHdz = p.dz || 0;
     }
+    // Skip head-surface features attached to a face pointing away from the camera in this dir
+    if (p.face === '-y' && (dir === 'down' || dir === 'right')) continue;
+    if (p.face === '+y' && (dir === 'left' || dir === 'up')) continue;
+    if (p.face === '+x' && (dir === 'up' || dir === 'right')) continue;
+    if (p.face === '-x' && (dir === 'down' || dir === 'left')) continue;
 
     // 2D pixel bounding box of this 3D box
     const pxMin = Math.max(0, Math.floor(X0 + (wb.wy0 - wb.wx1) * 2 * n - 1));
     const pxMax = Math.min(W - 1, Math.ceil(X0 + (wb.wy1 - wb.wx0) * 2 * n + 1));
     const pyMin = Math.max(0, Math.floor(Y0 + (wb.wx0 + wb.wy0) * n - wb.wz1 * n * KZ - 1));
     const pyMax = Math.min(H - 1, Math.ceil(Y0 + (wb.wx1 + wb.wy1) * n - wb.wz0 * n * KZ + 1));
+    if (pxMin < hitMinX) hitMinX = pxMin;
+    if (pxMax > hitMaxX) hitMaxX = pxMax;
+    if (pyMin < hitMinY) hitMinY = pyMin;
+    if (pyMax > hitMaxY) hitMaxY = pyMax;
 
     const stepOx = rx / ppu;
     const stepOy = ry / ppu;
@@ -1043,6 +1122,11 @@ export function renderCharacter(look, dir, pose, makeCanvas, scale = 1) {
           : (tyExit < tzExit ? tyExit : tzExit);
 
         const idx = rowOffset + px;
+        if (p.flushHead && pidGrid[idx] < 0) {
+          Ox += stepOx;
+          Oy += stepOy;
+          continue;
+        }
         if (te <= tx && te < bestGrid[idx]) {
           bestGrid[idx] = te;
           pidGrid[idx] = k;
@@ -1059,14 +1143,14 @@ export function renderCharacter(look, dir, pose, makeCanvas, scale = 1) {
   const colorGrid = new Array(totalPx).fill(null);
   const basis = DIR_BASIS[dir] || DIR_BASIS.down;
 
-  for (let py = 0; py < H; py++) {
+  for (let py = hitMinY; py <= hitMaxY; py++) {
     const v = vMax - (py + 0.5) / ppu;
     const baseOx = v * upx + 220 * cx;
     const baseOy = v * upy + 220 * cy;
     const Oz = v * upz + 220 * cz;
     const rowOffset = py * W;
 
-    for (let px = 0; px < W; px++) {
+    for (let px = hitMinX; px <= hitMaxX; px++) {
       const idx = rowOffset + px;
       const k = pidGrid[idx];
       if (k < 0) continue;
@@ -1085,7 +1169,7 @@ export function renderCharacter(look, dir, pose, makeCanvas, scale = 1) {
         const lx = hx * basis.rx + hy * basis.ry;
         const ly = hx * basis.fx + hy * basis.fy;
         const lz = hzHit - (p.dz || 0);
-        colorGrid[idx] = evalTorsoColor(look, lx, ly, lz, b, ramps);
+        colorGrid[idx] = evalTorsoColor(look, lx, ly, lz, b, ramps, n);
       } else if (p.slot === 'hair_cap' && b === 0 && TEXTURE_RULES.hair?.enabled !== false) {
         const u = uMin + (px + 0.5) / ppu;
         const te = bestGrid[idx];
@@ -1095,6 +1179,8 @@ export function renderCharacter(look, dir, pose, makeCanvas, scale = 1) {
         const iv = Math.floor(hy * n);
         const tk = characterTexel('hair_cap', iu, iv, 'top', { detail: n >= 3 ? 2 : 1, cu: 0, cv: 0 });
         colorGrid[idx] = tk ? rmp[tk] : rmp.top;
+      } else if (p.slot === 'mustache') {
+        colorGrid[idx] = ramps.skin[bandKey];
       } else {
         colorGrid[idx] = rmp[bandKey];
       }
@@ -1107,9 +1193,9 @@ export function renderCharacter(look, dir, pose, makeCanvas, scale = 1) {
   const outColors = colorGrid.slice();
   const DIRS4 = [[-1, 0], [1, 0], [0, -1], [0, 1]];
 
-  for (let py = 0; py < H; py++) {
+  for (let py = hitMinY; py <= hitMaxY; py++) {
     const rowOffset = py * W;
-    for (let px = 0; px < W; px++) {
+    for (let px = hitMinX; px <= hitMaxX; px++) {
       const idx = rowOffset + px;
       const k = pidGrid[idx];
       if (k < 0) continue;
@@ -1144,20 +1230,20 @@ export function renderCharacter(look, dir, pose, makeCanvas, scale = 1) {
   }
 
   // Stamp front-plane 2:1 sloped face features onto the head
-  applyFaceStamps(outColors, pidGrid, W, H, headIdx, dir, look, safePose, n, X0, Y0, headHdz);
+  applyFaceStamps(outColors, pidGrid, boxes, W, H, headIdx, dir, look, safePose, n, X0, Y0, headHdz);
 
-  // Emit horizontal pixel runs to canvas (zero anti-aliasing, works on both DOM canvas and Node test stubs)
-  for (let py = 0; py < H; py++) {
+  // Emit horizontal pixel runs to canvas within tight hit bounds (zero anti-aliasing, stays GPU-accelerated)
+  for (let py = hitMinY; py <= hitMaxY; py++) {
     const rowOffset = py * W;
-    let px = 0;
-    while (px < W) {
+    let px = hitMinX;
+    while (px <= hitMaxX) {
       const col = outColors[rowOffset + px];
       if (!col) {
         px++;
         continue;
       }
       let runEnd = px + 1;
-      while (runEnd < W && outColors[rowOffset + runEnd] === col) {
+      while (runEnd <= hitMaxX && outColors[rowOffset + runEnd] === col) {
         runEnd++;
       }
       ctx.fillStyle = col;
