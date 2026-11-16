@@ -36,6 +36,13 @@ export function deviceScale(dpr = 1, zoom = 1) {
   return Math.max(1, Math.min(8, Math.ceil(dpr * (zoom || 1))));
 }
 
+export const CUTAWAY_BAKE_SCALE_MAX = 1;
+
+// Tower cutaway is static facade/slab polygons; bake at scale 1 to prevent huge offscreen memory.
+export function cutawayBakeScale(ds = 1) {
+  return Math.min(ds, CUTAWAY_BAKE_SCALE_MAX);
+}
+
 // Baked sprite canvases are rasterised at `dpr` density in room/world space. The
 // caller may be drawing under a camera transform (device-pixel-ratio * zoom, plus
 let activeCamMatrix = null;
@@ -1468,7 +1475,8 @@ export function renderSkylineToCanvas(g, width, height, phase, floor, room = nul
 
 // ---------- Hotel Tower Cut-Away Architecture (Cached Static Layer) ----------
 
-function drawTowerCutawayUnderCached(ctx, room, originX, originY, width, height, phase, dpr = 1) {
+export function drawTowerCutawayUnderCached(ctx, room, originX, originY, width, height, phase, dpr = 1) {
+  dpr = cutawayBakeScale(dpr);
   const phaseBucket = Math.round(phase * 48) % 48;
   const floorNo = (room.floor === 'R' || room.floor === 42 || room.floor === '42') ? 42 : (Number(room.floor) || 1);
   const groundDy = computeGroundDy(floorNo);
@@ -1676,7 +1684,8 @@ function drawTowerCutawayUnder(ctx, room, originX, originY, height, phase) {
 // animation state), so — like drawTowerCutawayUnderCached — it is safe to
 // bake once per room/zoom/origin and blit thereafter instead of re-walking
 // every polygon every frame.
-function drawTowerCutawayOverCached(ctx, room, originX, originY, width, height, dpr = 1) {
+export function drawTowerCutawayOverCached(ctx, room, originX, originY, width, height, dpr = 1) {
+  dpr = cutawayBakeScale(dpr);
   const minX = Math.floor(originX - (room.height - 1) * (TILE_W / 2) - TILE_W / 2 - 32);
   const maxX = Math.ceil(originX + (room.width - 1) * (TILE_W / 2) + TILE_W / 2 + 32);
   const minY = Math.floor(originY - WALL_ANCHOR_Y - 64);
@@ -2519,7 +2528,7 @@ export function renderRoom(ctx, opts) {
   const sky = { top: lerpColor('#1a2250', '#8fd0ff', wb), bottom: lerpColor('#ffd27a', '#fff6c9', wb) };
 
   // Tower cut-away shaft, concrete floor slab, and neighbouring floors
-  drawTowerCutawayUnderCached(ctx, room, originX, originY, width, height, phase, ds);
+  drawTowerCutawayUnderCached(ctx, room, originX, originY, width, height, phase, cutawayBakeScale(ds));
 
   // Viewport bounds in world space for frustum culling on expanded floors
   const tl = screenToWorld(0, 0, camera, width, height);
@@ -2584,7 +2593,7 @@ export function renderRoom(ctx, opts) {
   drawWallsLayerCached(ctx, room, originX, originY, wallColor, sky, wb, lightsTag, ds);
 
   // Upper concrete ceiling slab / parapet over the top of the walls
-  drawTowerCutawayOverCached(ctx, room, originX, originY, width, height, ds);
+  drawTowerCutawayOverCached(ctx, room, originX, originY, width, height, cutawayBakeScale(ds));
 
   // Pass 3: depth-sorted furniture + entities (with overhead items rendered above)
   const drawables = drawablesBuf;

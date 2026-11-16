@@ -31,6 +31,7 @@ import {
   nearCityLayerTransform, getCachedIsoCityLayout, renderSkylineToCanvas, getSeatConfig,
   TILE_W, TILE_H, drawDiamondOverlay, ensureCameraTransform, ensureDeviceTransform,
   setActiveCamMatrix, drawSwimWaterlineOverlay, drawPoolWaterLayer, drawCharacter,
+  cutawayBakeScale, CUTAWAY_BAKE_SCALE_MAX, drawTowerCutawayUnderCached, renderRoom,
 } from '../js/render.js';
 import { ChiptuneAudio, MOOD_PROFILES, MUSIC_FILES, PLAYLIST, TRACK_ORDER, moodForRoom, formatTime } from '../js/audio.js';
 
@@ -2057,6 +2058,7 @@ function makeFakeCanvasCtx({ record = false } = {}) {
     canvas: { width: 0, height: 0 },
     fillStyle: '#000', strokeStyle: '#000', lineWidth: 1, imageSmoothingEnabled: true,
     save() { push('save'); }, restore() { push('restore'); },
+    translate() { push('translate'); }, scale() { push('scale'); },
     beginPath() { push('beginPath'); }, closePath() { push('closePath'); }, clip() { push('clip'); },
     rect(x, y, w, h) { push('rect'); if (record) rects.push([x, y, w, h]); },
     moveTo() { push('moveTo'); }, lineTo() { push('lineTo'); }, arc() { push('arc'); }, ellipse() { push('ellipse'); },
@@ -3130,5 +3132,56 @@ test('v0.12.3 city background: road and vehicle y positions lie on or below the 
     for (const v of vehicles) {
       assert.ok(v.screenY >= layout.horizonY - 1, `vehicle ${v.id} screenY (${v.screenY}) must lie on or below horizonY (${layout.horizonY})`);
     }
+  }
+});
+
+// ======================= v0.12.8: tower cutaway memory cap =======================
+
+test('perf guard: cutawayBakeScale caps bake scale to CUTAWAY_BAKE_SCALE_MAX across ds 1..8', () => {
+  assert.equal(CUTAWAY_BAKE_SCALE_MAX, 1);
+  for (let ds = 1; ds <= 8; ds++) {
+    assert.ok(cutawayBakeScale(ds) <= 1, `cutawayBakeScale(${ds}) must not exceed 1`);
+  }
+});
+
+test('perf guard: rendering cutaway for ROOMS.restaurant at ds=2 creates offscreen canvas <= 20,000,000 pixels', () => {
+  const realDocument = global.document;
+  const createdCanvases = [];
+  global.document = {
+    createElement(tag) {
+      assert.equal(tag, 'canvas', 'only offscreen <canvas> elements are created');
+      const canvas = {
+        width: 0,
+        height: 0,
+        getContext: () => makeFakeCanvasCtx({ record: false }),
+      };
+      createdCanvases.push(canvas);
+      return canvas;
+    },
+  };
+  try {
+    const liveCtx = makeFakeCanvasCtx({ record: true });
+    renderRoom(liveCtx, {
+      room: ROOMS.restaurant,
+      placedFurniture: [],
+      entities: [],
+      hoverTile: null,
+      ghost: null,
+      phase: 0.5,
+      walkTarget: null,
+      width: 960,
+      height: 600,
+      dpr: 2,
+      camera: { zoom: 1, panX: 0, panY: 0 },
+    });
+    assert.ok(createdCanvases.length > 0, 'offscreen canvases created');
+    const cutawayUnderCanvas = createdCanvases[0];
+    const totalPixels = cutawayUnderCanvas.width * cutawayUnderCanvas.height;
+    assert.ok(
+      totalPixels > 0 && totalPixels <= 20000000,
+      `restaurant cutaway canvas pixel count (${totalPixels}) must be <= 20,000,000 pixels`,
+    );
+  } finally {
+    global.document = realDocument;
   }
 });
