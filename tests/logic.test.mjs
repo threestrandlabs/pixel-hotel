@@ -22,7 +22,13 @@ import { createDefaultState, loadState, saveState, resetState, sanitizePlacedIte
 import { getCatalogueItem, TILE, SAVE_VERSION, ROOMS, NPCS, CATALOGUE, SEED_FURNITURE, ITEM_CATEGORIES, ROOM_TIERS } from '../js/data.js';
 import { respondToMessage, findWanderTarget, createNpcRuntime, tickNpc } from '../js/npc.js';
 import { LOOKS, renderCharacter, buildParts } from '../js/voxel.js';
-import { buildWindowSegment, buildGlassBalustradeSegment, buildBookshelf, FURNITURE_BUILDERS, ART } from '../js/sprites.js';
+import {
+  buildWindowSegment, buildGlassBalustradeSegment, buildBookshelf, FURNITURE_BUILDERS, ART,
+  buildFloorTile, buildWallSegment, buildDoorSegment, buildElevatorDoorSegment,
+  buildStairwellDoorSegment, buildElevatorTile, buildEdgeRailSegment, buildDoorTile,
+  FLOOR_MATERIALS, ISO,
+} from '../js/sprites.js';
+import { materialRamp, getDetail, setDetail } from '../js/pixelart.js';
 import {
   tileToScreen, computeOrigin, computeGroundDy, computeCityGroundDy,
   projectIsoCityPoint, buildIsoCityLayout, computeCityVehicles, drawBackground,
@@ -3183,5 +3189,110 @@ test('perf guard: rendering cutaway for ROOMS.restaurant at ds=2 creates offscre
     );
   } finally {
     global.document = realDocument;
+  }
+});
+
+// ======================= Phase 2: rooms (walls, floors, windows, doors) in the new pixel style =======================
+
+test('phase2 walls: wall body is one solid piece with no vertical panel-line columns', () => {
+  const prevDetail = getDetail();
+  try {
+    for (const d of [1, 2]) {
+      setDetail(d);
+      for (const kind of ['north', 'west']) {
+        const s = buildWallSegment('#e3a27a', kind);
+        const step = ART / d;
+        const wallHSteps = Math.floor((ISO.WALL_H * ART) / step);
+        // Sample a row well inside the plain body (clear of the top cap and the skirting board)
+        const bodyVIdx = Math.floor(wallHSteps / 2);
+        const startX = kind === 'north' ? s.w / 2 : 0;
+        const endX = kind === 'north' ? s.w : s.w / 2;
+        const colorsSeen = new Set();
+        for (let x = startX; x < endX; x += step) {
+          const uStep = kind === 'north'
+            ? Math.floor((x - s.w / 2) / (2 * step))
+            : Math.floor((s.w / 2 - 1 - x) / (2 * step));
+          const y = uStep * step + bodyVIdx * step;
+          if (y >= 0 && y < s.h) colorsSeen.add(s.px[y][x]);
+        }
+        assert.equal(colorsSeen.size, 1, `wall ${kind} body row at DETAIL=${d} must be a single flat colour, saw ${colorsSeen.size} distinct colours (panel-line seam)`);
+      }
+    }
+  } finally {
+    setDetail(prevDetail);
+  }
+});
+
+test('phase2 floors: every floor material bakes pixels strictly from its 4-shade material ramp', () => {
+  const baseColor = '#e9c48f';
+  const rmp = materialRamp(baseColor);
+  const allowed = new Set([rmp.top, rmp.left, rmp.right, rmp.line]);
+  for (const material of FLOOR_MATERIALS) {
+    const s = buildFloorTile(baseColor, 0, material);
+    for (let y = 0; y < s.h; y++) {
+      for (let x = 0; x < s.w; x++) {
+        const c = s.px[y][x];
+        if (!c) continue;
+        assert.ok(allowed.has(c), `floor material "${material}" pixel (${x},${y}) colour ${c} is outside the 4-shade ramp (no dither/speckle allowed)`);
+      }
+    }
+  }
+});
+
+test('phase2 edges: wall segment top edge steps a clean 2:1 stair (no AA notches)', () => {
+  const prevDetail = getDetail();
+  try {
+    for (const d of [1, 2]) {
+      setDetail(d);
+      for (const kind of ['north', 'west']) {
+        const s = buildWallSegment('#e3a27a', kind);
+        const step = ART / d;
+        const startX = kind === 'north' ? s.w / 2 : 0;
+        const endX = kind === 'north' ? s.w : s.w / 2;
+        let prevUStep = null;
+        let runLen = 0;
+        for (let x = startX; x < endX; x += step) {
+          const uStep = kind === 'north'
+            ? Math.floor((x - s.w / 2) / (2 * step))
+            : Math.floor((s.w / 2 - 1 - x) / (2 * step));
+          if (prevUStep === null || uStep === prevUStep) {
+            runLen += 1;
+          } else {
+            assert.equal(runLen, 2, `wall ${kind} top edge run length at DETAIL=${d} must be exactly 2 columns per stair step, saw ${runLen}`);
+            runLen = 1;
+          }
+          prevUStep = uStep;
+        }
+      }
+    }
+  } finally {
+    setDetail(prevDetail);
+  }
+});
+
+test('phase2 perf guard: room-shell sprite canvases (wall/floor/window/door/elevator/stairwell/edge-rail) stay bounded at DETAIL 1 and 2', () => {
+  const prevDetail = getDetail();
+  try {
+    const sky = { top: '#8fd0ff', bottom: '#fff6c9' };
+    for (const d of [1, 2]) {
+      setDetail(d);
+      const sprites = [
+        buildFloorTile('#e9c48f', 0, 'default'),
+        buildDoorTile('#e9c48f'),
+        buildWallSegment('#e3a27a', 'north'),
+        buildWindowSegment('#e3a27a', sky, 'north'),
+        buildDoorSegment('#e3a27a', 'north'),
+        buildElevatorDoorSegment('#e3a27a', 'north'),
+        buildStairwellDoorSegment('#e3a27a', 'north'),
+        buildElevatorTile('#e9c48f'),
+        buildEdgeRailSegment('south'),
+      ];
+      for (const s of sprites) {
+        const pixelCount = s.w * s.h;
+        assert.ok(pixelCount <= 200000, `room-shell sprite at DETAIL=${d} has ${pixelCount} px (w=${s.w}, h=${s.h}), exceeds the bounded single-tile cache budget`);
+      }
+    }
+  } finally {
+    setDetail(prevDetail);
   }
 });

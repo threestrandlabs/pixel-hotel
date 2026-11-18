@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 
+## [Unreleased]
+
+### Changed
+
+- **Art rework phase 2: rooms, walls, floors, windows and doors (`js/sprites.js`, `tests/logic.test.mjs`)**:
+  - Walls are now one solid piece per the locked style: a plain 4-shade ramp fill (lit/shaded face, wall-top cap, skirting board), with no panel lines, no per-tile seams, and mid-tone (never near-black) outlines.
+  - Reworked every floor material (`lobby_marble`, `dark_parquet`, `kitchen_tile`, `gym_rubber`, `spa_stone`, `library_carpet`, `arcade_neon`, `glasshouse_tile`, `grass`, `stone_path`, `timber_deck`, `default`) with calm, regular accent patterns (grout lines, broken plank grain, diamond lattices) instead of dense dither/speckle, all strictly limited to each material's 4-shade ramp.
+  - Rebuilt windows, doors, elevator doors, stairwell doors, glass balustrades, elevator floor tiles and edge rails as clean 2:1 pixel-grid sprites consistent with the new wall/floor style.
+  - Added Phase 2 unit tests guarding against wall panel-line regressions, floor pixels leaking outside their material ramp, broken 2:1 stair edges, and unbounded room-shell sprite cache sizes.
+
 ## [0.12.7] - 2026-11-16
 
 ### Fixed

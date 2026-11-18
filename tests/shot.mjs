@@ -79,7 +79,7 @@ async function main() {
     await page.screenshot({ path: path.join(OUT_DIR, `${PREFIX}-street.png`) });
     console.log('captured street');
 
-    // Reset zoom and capture lobby & restaurant at forced Low and High Sprite Detail
+    // Reset zoom and capture every room at forced Low and High Sprite Detail
     await page.goto(BASE_URL, { waitUntil: 'load' });
     await page.waitForFunction(() => window.__pixelHotel, null, { timeout: 8000 });
     await page.keyboard.press('Escape');
@@ -89,12 +89,24 @@ async function main() {
     for (const mode of modes) {
       await page.evaluate((m) => window.__pixelHotel.setSpriteDetail(m), mode);
       await page.waitForTimeout(250);
-      for (const room of ['lobby', 'restaurant']) {
-        await page.evaluate((r) => window.__pixelHotel.takeElevator(r), room);
+      for (const room of ['lobby', 'restaurant', 'pool', 'myroom', 'street']) {
+        const navRoom = room === 'street' ? 'lobby' : room;
+        await page.evaluate((r) => window.__pixelHotel.takeElevator(r), navRoom);
         await page.waitForTimeout(500);
-        const outFile = path.join(OUT_DIR, `${room}_${mode}.png`);
+        if (room === 'street') {
+          const canvas = await page.$('canvas');
+          const box = await canvas.boundingBox();
+          await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+          for (let i = 0; i < 12; i++) await page.mouse.wheel(0, 120);
+          await page.waitForTimeout(400);
+        }
+        const outFile = path.join(OUT_DIR, `${PREFIX}_${room}_${mode}.png`);
         await page.screenshot({ path: outFile });
-        console.log(`captured ${room}_${mode}.png`);
+        console.log(`captured ${PREFIX}_${room}_${mode}.png`);
+        if (room === 'street') {
+          await page.evaluate((r) => window.__pixelHotel.takeElevator(r), 'lobby');
+          await page.waitForTimeout(300);
+        }
       }
     }
   } finally {

@@ -7,6 +7,10 @@
 // drawn with crisp square blocks by render.js, which is what gives the
 // chunky retro-pixel look (no smoothing, no sub-pixel positions).
 
+import {
+  getDetail, materialRamp, woodStreak,
+} from './pixelart.js';
+
 function makeGrid(w, h) {
   const px = [];
   for (let y = 0; y < h; y++) px.push(new Array(w).fill(null));
@@ -117,468 +121,449 @@ export const ISO = { TILE_W: 64, TILE_H: 32, WALL_H: 56 };
 // by ART when it blits, so on-screen size and world scale never change.
 export const ART = 2;
 
+export const FLOOR_MATERIALS = [
+  'lobby_marble',
+  'dark_parquet',
+  'kitchen_tile',
+  'gym_rubber',
+  'spa_stone',
+  'library_carpet',
+  'arcade_neon',
+  'glasshouse_tile',
+  'grass',
+  'stone_path',
+  'timber_deck',
+  'default',
+];
+
+function paintBlock(sprite, x, y, step, color) {
+  for (let dy = 0; dy < step; dy++) {
+    const yy = y + dy;
+    if (yy < 0 || yy >= sprite.h) continue;
+    const row = sprite.px[yy];
+    for (let dx = 0; dx < step; dx++) {
+      const xx = x + dx;
+      if (xx >= 0 && xx < sprite.w) row[xx] = color;
+    }
+  }
+}
+
+// Helper iterating every detail-scaled texel inside the 2:1 isometric floor diamond.
+// Calls fn(x, y, step, u, v, N, d), where (u, v) in [0, N) are the periodic 2:1
+// isometric axes (u steps along +X/down-right, v steps along +Y/down-left).
+function forEachFloorDiamondTexel(w, h, fn) {
+  const d = getDetail();
+  const step = ART / d;
+  const W2 = w / 2;
+  const H2 = h / 2;
+  const M = Math.floor(H2 / step); // 16 at DETAIL=1, 32 at DETAIL=2
+  const N = 2 * M;                 // 32 at DETAIL=1, 64 at DETAIL=2
+
+  for (let Y = 0; Y < N; Y++) {
+    const y = Y * step;
+    const x0 = Y < M ? (W2 - 2 * step * (Y + 1)) : (2 * step * (Y - M));
+    const x1 = Y < M ? (W2 + 2 * step * (Y + 1)) : (w - 2 * step * (Y - M));
+    for (let x = x0; x < x1; x += step) {
+      const X = Math.floor((x - W2) / (2 * step));
+      const U = X + Y + 1;
+      const V = Y - X;
+      const u = ((U % N) + N) % N;
+      const v = ((V % N) + N) % N;
+      fn(x, y, step, u, v, N, d);
+    }
+  }
+}
+
 export function buildFloorTile(baseColor, variant = 0, material = 'default') {
   const w = ISO.TILE_W * ART;
   const h = ISO.TILE_H * ART;
   const s = makeGrid(w, h);
-  fillDiamond(s, w / 2, h / 2 - 0.5, w / 2 - 0.5, h / 2 - 0.5, baseColor);
-  const light = shade(baseColor, 0.18);
-  const dark = shade(baseColor, -0.16);
+  const rmp = materialRamp(baseColor || '#e9c48f');
 
-  if (material === 'lobby_marble' || material === 'marble') {
-    // Polished ivory marble with subtle brass inlay diamond lines
-    for (let y = 0; y < h; y++) {
-      for (let x = 0; x < w; x++) {
-        if (!s.px[y][x]) continue;
-        const nx = Math.abs(x - w / 2);
-        const ny = Math.abs(y - h / 2);
-        const d = nx + ny * 2;
-        if (d >= 24 * ART && d <= 26 * ART) {
-          s.px[y][x] = '#cca442'; // warm polished brass
-        } else if (d > 26 * ART) {
-          s.px[y][x] = shade(baseColor, -0.06);
-        } else {
-          if ((x * 3 + y * 7) % 19 === 0) s.px[y][x] = shade(baseColor, 0.12);
-          else if ((x * 5 + y * 2) % 23 === 0) s.px[y][x] = shade(baseColor, -0.08);
-          else if ((x * 11 + y * 13) % 37 === 0) s.px[y][x] = shade(baseColor, 0.22); // fine quartz sparkle
-        }
+  forEachFloorDiamondTexel(w, h, (x, y, step, u, v, N, d) => {
+    let c = rmp.left;
+
+    if (material === 'lobby_marble' || material === 'marble') {
+      // Calm honed marble slab with 1-step grout, inner bevel highlight, and small corner diamond inlay
+      const cornerDist = Math.min(u + v, (N - u) + (N - v), u + (N - v), (N - u) + v);
+      if (cornerDist < 3 * d) {
+        c = rmp.right;
+      } else if (cornerDist === 3 * d) {
+        c = rmp.line;
+      } else if (u === 0 || v === 0) {
+        c = rmp.right;
+      } else if ((u === 1 && v >= 1) || (v === 1 && u >= 1)) {
+        c = rmp.top;
+      }
+    } else if (material === 'dark_parquet' || material === 'dark_marble') {
+      // Calm horizontal 2:1 wood planks with staggered butt joints and sparse broken grain (texture.py)
+      const pw = 8 * d;
+      const vInPlank = v % pw;
+      const plankIdx = Math.floor(v / pw);
+      const buttPos = (u + (plankIdx % 2) * (16 * d)) % N;
+      if (vInPlank === 0 || buttPos === 0) {
+        c = rmp.right;
+      } else if (vInPlank === 1 && buttPos >= 2 * d && buttPos < 6 * d) {
+        c = rmp.top;
+      } else if (vInPlank >= 2 && vInPlank < pw - 1 && woodStreak(u, v, 17 + (variant % 2) * 7, { detail: d, rowMod: 3, segMod: 4 })) {
+        c = rmp.right;
+      }
+    } else if (material === 'timber_deck') {
+      // Seamless outdoor timber decking boards along U with sparse broken grain
+      const bw = 8 * d;
+      const uInBoard = u % bw;
+      if (uInBoard === 0) {
+        c = rmp.line;
+      } else if (uInBoard === 1) {
+        c = rmp.top;
+      } else if (uInBoard >= 2 && uInBoard < bw - 1 && woodStreak(v, u, 31, { detail: d, rowMod: 3, segMod: 4 })) {
+        c = rmp.right;
+      }
+    } else if (material === 'library_carpet') {
+      // Woven carpet with centre diamond lattice per room.py / texture.py floor_texture (no dither)
+      const du = Math.abs(u - N / 2);
+      const dv = Math.abs(v - N / 2);
+      const cheb = Math.max(du, dv);
+      if (cheb >= 4 * d && cheb < 6 * d) {
+        c = rmp.top;
+      } else if (cheb < 4 * d) {
+        c = rmp.right;
+      } else if (u < 1 * d && v < 1 * d) {
+        c = rmp.line;
+      }
+    } else if (material === 'kitchen_tile') {
+      // Clean 2x2 ceramic square tiles per diamond with 2:1 grout lines
+      const sub = 16 * d;
+      const su = u % sub;
+      const sv = v % sub;
+      if (su === 0 || sv === 0) {
+        c = rmp.right;
+      } else if ((su === 1 && sv >= 1 && sv < 5 * d) || (sv === 1 && su >= 1 && su < 5 * d)) {
+        c = rmp.top;
+      }
+    } else if (material === 'spa_stone') {
+      // Natural stone pavers with clean 2:1 bevelled grout
+      if (u === 0 || v === 0) {
+        c = rmp.line;
+      } else if (u === N - 1 || v === N - 1) {
+        c = rmp.right;
+      } else if ((u === 1 && v >= 1 && v < N - 1) || (v === 1 && u >= 1 && u < N - 1)) {
+        c = rmp.top;
+      }
+    } else if (material === 'glasshouse_tile' || material === 'terracotta') {
+      // Warm terracotta pavers with light mortar joint and inner shadow bevel
+      if (u === 0 || v === 0) {
+        c = rmp.top;
+      } else if (u === 1 || v === 1) {
+        c = rmp.right;
+      } else if (u === N - 1 || v === N - 1) {
+        c = rmp.line;
+      }
+    } else if (material === 'stone_path') {
+      // Staggered ashlar flagstone slabs
+      const courseH = 16 * d;
+      const uInCourse = u % courseH;
+      const course = Math.floor(u / courseH);
+      const vJoint = (v + course * (16 * d)) % N;
+      if (uInCourse === 0 || vJoint === 0) {
+        c = rmp.line;
+      } else if (uInCourse === courseH - 1 || vJoint === N - 1) {
+        c = rmp.right;
+      } else if ((uInCourse === 1 && vJoint >= 1) || (vJoint === 1 && uInCourse >= 1)) {
+        c = rmp.top;
+      }
+    } else if (material === 'gym_rubber') {
+      // Calm interlocking rubber mat tiles with subtle corner lug
+      if (u === 0 || v === 0) {
+        c = rmp.line;
+      } else if (u === N - 1 || v === N - 1) {
+        c = rmp.right;
+      } else if ((u >= 3 * d && u < 5 * d && v >= 3 * d && v < 5 * d) ||
+                 (u >= N - 5 * d && u < N - 3 * d && v >= N - 5 * d && v < N - 3 * d)) {
+        c = rmp.top;
+      }
+    } else if (material === 'arcade_neon') {
+      // Calm geometric arcade carpet diamond motif (zero random noise)
+      const du = Math.abs(u - N / 2);
+      const dv = Math.abs(v - N / 2);
+      const cheb = Math.max(du, dv);
+      if (cheb >= 10 * d && cheb < 11 * d) {
+        c = rmp.right;
+      } else if (cheb >= 4 * d && cheb < 6 * d) {
+        c = rmp.top;
+      } else if (cheb < 2 * d) {
+        c = rmp.line;
+      }
+    } else if (material === 'grass') {
+      // Calm lawn grass with two small deterministic 2:1 blade tufts per tile
+      if (u >= 8 * d && u < 10 * d && v >= 10 * d && v < 11 * d) {
+        c = rmp.top;
+      } else if (u >= 22 * d && u < 24 * d && v >= 20 * d && v < 21 * d) {
+        c = rmp.right;
+      }
+    } else {
+      // Default calm deck paver
+      if (u === 0 || v === 0) {
+        c = rmp.right;
+      } else if ((u === 1 && v >= 1 && v < 8 * d) || (v === 1 && u >= 1 && u < 8 * d)) {
+        c = rmp.top;
       }
     }
-    if (variant % 2 === 0) {
-      fillRect(s, w / 2 - 1, h / 2 - 1, 2, 2, '#d8b454');
-    }
-    return s;
-  }
 
-  if (material === 'dark_parquet' || material === 'dark_marble') {
-    // Posh dark espresso mahogany parquet with golden brass inlay edge
-    const darkWood = '#281a16';
-    const midWood = '#34221c';
-    const lightWood = '#402a22';
-    const gold = '#c69a48';
-    for (let y = 0; y < h; y++) {
-      for (let x = 0; x < w; x++) {
-        if (!s.px[y][x]) continue;
-        const nx = Math.abs(x - w / 2);
-        const ny = Math.abs(y - h / 2);
-        const d = nx + ny * 2;
-        if (d >= 28 * ART) {
-          s.px[y][x] = '#1a100e';
-        } else if (d >= 25 * ART && d <= 26 * ART) {
-          s.px[y][x] = gold;
-        } else {
-          const plank = variant % 2 === 0 ? ((x + y * 2) % 6) : ((x - y * 2 + 100) % 6);
-          let c = plank < 2 ? darkWood : (plank < 4 ? midWood : lightWood);
-          if ((x * 3 + y * 5) % 29 === 0) c = shade(c, 0.16); // fine grain fleck
-          s.px[y][x] = c;
-        }
-      }
-    }
-    return s;
-  }
+    paintBlock(s, x, y, step, c);
+  });
 
-  if (material === 'gym_rubber') {
-    // Heavy-duty textured gym rubber matting with cool blue & white flecks
-    const rubberBase = '#26282c';
-    const rubberDark = '#1c1e22';
-    for (let y = 0; y < h; y++) {
-      for (let x = 0; x < w; x++) {
-        if (!s.px[y][x]) continue;
-        const nx = Math.abs(x - w / 2);
-        const ny = Math.abs(y - h / 2);
-        if (nx + ny * 2 >= 29 * ART) {
-          s.px[y][x] = '#141418';
-          continue;
-        }
-        const hash = (x * 37 + y * 59 + variant * 17) & 0xff;
-        let c = hash < 12 ? '#5c8ea8' : hash < 20 ? '#c8d4dc' : hash < 80 ? rubberDark : rubberBase;
-        if (x % (8 * ART) < 1 || y % (8 * ART) < 1) c = shade(c, -0.22); // interlocking mat seams
-        s.px[y][x] = c;
-      }
-    }
-    return s;
-  }
-
-  if (material === 'spa_stone') {
-    // Serene natural slate/travertine pavers with bevelled grout
-    const stoneBase = '#789492';
-    const stoneLight = '#8aa6a4';
-    const stoneDark = '#627c7a';
-    const grout = '#445a58';
-    for (let y = 0; y < h; y++) {
-      for (let x = 0; x < w; x++) {
-        if (!s.px[y][x]) continue;
-        const nx = Math.abs(x - w / 2);
-        const ny = Math.abs(y - h / 2);
-        const d = nx + ny * 2;
-        if (d >= 27 * ART) s.px[y][x] = grout;
-        else if (d >= 25 * ART) s.px[y][x] = stoneDark;
-        else {
-          const hh = (x * 29 + y * 43) % 17;
-          let c = hh < 4 ? stoneLight : (hh < 12 ? stoneBase : stoneDark);
-          if ((x * 13 + y * 7) % 31 === 0) c = shade(c, 0.2); // mineral vein glint
-          s.px[y][x] = c;
-        }
-      }
-    }
-    return s;
-  }
-
-  if (material === 'library_carpet') {
-    // Deep burgundy woven wool carpet with golden diamond lattice
-    const burgDark = '#3e121e';
-    const burgMid = '#521828';
-    const gold = '#b89248';
-    for (let y = 0; y < h; y++) {
-      for (let x = 0; x < w; x++) {
-        if (!s.px[y][x]) continue;
-        const nx = Math.abs(x - w / 2);
-        const ny = Math.abs(y - h / 2);
-        const d = nx + ny * 2;
-        if (d >= 28 * ART) s.px[y][x] = '#2c0c16';
-        else if (Math.floor(d / ART) === 16 || Math.floor(d / ART) === 17) s.px[y][x] = gold;
-        else {
-          let c = (nx + ny) % 3 === 0 ? burgMid : burgDark;
-          if ((x + y * 3) % 23 === 0) c = shade(gold, -0.3); // fine woven thread fleck
-          s.px[y][x] = c;
-        }
-      }
-    }
-    return s;
-  }
-
-  if (material === 'arcade_neon') {
-    // Retro cyber neon carpet: dark indigo with vibrant magenta and cyan pixel accents
-    const bg = '#161226';
-    for (let y = 0; y < h; y++) {
-      for (let x = 0; x < w; x++) {
-        if (!s.px[y][x]) continue;
-        const nx = Math.abs(x - w / 2);
-        const ny = Math.abs(y - h / 2);
-        const d = nx + ny * 2;
-        if (d >= 29 * ART) { s.px[y][x] = '#0e0a1a'; continue; }
-        if ((x + y) % 11 === 0 && d < 22 * ART) s.px[y][x] = '#ff2a8c';
-        else if ((x - y + 60) % 13 === 0 && d < 22 * ART) s.px[y][x] = '#00e5ff';
-        else if (Math.floor(d / ART) === 14) s.px[y][x] = '#4a2878';
-        else if ((x * 3 + y * 5) % 43 === 0) s.px[y][x] = shade(bg, 0.3); // faint pixel sparkle grid
-        else s.px[y][x] = bg;
-      }
-    }
-    return s;
-  }
-
-  if (material === 'glasshouse_tile' || material === 'terracotta') {
-    // Warm terracotta ceramic tile with ivory grout
-    const terra = '#b86244';
-    const terraDark = '#984e36';
-    const grout = '#e2d8c6';
-    for (let y = 0; y < h; y++) {
-      for (let x = 0; x < w; x++) {
-        if (!s.px[y][x]) continue;
-        const nx = Math.abs(x - w / 2);
-        const ny = Math.abs(y - h / 2);
-        const d = nx + ny * 2;
-        if (d >= 28 * ART) s.px[y][x] = grout;
-        else if (d >= 26 * ART) s.px[y][x] = terraDark;
-        else {
-          let c = (x + y * 3) % 7 === 0 ? terraDark : terra;
-          if ((x * 5 + y) % 17 === 0) c = shade(terra, 0.22); // kiln-fired fleck
-          s.px[y][x] = c;
-        }
-      }
-    }
-    return s;
-  }
-
-  if (material === 'grass') {
-    // Lush lawn grass
-    const g0 = '#3e8a42';
-    const g1 = '#4ea052';
-    const g2 = '#327236';
-    for (let y = 0; y < h; y++) {
-      for (let x = 0; x < w; x++) {
-        if (!s.px[y][x]) continue;
-        const hh = (x * 41 + y * 73) % 19;
-        let c = hh < 5 ? g1 : (hh < 13 ? g0 : g2);
-        if ((x * 17 + y * 23) % 31 === 0) c = shade(g1, 0.35); // dew-lit blade tip
-        s.px[y][x] = c;
-      }
-    }
-    return s;
-  }
-
-  if (material === 'stone_path') {
-    // Flagstone garden path
-    const stone = '#7e848c';
-    const stoneDark = '#5e646c';
-    const seam = '#3a5c36';
-    for (let y = 0; y < h; y++) {
-      for (let x = 0; x < w; x++) {
-        if (!s.px[y][x]) continue;
-        const nx = Math.abs(x - w / 2);
-        const ny = Math.abs(y - h / 2);
-        const d = nx + ny * 2;
-        if (d >= 27 * ART) s.px[y][x] = seam;
-        else {
-          let c = (x * 7 + y * 13) % 11 < 4 ? stoneDark : stone;
-          if ((x * 3 + y * 19) % 29 === 0) c = shade(stone, 0.28); // mica glint
-          s.px[y][x] = c;
-        }
-      }
-    }
-    return s;
-  }
-
-  if (material === 'timber_deck') {
-    // Teak outdoor decking boards
-    const teak = '#98683e';
-    const teakDark = '#7c522e';
-    const seam = '#4a301a';
-    const boardW = 3 * ART;
-    for (let y = 0; y < h; y++) {
-      for (let x = 0; x < w; x++) {
-        if (!s.px[y][x]) continue;
-        if (y % boardW < ART) s.px[y][x] = seam;
-        else {
-          let c = (x * 3 + y) % 9 === 0 ? teakDark : teak;
-          if ((x * 11 + y * 2) % 23 === 0) c = shade(teak, 0.2); // grain highlight
-          s.px[y][x] = c;
-        }
-      }
-    }
-    return s;
-  }
-
-  if (material === 'kitchen_tile') {
-    // Commercial white kitchen floor tile
-    const tile = '#e6ecf0';
-    const tileShade = '#d4dce2';
-    const grout = '#a4b0b8';
-    for (let y = 0; y < h; y++) {
-      for (let x = 0; x < w; x++) {
-        if (!s.px[y][x]) continue;
-        const nx = Math.abs(x - w / 2);
-        const ny = Math.abs(y - h / 2);
-        const d = nx + ny * 2;
-        if (d >= 28 * ART) s.px[y][x] = grout;
-        else if (d >= 26 * ART) s.px[y][x] = tileShade;
-        else s.px[y][x] = (x % (16 * ART) < ART || y % (16 * ART) < ART) ? shade(tile, -0.04) : tile; // individual tile grout lines
-      }
-    }
-    return s;
-  }
-
-  // Default subtle diamond facets
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      if (!s.px[y][x]) continue;
-      const nx = x - w / 2;
-      const ny = y - h / 2;
-      if (nx + ny * 2 < -6 * ART) s.px[y][x] = light;
-      else if (nx + ny * 2 > 10 * ART) s.px[y][x] = dark;
-      else if ((Math.abs(nx) + Math.abs(ny)) % 23 === 0) s.px[y][x] = shade(baseColor, 0.08); // subtle fine fleck
-    }
-  }
-  if (variant % 2 === 0) {
-    fillRect(s, w / 2 - 1, h / 2 - 1, 2, 2, shade(baseColor, 0.3));
-  }
   return s;
 }
 
 export function buildDoorTile(baseColor) {
   const s = buildFloorTile(baseColor, 1);
-  const w = ISO.TILE_W * ART, h = ISO.TILE_H * ART;
-  const mat = '#9c4a3c';
-  fillDiamond(s, w / 2, h / 2, w / 2 - 8 * ART, h / 2 - 5 * ART, mat);
-  fillDiamond(s, w / 2, h / 2, w / 2 - 12 * ART, h / 2 - 7 * ART, shade(mat, 0.15));
-  fillDiamond(s, w / 2, h / 2, w / 2 - 16 * ART, h / 2 - 9 * ART, shade(mat, -0.1)); // inner bevel ring
+  const matRmp = materialRamp('#9c4a3c');
+  forEachFloorDiamondTexel(s.w, s.h, (x, y, step, u, v, N, d) => {
+    const m0 = 5 * d;
+    const m1 = N - 5 * d;
+    if (u < m0 || u >= m1 || v < m0 || v >= m1) return;
+    const dist = Math.min(u - m0, m1 - 1 - u, v - m0, m1 - 1 - v);
+    let c = matRmp.left;
+    if (dist < 1 * d) c = matRmp.line;
+    else if (dist < 3 * d) c = matRmp.top;
+    else if (dist < 4 * d) c = matRmp.right;
+    paintBlock(s, x, y, step, c);
+  });
   return s;
 }
 
-// Each wall tile is a parallelogram, not a rectangle: adjacent room tiles are
-// offset on screen by (TILE_W/2, TILE_H/2), so a rectangular slab would leave
-// a staircase of gaps/overlaps along the back wall. Extruding the diamond's
-// north-east edge (for the north wall) or north-west edge (for the west
-// wall) upward by WALL_H gives a face whose side edges land exactly on the
-// neighboring tile's face, producing one continuous slanted wall.
-//
-// Anchor: local (w/2, WALL_H + TILE_H/2) is the "north" diamond point at
-// floor level — callers align that point with the tile's floor center.
+// Each wall tile is a parallelogram extruded upward from the floor diamond's
+// north-east edge (for the north wall) or north-west edge (for the west wall).
+// Locked Pass 14b style: walls are ONE SOLID PIECE — plain 4-shade ramp fill
+// (wall-top cap with mid-tone outline, lit/shaded face, skirting board at the bottom),
+// with NO vertical panel lines, NO horizontal plank lines, and NO speckle.
 export function buildWallSegment(baseColor, kind = 'north') {
   const w = ISO.TILE_W * ART;
   const h = (ISO.WALL_H + ISO.TILE_H) * ART;
   const s = makeGrid(w, h);
-  const bodyColor = kind === 'north' ? baseColor : shade(baseColor, -0.1);
-  const trim = shade(bodyColor, 0.22);
+  const d = getDetail();
+  const step = ART / d;
+  const rmp = materialRamp(baseColor || '#e3a27a');
+  const bodyColor = kind === 'north' ? rmp.left : rmp.right;
+  const skirtLip = kind === 'north' ? rmp.right : rmp.left;
 
-  const north = [w / 2, ISO.WALL_H * ART];
-  const side = kind === 'north' ? [w, (ISO.WALL_H + ISO.TILE_H / 2) * ART] : [0, (ISO.WALL_H + ISO.TILE_H / 2) * ART];
-  const northUp = [north[0], north[1] - ISO.WALL_H * ART];
-  const sideUp = [side[0], side[1] - ISO.WALL_H * ART];
+  const startX = kind === 'north' ? w / 2 : 0;
+  const endX = kind === 'north' ? w : w / 2;
+  const wallHSteps = Math.floor((ISO.WALL_H * ART) / step); // 56 at DETAIL=1, 112 at DETAIL=2
 
-  fillPolygon(s, [northUp, sideUp, side, north], bodyColor);
-  // plank shading lines run parallel to the wall's slanted base, not the screen
-  const baseY = (x) => Math.round(ISO.WALL_H * ART + (kind === 'north' ? (x - w / 2) / 2 : (w / 2 - x) / 2));
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      if (!s.px[y][x]) continue;
-      if ((baseY(x) - y) % 7 === 6) s.px[y][x] = shade(bodyColor, -0.14);
-      else if ((x * 3 + y * 5) % 41 === 0) s.px[y][x] = shade(bodyColor, 0.08); // fine plank grain fleck
+  for (let x = startX; x < endX; x += step) {
+    const uStep = kind === 'north'
+      ? Math.floor((x - w / 2) / (2 * step))
+      : Math.floor((w / 2 - 1 - x) / (2 * step));
+    const topY = uStep * step;
+
+    for (let vIdx = 0; vIdx <= wallHSteps; vIdx++) {
+      const y = topY + vIdx * step;
+      let c = bodyColor;
+      if (vIdx < 1 * d) {
+        c = rmp.line; // outer top 2:1 outline
+      } else if (vIdx < 4 * d) {
+        c = rmp.top;  // wall-top cap fill
+      } else if (vIdx < 5 * d) {
+        c = rmp.line; // inner top 2:1 outline
+      } else if (vIdx >= wallHSteps - 4 * d && vIdx < wallHSteps - 3 * d) {
+        c = skirtLip; // skirting board top lip
+      } else if (vIdx >= wallHSteps - 3 * d) {
+        c = rmp.line; // skirting board face & floor contact line
+      }
+      paintBlock(s, x, y, step, c);
     }
-  }
-  // a thin highlight along the top (ceiling) edge of the wall
-  for (let x = 0; x < w; x++) {
-    let hit = 0;
-    for (let y = 0; y < h && hit < ART; y++) {
-      if (s.px[y][x]) { s.px[y][x] = hit === 0 ? trim : shade(trim, -0.1); hit++; }
-    }
-  }
-  // dark baseboard where the wall meets the floor
-  for (let x = 0; x < w; x++) {
-    let last = -1;
-    for (let y = 0; y < h; y++) if (s.px[y][x]) last = y;
-    for (let y = last - 3 * ART; y <= last; y++) if (y >= 0 && s.px[y][x]) s.px[y][x] = shade(bodyColor, -0.32);
   }
   return s;
 }
 
 export const WALL_ANCHOR_Y = ISO.WALL_H + ISO.TILE_H / 2;
 
-// Wall-plane mapping for one wall tile: (u along the wall 0..1, t up the wall
-// 0..1) <-> sprite pixels. Everything drawn through it follows the wall's
-// slant, so window parts converge with the wall instead of floating on it.
-function wallPlane(kind) {
-  const sgn = kind === 'north' ? 1 : -1;
-  const W2 = (ISO.TILE_W * ART) / 2;
-  const WALLF = ISO.WALL_H * ART;
-  return {
-    P: (u, t) => [W2 + sgn * W2 * u, WALLF + (ISO.TILE_H * ART / 2) * u - WALLF * t],
-    inv: (x, y) => {
-      const u = sgn * (x - W2) / W2;
-      return [u, (WALLF + (ISO.TILE_H * ART / 2) * u - y) / WALLF];
-    },
-  };
-}
-
-// A recessed window cut into the wall plane: architrave, a left reveal and
-// inner sill visible through the opening, sky-gradient panes with sash bars and
-// glare, a projecting stone sill and lintel (top + front + end faces).
-// `sky` = { top, bottom } hex colours.
+// Window cut cleanly into the wall plane along exact 2:1 stair steps:
+// mid-tone outline, warm frame, light sill highlight row, centre mullion,
+// and calm 2-3 shade glass with one highlight streak (no gradients, no speckle).
 export function buildWindowSegment(baseColor, sky, kind = 'north') {
   const s = buildWallSegment(baseColor, kind);
-  const body = kind === 'north' ? baseColor : shade(baseColor, -0.1);
-  const { P, inv } = wallPlane(kind);
-  const poly = (ua, ub, ta, tb, o = [0, 0]) => [[ua, ta], [ub, ta], [ub, tb], [ua, tb]]
-    .map(([u, t]) => { const [x, y] = P(u, t); return [x + o[0], y + o[1]]; });
-  const U0 = 0.16, U1 = 0.84, T0 = 0.32, T1 = 0.82;
-  const frame = '#f1e6d2';
-  const sgn = kind === 'north' ? 1 : -1;
+  const w = s.w;
+  const d = getDetail();
+  const step = ART / d;
+  const startX = kind === 'north' ? w / 2 : 0;
+  const endX = kind === 'north' ? w : w / 2;
 
-  // architrave (flush with the wall): lit left jamb/head, shaded right jamb
-  fillPolygon(s, poly(U0 - 0.07, U1 + 0.07, T0 - 0.06, T1 + 0.06), shade(frame, -0.05));
-  fillPolygon(s, poly(U1, U1 + 0.07, T0 - 0.06, T1 + 0.06), shade(frame, -0.2));
-  // opening: depth goes into the wall, which shifts the pane up the wall's depth axis
-  const sx = sgn * 3.4 * ART, sy = -1.7 * ART;
-  const lo = (a, b, c) => Math.max(a, Math.min(b, c));
-  for (let y = 0; y < s.h; y++) {
-    for (let x = 0; x < s.w; x++) {
-      if (!s.px[y][x]) continue;
-      const [u, t] = inv(x + 0.5, y + 0.5);
-      if (u < U0 || u > U1 || t < T0 || t > T1) continue;
-      const [pu, pt] = inv(x + 0.5 - sx, y + 0.5 - sy);
-      if (pu < U0) { s.px[y][x] = shade(body, -0.38); continue; } // side reveal
-      if (pt < T0) { s.px[y][x] = shade(frame, -0.1); continue; } // inner sill, lit from above
-      const nu = lo(0, 1, (pu - U0) / (U1 - U0)), nt = lo(0, 1, (pt - T0) / (T1 - T0));
-      if (nu < 0.07 || nu > 0.93 || nt < 0.06 || nt > 0.94 || Math.abs(nu - 0.5) < 0.05 || Math.abs(nt - 0.5) < 0.045) {
-        s.px[y][x] = (nu < 0.5 || nt > 0.5) ? shade(frame, -0.08) : shade(frame, -0.28); // lit top/left, shaded bottom/right
-        continue;
+  const frameRmp = materialRamp('#e8dcc8');
+  const glassRmp = materialRamp(sky?.top || '#8fd0ff');
+
+  const u0 = 3 * d;
+  const u1 = 13 * d;
+  const v0 = 12 * d;
+  const v1 = 39 * d;
+  const uMid = 8 * d;
+
+  for (let x = startX; x < endX; x += step) {
+    const uLeft = Math.floor((x - startX) / (2 * step));
+    if (uLeft < u0 || uLeft >= u1) continue;
+    const uStep = kind === 'north' ? uLeft : (16 * d - 1 - uLeft);
+    const topY = uStep * step;
+
+    for (let vIdx = v0; vIdx < v1; vIdx++) {
+      const y = topY + vIdx * step;
+      let c;
+      const isOuterOutline = (uLeft === u0 || uLeft === u1 - 1 || vIdx === v0 || vIdx === v1 - 1);
+      const isSillHighlight = (vIdx >= v1 - 3 * d && vIdx < v1 - 2 * d && uLeft > u0 && uLeft < u1 - 1);
+      const isSillFace = (vIdx >= v1 - 2 * d && vIdx < v1 - 1 && uLeft > u0 && uLeft < u1 - 1);
+      const isFrameTop = (vIdx >= v0 + 1 && vIdx < v0 + 2 * d);
+      const isFrameLeft = (uLeft >= u0 + 1 && uLeft < u0 + 2 * d);
+      const isFrameRight = (uLeft >= u1 - 2 * d && uLeft < u1 - 1);
+      const isMullion = (uLeft === uMid || (d === 2 && uLeft === uMid - 1));
+
+      if (isOuterOutline) {
+        c = frameRmp.line;
+      } else if (isSillHighlight) {
+        c = frameRmp.top;
+      } else if (isSillFace) {
+        c = frameRmp.left;
+      } else if (isFrameTop || isFrameLeft) {
+        c = frameRmp.left;
+      } else if (isFrameRight) {
+        c = frameRmp.right;
+      } else if (isMullion) {
+        c = frameRmp.right;
+      } else {
+        // Glass pane: calm 2-3 flat shades from glassRmp with one highlight streak
+        const isTopShadow = (vIdx < v0 + 3 * d);
+        const isHighlightStreak = (uLeft === u0 + 2 * d + 1 && vIdx >= v0 + 5 * d && vIdx < v1 - 6 * d);
+        if (isHighlightStreak) {
+          c = glassRmp.top;
+        } else if (isTopShadow || uLeft > uMid) {
+          c = glassRmp.right;
+        } else {
+          c = glassRmp.left;
+        }
       }
-      let c = mixHex(sky.bottom, sky.top, nt);
-      const g = nu * 0.8 + nt * 0.5;
-      if (g > 0.9 && g < 1.05) c = shade(c, 0.22);
-      else if (g > 1.12 && g < 1.2) c = shade(c, 0.12);
-      if (nt > 0.88) c = shade(c, -0.14); // shadow under the lintel
-      if ((x * 7 + y * 13) % 53 === 0) c = shade(c, 0.1); // fine glass-pane speckle
-      s.px[y][x] = c;
+      paintBlock(s, x, y, step, c);
     }
   }
-  // projecting slab: top face, front face and the end cap that faces the viewer
-  const slab = (ua, ub, ta, tb, pr, color) => {
-    const out = [-sgn * (ISO.TILE_W * ART) / 2 * pr, (ISO.TILE_H * ART) / 2 * pr]; // outward = toward the viewer
-    const sh = (p) => [p[0] + out[0], p[1] + out[1]];
-    fillPolygon(s, [P(ua, tb), P(ub, tb), sh(P(ub, tb)), sh(P(ua, tb))], shade(color, 0.12));
-    fillPolygon(s, [P(ub, tb), P(ub, ta), sh(P(ub, ta)), sh(P(ub, tb))], shade(color, -0.3));
-    fillPolygon(s, poly(ua, ub, ta, tb, out), color);
-  };
-  fillPolygon(s, poly(0.07, 0.95, T0 - 0.2, T0 - 0.15), shade(body, -0.22)); // wall shadow under the sill
-  slab(0.07, 0.93, T0 - 0.15, T0 - 0.05, 0.16, shade(frame, -0.12));
-  slab(U0 - 0.1, U1 + 0.1, T1 + 0.06, T1 + 0.13, 0.12, shade(frame, -0.12));
   return s;
 }
 
-function mixHex(a, b, t) {
-  const pa = parseInt(a.slice(1), 16), pb = parseInt(b.slice(1), 16);
-  const ch = (sh) => Math.round(((pa >> sh) & 255) * (1 - t) + ((pb >> sh) & 255) * t);
-  return `#${((1 << 24) + (ch(16) << 16) + (ch(8) << 8) + ch(0)).toString(16).slice(1)}`;
-}
-
-// A wall segment with a framed doorway cut into it. Wall bases run along the
-// same slanted line as buildWallSegment, so the frame sits flush on the floor edge.
+// Solid wood door with frame, recessed panels, and brass handle pixel.
 export function buildDoorSegment(baseColor, kind = 'north') {
   const s = buildWallSegment(baseColor, kind);
-  const frame = '#6a3f22';
-  const frameLight = '#f0c27a';
-  const half = (ISO.TILE_W * ART) / 2;
-  const xl = (kind === 'north' ? 35 : 3) * ART;
-  const xr = xl + 26 * ART;
-  const doorH = 46 * ART;
-  for (let x = xl; x < xr; x++) {
-    const base = Math.round(ISO.WALL_H * ART + (kind === 'north' ? (x - half) / 2 : (half - x) / 2)) - ART;
-    for (let y = base - doorH; y <= base; y++) {
-      const post = x < xl + 4 * ART || x >= xr - 4 * ART || y < base - doorH + 4 * ART;
-      let c = post ? (x === xl || y === base - doorH ? frameLight : frame) : '#2b1d2e';
-      if (!post && y > base - 5 * ART) c = '#d9a65a'; // warm light spilling under the door
-      else if (!post && (x * 3 + y * 7) % 31 === 0) c = shade('#2b1d2e', 0.2); // fine wood-grain panel fleck
-      setPixel(s, x, y, c);
+  const w = s.w;
+  const d = getDetail();
+  const step = ART / d;
+  const startX = kind === 'north' ? w / 2 : 0;
+  const endX = kind === 'north' ? w : w / 2;
+
+  const frameRmp = materialRamp('#6a4333');
+  const doorRmp = materialRamp('#9e6840');
+  const handleRmp = materialRamp('#f0c264');
+
+  const u0 = 3 * d;
+  const u1 = 13 * d;
+  const v0 = 10 * d;
+  const v1 = 56 * d;
+
+  for (let x = startX; x < endX; x += step) {
+    const uLeft = Math.floor((x - startX) / (2 * step));
+    if (uLeft < u0 || uLeft >= u1) continue;
+    const uStep = kind === 'north' ? uLeft : (16 * d - 1 - uLeft);
+    const topY = uStep * step;
+
+    for (let vIdx = v0; vIdx <= v1; vIdx++) {
+      const y = topY + vIdx * step;
+      let c;
+      if (uLeft === u0 || uLeft === u1 - 1 || vIdx === v0 || vIdx >= v1 - 1 * d) {
+        c = frameRmp.line;
+      } else if (vIdx < v0 + 2 * d) {
+        c = vIdx === v0 + 1 ? frameRmp.top : frameRmp.left;
+      } else if (uLeft < u0 + 2 * d) {
+        c = frameRmp.left;
+      } else if (uLeft >= u1 - 2 * d) {
+        c = frameRmp.right;
+      } else {
+        // Solid door leaf with upper & lower recessed panels and handle
+        c = doorRmp.left;
+        const inPanelU = (uLeft >= u0 + 3 * d && uLeft < u1 - 3 * d);
+        const inUpperV = (vIdx >= 15 * d && vIdx < 30 * d);
+        const inLowerV = (vIdx >= 35 * d && vIdx < 51 * d);
+        if (inPanelU && (inUpperV || inLowerV)) {
+          const pv0 = inUpperV ? 15 * d : 35 * d;
+          const pv1 = inUpperV ? 30 * d : 51 * d;
+          if (uLeft === u0 + 3 * d || vIdx === pv0) c = doorRmp.line;
+          else if (uLeft === u1 - 3 * d - 1 || vIdx === pv1 - 1) c = doorRmp.top;
+          else c = doorRmp.right;
+        }
+        // Brass door handle
+        if (uLeft === u1 - 3 * d && vIdx >= 31 * d && vIdx < 34 * d) {
+          c = vIdx === 31 * d ? handleRmp.top : handleRmp.left;
+        }
+      }
+      paintBlock(s, x, y, step, c);
     }
   }
   return s;
 }
 
+// Brushed-steel bi-parting metal elevator doors in a brass frame with floor indicator above.
 export function buildElevatorDoorSegment(baseColor, kind = 'north') {
   const s = buildWallSegment(baseColor, kind);
-  const brass = '#d8a848';
-  const brassLight = '#ffe28a';
-  const steelL = '#9aa8b8';
-  const steelR = '#7c8a9a';
-  const seam = '#28303c';
-  const half = (ISO.TILE_W * ART) / 2;
-  const xl = (kind === 'north' ? 34 : 4) * ART;
-  const xr = xl + 28 * ART;
-  const mid = Math.floor((xl + xr) / 2);
-  const doorH = 48 * ART;
-  for (let x = xl; x < xr; x++) {
-    const base = Math.round(ISO.WALL_H * ART + (kind === 'north' ? (x - half) / 2 : (half - x) / 2)) - ART;
-    for (let y = base - doorH; y <= base; y++) {
-      const isFrame = x < xl + 3 * ART || x >= xr - 3 * ART || y < base - doorH + 4 * ART;
-      const isIndicator = y >= base - doorH - 5 * ART && y < base - doorH && x >= mid - 5 * ART && x <= mid + 5 * ART;
-      if (isFrame) {
-        setPixel(s, x, y, x === xl || y === base - doorH ? brassLight : brass);
-      } else {
-        let c = x < mid ? steelL : steelR;
-        if (x === mid) c = seam;
-        else if (y === base - doorH + 6 * ART || y === base - 3 * ART) c = shade(c, -0.15);
-        else if ((x * 5 + y * 3) % 23 === 0) c = shade(c, 0.1); // brushed steel grain
-        setPixel(s, x, y, c);
+  const w = s.w;
+  const d = getDetail();
+  const step = ART / d;
+  const startX = kind === 'north' ? w / 2 : 0;
+  const endX = kind === 'north' ? w : w / 2;
+
+  const brassRmp = materialRamp('#d4a448');
+  const steelRmp = materialRamp('#9aa8b8');
+
+  const u0 = 2 * d;
+  const u1 = 14 * d;
+  const uMid = 8 * d;
+  const v0 = 10 * d;
+  const v1 = 56 * d;
+
+  for (let x = startX; x < endX; x += step) {
+    const uLeft = Math.floor((x - startX) / (2 * step));
+    const uStep = kind === 'north' ? uLeft : (16 * d - 1 - uLeft);
+    const topY = uStep * step;
+
+    // Floor indicator bezel above the elevator architrave
+    if (uLeft >= 6 * d && uLeft < 10 * d) {
+      for (let vIdx = 6 * d; vIdx < 9 * d; vIdx++) {
+        const isIndInside = (uLeft >= 7 * d && uLeft < 9 * d && vIdx === 7 * d);
+        paintBlock(s, x, topY + vIdx * step, step, isIndInside ? brassRmp.top : steelRmp.line);
       }
-      if (isIndicator) setPixel(s, x, y, '#1c1828');
     }
-    // glowing floor indicator dots above elevator arch
-    const indY = Math.round(ISO.WALL_H * ART + (kind === 'north' ? (x - half) / 2 : (half - x) / 2)) - doorH - 4 * ART;
-    if (x >= mid - 4 * ART && x <= mid + 4 * ART) {
-      setPixel(s, x, indY - ART, '#221a30');
-      setPixel(s, x, indY, Math.floor(x / ART) % 2 === 0 ? '#ffcf56' : '#ff6b4a');
-      setPixel(s, x, indY + ART, '#221a30');
+
+    if (uLeft < u0 || uLeft >= u1) continue;
+
+    for (let vIdx = v0; vIdx <= v1; vIdx++) {
+      const y = topY + vIdx * step;
+      let c;
+      if (uLeft === u0 || uLeft === u1 - 1 || vIdx === v0) {
+        c = brassRmp.line;
+      } else if (vIdx >= v1 - 1 * d) {
+        c = steelRmp.line;
+      } else if (vIdx < v0 + 2 * d) {
+        c = vIdx === v0 + 1 ? brassRmp.top : brassRmp.left;
+      } else if (uLeft < u0 + 2 * d) {
+        c = uLeft === u0 + 1 ? brassRmp.top : brassRmp.left;
+      } else if (uLeft >= u1 - 2 * d) {
+        c = brassRmp.right;
+      } else if (uLeft === uMid) {
+        c = steelRmp.line; // centre parting seam between metal elevator doors
+      } else if (uLeft < uMid) {
+        // Left metal door leaf with vertical bright specular stripe (guide 8.4 metal recipe)
+        c = (uLeft === u0 + 3 * d) ? steelRmp.top : steelRmp.left;
+        if (vIdx === v0 + 2 * d) c = steelRmp.right;
+      } else {
+        // Right metal door leaf
+        c = (uLeft === uMid + 1) ? steelRmp.left : steelRmp.right;
+        if (vIdx === v0 + 2 * d) c = steelRmp.line;
+      }
+      paintBlock(s, x, y, step, c);
     }
   }
   return s;
@@ -586,35 +571,61 @@ export function buildElevatorDoorSegment(baseColor, kind = 'north') {
 
 export function buildStairwellDoorSegment(baseColor, kind = 'north') {
   const s = buildWallSegment(baseColor, kind);
-  const frame = '#323a48';
-  const frameLight = '#627288';
-  const half = (ISO.TILE_W * ART) / 2;
-  const xl = (kind === 'north' ? 34 : 4) * ART;
-  const xr = xl + 28 * ART;
-  const mid = Math.floor((xl + xr) / 2);
-  const doorH = 48 * ART;
-  for (let x = xl; x < xr; x++) {
-    const base = Math.round(ISO.WALL_H * ART + (kind === 'north' ? (x - half) / 2 : (half - x) / 2)) - ART;
-    for (let y = base - doorH; y <= base; y++) {
-      const isFrame = x < xl + 3 * ART || x >= xr - 3 * ART || y < base - doorH + 4 * ART;
-      const isWindow = !isFrame && y >= base - doorH + 8 * ART && y <= base - doorH + 22 * ART && x >= mid - 8 * ART && x <= mid + 8 * ART;
-      if (isFrame) {
-        setPixel(s, x, y, (x === xl || y === base - doorH) ? frameLight : frame);
-      } else if (isWindow) {
-        setPixel(s, x, y, Math.floor((x + y) / ART) % 2 === 0 ? '#b8ebff' : '#88ccee');
-      } else {
-        let c = x < mid ? '#485468' : '#384252';
-        if ((x * 7 + y * 3) % 29 === 0) c = shade(c, 0.1); // brushed panel grain
-        setPixel(s, x, y, c);
+  const w = s.w;
+  const d = getDetail();
+  const step = ART / d;
+  const startX = kind === 'north' ? w / 2 : 0;
+  const endX = kind === 'north' ? w : w / 2;
+
+  const frameRmp = materialRamp('#526074');
+  const glassRmp = materialRamp('#98d4ee');
+  const signRmp = materialRamp('#28a854');
+
+  const u0 = 3 * d;
+  const u1 = 13 * d;
+  const v0 = 10 * d;
+  const v1 = 56 * d;
+
+  for (let x = startX; x < endX; x += step) {
+    const uLeft = Math.floor((x - startX) / (2 * step));
+    const uStep = kind === 'north' ? uLeft : (16 * d - 1 - uLeft);
+    const topY = uStep * step;
+
+    // Illuminated green EXIT sign above stairwell door
+    if (uLeft >= 5 * d && uLeft < 11 * d) {
+      for (let vIdx = 6 * d; vIdx < 9 * d; vIdx++) {
+        const isBorder = (uLeft === 5 * d || uLeft === 11 * d - 1 || vIdx === 6 * d || vIdx === 9 * d - 1);
+        const isLit = (uLeft >= 7 * d && uLeft < 9 * d && vIdx === 7 * d);
+        paintBlock(s, x, topY + vIdx * step, step, isBorder ? signRmp.line : (isLit ? signRmp.top : signRmp.left));
       }
     }
-    // Illuminated green "ROOF / EXIT" emergency sign above the stairwell door
-    const signY = Math.round(ISO.WALL_H * ART + (kind === 'north' ? (x - half) / 2 : (half - x) / 2)) - doorH - 4 * ART;
-    if (x >= mid - 8 * ART && x <= mid + 8 * ART) {
-      setPixel(s, x, signY - 2 * ART, '#183824');
-      setPixel(s, x, signY - ART, (x === mid - 8 * ART || x === mid + 8 * ART) ? '#22c55e' : '#15803d');
-      setPixel(s, x, signY, (x >= mid - 3 * ART && x <= mid + 3 * ART) ? '#f0fdf4' : '#22c55e');
-      setPixel(s, x, signY + ART, '#183824');
+
+    if (uLeft < u0 || uLeft >= u1) continue;
+
+    for (let vIdx = v0; vIdx <= v1; vIdx++) {
+      const y = topY + vIdx * step;
+      let c;
+      if (uLeft === u0 || uLeft === u1 - 1 || vIdx === v0 || vIdx >= v1 - 1 * d) {
+        c = frameRmp.line;
+      } else if (vIdx < v0 + 2 * d || uLeft < u0 + 2 * d) {
+        c = (vIdx === v0 + 1 || uLeft === u0 + 1) ? frameRmp.top : frameRmp.right;
+      } else if (uLeft >= u1 - 2 * d) {
+        c = frameRmp.right;
+      } else {
+        c = frameRmp.left;
+        // Vision window in upper door leaf
+        if (uLeft >= 6 * d && uLeft < 10 * d && vIdx >= 16 * d && vIdx < 27 * d) {
+          if (uLeft === 6 * d || uLeft === 10 * d - 1 || vIdx === 16 * d || vIdx === 27 * d - 1) {
+            c = frameRmp.line;
+          } else {
+            c = (uLeft === 7 * d) ? glassRmp.top : glassRmp.left;
+          }
+        } else if (uLeft >= 5 * d && uLeft < 11 * d && vIdx >= 34 * d && vIdx < 36 * d) {
+          // Horizontal panic push-bar
+          c = frameRmp.top;
+        }
+      }
+      paintBlock(s, x, y, step, c);
     }
   }
   return s;
@@ -624,50 +635,67 @@ export function buildGlassBalustradeSegment(kind = 'north') {
   const w = ISO.TILE_W * ART;
   const h = (ISO.WALL_H + ISO.TILE_H / 2) * ART;
   const s = makeGrid(w, h);
-  const baseY = (x) => Math.round(ISO.WALL_H * ART + (kind === 'north' ? (x - w / 2) / 2 : (w / 2 - x) / 2));
-  const RAIL_H = 18 * ART;
+  const d = getDetail();
+  const step = ART / d;
   const startX = kind === 'north' ? w / 2 : 0;
   const endX = kind === 'north' ? w : w / 2;
-  const posts = [4, 5, 31, 32, 58, 59];
 
-  for (let x = startX; x < endX; x++) {
-    const base = baseY(x);
-    // Base mounting shoe (dark metal channel)
-    for (let i = 0; i < ART; i++) setPixel(s, x, base - i, '#242b35');
-    for (let i = ART; i < 2 * ART; i++) setPixel(s, x, base - i, '#3a4452');
-    for (let i = 2 * ART; i < 3 * ART; i++) setPixel(s, x, base - i, '#505d6e');
+  const metalRmp = materialRamp('#9aa8b8');
+  const glassRmp = materialRamp('#8ec8e8');
+  const railHSteps = 18 * d;
 
-    // Tempered glass panel with reflections and sky tint
-    for (let y = base - RAIL_H + 2 * ART; y <= base - 3 * ART; y++) {
-      const isReflect = ((x * 2 + y * 3) % 20 < 2);
-      const isPost = posts.some((p) => x >= p * ART && x < p * ART + ART);
-      if (isPost) {
-        setPixel(s, x, y, (Math.floor(x / ART) % 2 === 0) ? '#d8e4f0' : '#8fa4b8');
-      } else if (isReflect) {
-        setPixel(s, x, y, '#eaf8ff');
+  for (let x = startX; x < endX; x += step) {
+    const uLeft = Math.floor((x - startX) / (2 * step));
+    const uStep = kind === 'north' ? uLeft : (16 * d - 1 - uLeft);
+    const baseY = ISO.WALL_H * ART + uStep * step;
+    const topY = baseY - (railHSteps - 1) * step;
+
+    for (let vIdx = 0; vIdx < railHSteps; vIdx++) {
+      const y = topY + vIdx * step;
+      let c;
+      if (vIdx === 0 || vIdx === railHSteps - 1) {
+        c = metalRmp.line;
+      } else if (vIdx < 2 * d) {
+        c = metalRmp.top;
+      } else if (vIdx < 3 * d) {
+        c = metalRmp.left;
+      } else if (vIdx >= railHSteps - 3 * d) {
+        c = metalRmp.right;
+      } else if (uLeft === 0 || uLeft === 16 * d - 1) {
+        c = uLeft === 0 ? metalRmp.left : metalRmp.right;
+      } else if (uLeft === 4 * d || uLeft === 11 * d) {
+        c = glassRmp.top;
       } else {
-        // Translucent glass texture with subtle dither
-        let c = Math.floor((x + y) / ART) % 2 === 0 ? '#98d2f0' : '#68b4dc';
-        if ((x * 3 + y * 5) % 37 === 0) c = shade(c, 0.3); // fine glint fleck
-        setPixel(s, x, y, c);
+        c = kind === 'north' ? glassRmp.left : glassRmp.right;
       }
+      paintBlock(s, x, y, step, c);
     }
-
-    // Top handrail (polished steel chrome with upper highlight)
-    for (let i = 0; i < ART; i++) setPixel(s, x, base - RAIL_H + i, '#edf4fa');
-    for (let i = ART; i < 2 * ART; i++) setPixel(s, x, base - RAIL_H + i, '#b8c8d8');
-    for (let i = 2 * ART; i < 3 * ART; i++) setPixel(s, x, base - RAIL_H + i, '#6c7c8c');
   }
   return s;
 }
 
 export function buildElevatorTile(baseColor) {
   const s = buildFloorTile(baseColor, 1);
-  const w = ISO.TILE_W * ART, h = ISO.TILE_H * ART;
-  fillDiamond(s, w / 2, h / 2, w / 2 - 7 * ART, h / 2 - 4 * ART, '#3a4252');
-  fillDiamond(s, w / 2, h / 2, w / 2 - 11 * ART, h / 2 - 6 * ART, '#d8a848');
-  fillDiamond(s, w / 2, h / 2, w / 2 - 15 * ART, h / 2 - 8 * ART, '#546074');
-  fillDiamond(s, w / 2, h / 2, w / 2 - 17 * ART, h / 2 - 9 * ART, shade('#546074', -0.15)); // inner bevel
+  const steelRmp = materialRamp('#546074');
+  const brassRmp = materialRamp('#d4a448');
+
+  forEachFloorDiamondTexel(s.w, s.h, (x, y, step, u, v, N, d) => {
+    const m0 = 4 * d;
+    const m1 = N - 4 * d;
+    if (u < m0 || u >= m1 || v < m0 || v >= m1) return;
+    const dist = Math.min(u - m0, m1 - 1 - u, v - m0, m1 - 1 - v);
+    let c = steelRmp.left;
+    if (dist < 1 * d) {
+      c = steelRmp.line;
+    } else if (dist < 3 * d) {
+      c = (u < m0 + 3 * d || v < m0 + 3 * d) ? brassRmp.top : brassRmp.left;
+    } else if (dist < 4 * d) {
+      c = steelRmp.line;
+    } else if (u === Math.floor(N / 2) || v === Math.floor(N / 2)) {
+      c = steelRmp.right;
+    }
+    paintBlock(s, x, y, step, c);
+  });
   return s;
 }
 
@@ -6090,26 +6118,50 @@ export function buildSkyViewerSprite(rot = 0) {
 }
 
 // Low glass-and-chrome safety railing that tiles seamlessly along an open
-// floor edge; `edge` picks which far side of the tile it hugs.
+// floor edge; `edge` picks which far side of the tile it hugs ('south' or 'east').
+// Authored as a clean 2:1 pixel-grid sprite (with mid-tone outline, no #2a1d2e).
 export function buildEdgeRailSegment(edge = 'south') {
-  const METAL = ['#c2ccd6', '#8fa0b0', '#55626f'];
-  const GLASS = ['#a0d8f2', '#6fb6dd', '#3f7f9f'];
-  const t = 0.09;
-  return isoSprite(1, 1, 30, (box) => {
-    if (edge === 'east') {
-      box(1 - t, 0, 1, 1, 0, 3, ...METAL);
-      box(1 - t * 0.7, 0.04, 1 - t * 0.25, 0.22, 3, 24, ...METAL);
-      box(1 - t * 0.7, 0.78, 1 - t * 0.25, 0.96, 3, 24, ...METAL);
-      box(1 - t, 0.06, 1 - t * 0.3, 0.94, 3, 22, ...GLASS);
-      box(1 - t, 0, 1, 1, 24, 27, ...METAL);
-    } else {
-      box(0, 1 - t, 1, 1, 0, 3, ...METAL);
-      box(0.04, 1 - t * 0.7, 0.22, 1 - t * 0.25, 3, 24, ...METAL);
-      box(0.78, 1 - t * 0.7, 0.96, 1 - t * 0.25, 3, 24, ...METAL);
-      box(0.06, 1 - t, 0.94, 1 - t * 0.3, 3, 22, ...GLASS);
-      box(0, 1 - t, 1, 1, 24, 27, ...METAL);
+  const w = ISO.TILE_W * ART;
+  const h = (24 + ISO.TILE_H / 2) * ART;
+  const s = makeGrid(w, h);
+  const d = getDetail();
+  const step = ART / d;
+  const startX = edge === 'east' ? w / 2 : 0;
+  const endX = edge === 'east' ? w : w / 2;
+
+  const metalRmp = materialRamp('#9aa8b8');
+  const glassRmp = materialRamp('#8ec8e8');
+  const railHSteps = 16 * d;
+  const anchorY = 20 * ART;
+
+  for (let x = startX; x < endX; x += step) {
+    const uLeft = Math.floor((x - startX) / (2 * step));
+    const uStep = edge === 'south' ? uLeft : (16 * d - 1 - uLeft);
+    const baseY = anchorY + uStep * step;
+    const topY = baseY - (railHSteps - 1) * step;
+
+    for (let vIdx = 0; vIdx < railHSteps; vIdx++) {
+      const y = topY + vIdx * step;
+      let c;
+      if (vIdx === 0 || vIdx === railHSteps - 1) {
+        c = metalRmp.line;
+      } else if (vIdx < 2 * d) {
+        c = metalRmp.top;
+      } else if (vIdx >= railHSteps - 2 * d) {
+        c = metalRmp.right;
+      } else if (uLeft === 0 || uLeft === 16 * d - 1) {
+        c = uLeft === 0 ? metalRmp.left : metalRmp.right;
+      } else if (uLeft === 5 * d) {
+        c = glassRmp.top;
+      } else {
+        c = edge === 'south' ? glassRmp.left : glassRmp.right;
+      }
+      paintBlock(s, x, y, step, c);
     }
-  });
+  }
+  s.ax = (ISO.TILE_W / 2) * ART;
+  s.ay = anchorY;
+  return s;
 }
 
 export const FURNITURE_BUILDERS = {
