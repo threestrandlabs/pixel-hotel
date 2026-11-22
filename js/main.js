@@ -316,8 +316,9 @@ const MARGIN_BUCKET = 160;
 // MIN_ZOOM as the worst case so later zoom-outs never need a fresh rebake —
 // and only pay for a (idle-scheduled) rebake when the existing bake falls short.
 function requiredCityMargin(cssDim, pan, zoomNow) {
-  const effZoom = Math.max(MIN_ZOOM, Math.min(1.0, zoomNow || 1));
-  const halfVisible = (cssDim / 2 + Math.abs(pan)) / effZoom;
+  const z = Math.max(MIN_ZOOM, zoomNow || 1);
+  const effZoom = Math.min(1.0, z);
+  const halfVisible = Math.abs(pan) / z + (cssDim / 2) / effZoom;
   const needed = Math.max(0, halfVisible - cssDim / 2) + cssDim * 0.12;
   return Math.ceil(needed / MARGIN_BUCKET) * MARGIN_BUCKET;
 }

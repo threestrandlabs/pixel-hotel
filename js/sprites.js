@@ -5739,21 +5739,26 @@ export function buildLampSprite() {
 // 10 continuous fronds. Each frond is one cubic curve that rises from the soil centre and arches
 // down past the rim, drawn as a tapering blade with a light top edge and a dark underside, so every
 // green pixel connects to the same centre. Back fronds are darker and stay above the rim.
+// [angle deg (0 = right, 90 = toward the viewer), reach px, rise px, drop px]: the back fronds stay
+// above the rim; the four front-side ones sweep out past the pot's flanks instead of hanging over its
+// face, so the lighter rim and the soil stay readable.
 const FERN_FRONDS = 10;
+const FERN_SPEC = [
+  [200, 17, 9, -1], [232, 16, 10, -2], [258, 15, 10, -2], [284, 15, 10, -2], [310, 16, 10, -2], [340, 18, 9, -1],
+  [10, 26, 8, 3], [34, 25, 7, 3], [146, 25, 7, 3], [170, 26, 8, 3],
+];
 function paintFern(s, P, R) {
   const [cx, cy] = P(0.5, 0.5, 15);
   const G = tri('#58b24a'); // lit top, base, shadow
-  const order = [];
-  for (let i = 0; i < FERN_FRONDS; i++) {
-    const phi = (i / FERN_FRONDS) * Math.PI * 2 + 0.31 + (i % 3) * 0.05;
-    order.push({ phi, c: Math.cos(phi), n: Math.sin(phi), i });
-  }
-  order.sort((a, b) => a.n - b.n); // back (up the screen) first
+  const order = FERN_SPEC.map(([deg, r, h, d]) => {
+    const phi = (deg * Math.PI) / 180;
+    return { c: Math.cos(phi), n: Math.sin(phi), r, h, d };
+  }).sort((a, b) => a.n - b.n); // back (up the screen) first
   for (const f of order) {
-    const back = f.n < -0.35;
-    const reach = (back ? 16 : (21 + (f.i % 3) * 2) * (1 - 0.35 * Math.max(0, f.n))) * R; // px; the y axis is squashed 2:1 below
-    const h = (back ? 9 : 7 + (f.i % 4)) * R;
-    const drop = (back ? -2 : 2) * R;
+    const back = f.n < -0.3;
+    const reach = f.r * R; // px; the y axis is squashed 2:1 below
+    const h = f.h * R;
+    const drop = f.d * R;
     const ex = f.c * reach;
     const ey = f.n * reach * 0.5;
     const pts = [
@@ -5825,7 +5830,7 @@ export function buildComputerDeskSprite(rot = 0) {
   const inside = tri('#7e5430');
   const drawer = tri('#c48f52');
   const screen = ['#2c437e', '#1d2c5c', '#16224a']; // dark navy glass
-  const glare = ['#5b7fd0', '#5b7fd0', '#4a68b8'];
+  const glare = ['#2c437e', '#2c437e', '#2c437e']; // one step lighter than the navy glass, flat on screen
   const bezel = ['#6d7482', '#4a515e', '#383e4a']; // dark grey
   return isoSprite(tw, th, 46, (box) => {
     const L = frameBox(box, r, 2, 1);
@@ -5844,8 +5849,7 @@ export function buildComputerDeskSprite(rot = 0) {
     L(0.55, 0.36, 0.67, 0.44, 27, 32, ...bezel, { rim: false });
     L(0.24, 0.3, 0.98, 0.4, 31, 46, ...bezel);
     L(0.3, 0.4, 0.92, 0.44, 33, 44, ...screen, { rim: false });
-    L(0.36, 0.4, 0.52, 0.44, 40, 42.5, ...glare, { rim: false }); // small glow / glare patch, coplanar with the glass
-    L(0.36, 0.4, 0.4, 0.44, 37, 40, ...glare, { rim: false });
+    for (let i = 0; i < 3; i++) L(0.36 + i * 0.05, 0.4, 0.4 + i * 0.05, 0.44, 39 + i * 0.9, 39.8 + i * 0.9, ...glare, { rim: false }); // thin diagonal glint, coplanar with the glass
     L(1.0, 0.56, 1.5, 0.78, 26, 27.5, ...CREAM, { rim: false }); // keyboard
     L(1.6, 0.6, 1.7, 0.7, 26, 27.5, ...CREAM, { rim: false }); // mouse
   });

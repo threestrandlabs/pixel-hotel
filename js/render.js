@@ -995,7 +995,7 @@ export function drawBackground(ctx, width, height, phase, floor = 1, dpr = 1, no
 // bottom-right), a mid-tone outline and a few leaf accent pixels; everything is fillRect runs.
 const TREE_W = 24;
 const TREE_H = 20;
-const TREE_LOBES = [[12, 10, 11, 9], [7, 12, 7, 6], [17, 12, 7, 6], [12, 6, 8, 6]];
+const TREE_LOBES = [[12, 9, 10, 8], [7, 12, 6, 5], [17, 12, 6, 5], [12, 6, 8, 6], [12, 14, 6, 5]];
 const TREE_MASK = (() => {
   const inside = (x, y) => TREE_LOBES.some(([cx, cy, rx, ry]) => ((x + 0.5 - cx) / rx) ** 2 + ((y + 0.5 - cy) / ry) ** 2 <= 1);
   const rows = [];
@@ -1027,7 +1027,7 @@ export function drawStreetTree(g, bx, by, leaf, trunk) {
   g.fillRect(bx - 1, by - 11, 2, 11);
   g.fillStyle = shadeColor(trunk, -0.2);
   g.fillRect(bx, by - 11, 1, 11);
-  const cols = [null, midToneOutline(shadeColor(leaf, -0.14)), shadeColor(leaf, 0.12), leaf, shadeColor(leaf, -0.2)];
+  const cols = [null, shadeColor(leaf, -0.1), shadeColor(leaf, 0.12), leaf, shadeColor(leaf, -0.2)];
   const x0 = bx - TREE_W / 2;
   const y0 = by - 8 - TREE_H;
   for (let y = 0; y < TREE_H; y++) {
@@ -2027,18 +2027,27 @@ function toSpriteKey(itemId) {
 // Crisp scanline polygon fill: samples pixel centres and rounds spans like sprites.js's
 // scanPoly, so diagonal/isometric edges (building facades, windows) rasterise with zero
 // antialiasing instead of relying on the canvas's own antialiased path fill.
-// Window pane: the real slanted quad, except on a sub-1 bake (g.lowBake, set by main.js's snapped
-// bake context) where a pane is ~2 bake pixels wide and a slanted quad rasterises ragged, so it
-// becomes a flat-topped rect spanning the pane's width and mean height.
+// Window pane: the real slanted quad on a native bake. On a sub-1 bake (g.lowBake, set by main.js's
+// snapped bake context) it is built by hand in whole bake pixels as column pairs: an even width, a
+// fixed height, and the top/bottom stepping one bake pixel per two columns, so the pane keeps the
+// facade's 2:1 slant with clean 2-px runs instead of the ragged edge a thin quad rasterises to.
 function fillWindow(g, pts, color) {
   if (!g.lowBake) { fillPoly(g, pts, color); return; }
-  const xs = pts.map((p) => p[0]);
-  const x0 = Math.round(Math.min(...xs));
-  const x1 = Math.round(Math.max(...xs));
-  const yc = (pts[0][1] + pts[1][1] + pts[2][1] + pts[3][1]) / 4;
-  const hh = Math.abs(pts[3][1] - pts[0][1]) / 2;
+  const t = g.bakeT || g.getTransform();
+  const raw = g.rawFillRect || g.fillRect;
+  const [pl, pr] = pts[0][0] <= pts[1][0] ? [pts[0], pts[1]] : [pts[1], pts[0]]; // top edge, left to right
+  const slope = (pr[1] - pl[1]) / (pr[0] - pl[0]); // +-0.5 on an iso face
+  const bx0 = Math.round(t.a * pl[0] + t.e);
+  const cols = Math.max(2, 2 * Math.round(t.a * (pr[0] - pl[0]) / 2));
+  const hb = Math.max(2, Math.round(Math.abs(t.d * (pts[3][1] - pts[0][1]))));
+  const by0 = Math.round(t.d * (pl[1] + slope * ((bx0 - t.e) / t.a - pl[0])) + t.f);
+  const step = slope > 0 ? 1 : -1;
+  const invA = 1 / t.a;
+  const invD = 1 / t.d;
   g.fillStyle = color;
-  g.fillRect(x0, Math.round(yc - hh), x1 - x0, Math.round(hh * 2));
+  for (let j = 0; j < cols / 2; j++) {
+    raw.call(g, (bx0 + 2 * j - t.e) * invA, (by0 + step * j - t.f) * invD, 2 * invA, hb * invD);
+  }
 }
 
 function fillPoly(ctx, pts, color) {

@@ -9,13 +9,17 @@ export function snapBakeCtx(g, scale) {
   if (!g.rawFillRect) g.rawFillRect = g.fillRect;
   const raw = g.rawFillRect;
   g.lowBake = scale < 1;
-  if (scale >= 1) { g.fillRect = raw; return; }
+  if (scale >= 1) { g.fillRect = raw; g.bakeT = null; return; }
+  const t = g.getTransform();
+  const { a, d, e, f } = t;
+  const invA = 1 / a;
+  const invD = 1 / d;
+  g.bakeT = t;
   g.fillRect = function snappedFillRect(x, y, w, h) {
-    const t = this.getTransform();
-    const X0 = t.a * x + t.e;
-    const Y0 = t.d * y + t.f;
-    const X1 = t.a * (x + w) + t.e;
-    const Y1 = t.d * (y + h) + t.f;
+    const X0 = a * x + e;
+    const Y0 = d * y + f;
+    const X1 = a * (x + w) + e;
+    const Y1 = d * (y + h) + f;
     let x0 = Math.ceil(X0 - 0.5);
     let x1 = Math.ceil(X1 - 0.5);
     let y0 = Math.ceil(Y0 - 0.5);
@@ -24,6 +28,6 @@ export function snapBakeCtx(g, scale) {
     if (x1 <= x0 && w >= 2) { x0 = Math.round(X0); x1 = x0 + 1; }
     if (y1 <= y0 && h >= 2) { y0 = Math.round(Y0); y1 = y0 + 1; }
     if (x1 <= x0 || y1 <= y0) return;
-    raw.call(this, (x0 - t.e) / t.a, (y0 - t.f) / t.d, (x1 - x0) / t.a, (y1 - y0) / t.d);
+    raw.call(this, (x0 - e) * invA, (y0 - f) * invD, (x1 - x0) * invA, (y1 - y0) * invD);
   };
 }
