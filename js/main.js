@@ -144,7 +144,7 @@ function performBackgroundBake(room, width, height, phase, ox, oy) {
 
   const g = bgCanvas.getContext('2d');
   g.setTransform(BG_SCALE, 0, 0, BG_SCALE, ox * BG_SCALE, oy * BG_SCALE);
-  g.imageSmoothingEnabled = true;
+  g.imageSmoothingEnabled = false;
   renderSkylineToCanvas(g, width, height, phase, floor, room, ox, oy, 'ground');
 
   let beacons = [];
@@ -153,7 +153,7 @@ function performBackgroundBake(room, width, height, phase, ox, oy) {
     bCtx.setTransform(1, 0, 0, 1, 0, 0);
     bCtx.clearRect(0, 0, buildingsCanvas.width, buildingsCanvas.height);
     bCtx.setTransform(BG_SCALE, 0, 0, BG_SCALE, ox * BG_SCALE, oy * BG_SCALE);
-    bCtx.imageSmoothingEnabled = true;
+    bCtx.imageSmoothingEnabled = false;
     beacons = renderSkylineToCanvas(bCtx, width, height, phase, floor, room, ox, oy, 'buildings');
   }
   bgState.beacons = beacons;
@@ -171,7 +171,7 @@ function performBackgroundBake(room, width, height, phase, ox, oy) {
     skyCanvas.style.height = `${height + 2 * oy}px`;
     const sg = skyCanvas.getContext('2d');
     sg.setTransform(BG_SCALE, 0, 0, BG_SCALE, ox * BG_SCALE, oy * BG_SCALE);
-    sg.imageSmoothingEnabled = true;
+    sg.imageSmoothingEnabled = false;
     renderSkylineToCanvas(sg, width, height, phase, floor, room, ox, oy, 'sky');
   }
 

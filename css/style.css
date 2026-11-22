@@ -117,8 +117,7 @@ html, body {
   pointer-events: none;
   overflow: visible;
   /* filter: blur(3.5px) brightness(0.92) saturate(0.88); */
-  image-rendering: auto;
-  image-rendering: smooth;
+  image-rendering: pixelated;
   transform-origin: center center;
   will-change: transform;
   z-index: -1;
@@ -129,8 +128,7 @@ html, body {
   left: 0;
   pointer-events: none;
   display: block;
-  image-rendering: auto;
-  image-rendering: smooth;
+  image-rendering: pixelated;
 }
 /* #bgLayer carries the near city layer (ground, roads, buildings, vehicles) and
    must stay locked 1:1 to the game camera (see updateBackgroundTransform in
@@ -144,8 +142,7 @@ html, body {
   pointer-events: none;
   overflow: visible;
   /* filter: blur(1.5px) brightness(0.92) saturate(0.88); */
-  image-rendering: auto;
-  image-rendering: smooth;
+  image-rendering: pixelated;
   transform-origin: center center;
   will-change: transform;
   z-index: 0;
@@ -159,8 +156,7 @@ html, body {
   left: 0;
   pointer-events: none;
   display: block;
-  image-rendering: auto;
-  image-rendering: smooth;
+  image-rendering: pixelated;
 }
 #gameCanvas {
   position: relative;

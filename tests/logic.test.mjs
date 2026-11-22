@@ -2098,7 +2098,7 @@ test('v0.8.1 render: street vehicles are drawn strictly between the street backd
     assert.equal(blitIdx.length, 2, 'exactly two cached-layer blits land on the live canvas: street backdrop, then buildings');
     const [backdropIdx, buildingsIdx] = blitIdx;
     assert.ok(backdropIdx < buildingsIdx, 'the street backdrop must blit before the buildings layer');
-    const vehicleDrawn = calls.some((c, i) => i > backdropIdx && i < buildingsIdx && (c === 'fill' || c === 'arc'));
+    const vehicleDrawn = calls.some((c, i) => i > backdropIdx && i < buildingsIdx && (c === 'fill' || c === 'arc' || c === 'fillRect'));
     assert.ok(vehicleDrawn, 'vehicles must be drawn strictly between the backdrop and buildings blits, so buildings always occlude them');
   } finally {
     global.document = realDocument;
