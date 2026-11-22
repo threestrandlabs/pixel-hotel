@@ -31,6 +31,7 @@ import {
   buildPlantSprite, buildBarCounter, buildArmchairSprite, buildDiningTableSprite, buildDiningChairSprite,
 } from '../js/sprites.js';
 import { materialRamp, getDetail, setDetail } from '../js/pixelart.js';
+import { snapBakeCtx } from '../js/bakeSnap.js';
 import {
   tileToScreen, computeOrigin, computeGroundDy, computeCityGroundDy,
   projectIsoCityPoint, buildIsoCityLayout, computeCityVehicles, drawBackground,
@@ -3354,4 +3355,69 @@ test('phase4 environment: city layout, roads, and vehicle proportions stay withi
     assert.ok(v.length <= 2.2, `vehicle ${v.id} length (${v.length}) does not exceed max bounds to prevent stretched streaks`);
     assert.ok(v.width >= 0.25 && v.width <= 1.0, `vehicle ${v.id} width (${v.width}) within realistic lane bounds`);
   }
+});
+
+// ======================= Leftovers: backdrop snap, monitor, fern =======================
+
+test('leftovers: snapBakeCtx lands every rect on whole bake pixels at 0.25 and restores native at 1', () => {
+  const rects = [];
+  const g = { fillRect(...a) { rects.push(a); }, getTransform: () => ({ a: 0.25, d: 0.25, e: 10, f: 5 }) };
+  const native = g.fillRect;
+  snapBakeCtx(g, 0.25);
+  for (const [x, y, w, h] of [[3, 7, 11, 1], [100, 101, 1, 1], [5, 5, 2, 18], [8, 8, 40, 31]]) g.fillRect(x, y, w, h);
+  assert.ok(rects.length >= 3);
+  for (const [x, y, w, h] of rects) {
+    for (const v of [x * 0.25 + 10, y * 0.25 + 5, (x + w) * 0.25 + 10, (y + h) * 0.25 + 5]) {
+      assert.equal(v, Math.round(v), 'device edge is an integer (no blended coverage)');
+    }
+  }
+  assert.equal(g.lowBake, true);
+  snapBakeCtx(g, 1);
+  assert.equal(g.fillRect, native);
+  assert.equal(g.lowBake, false);
+});
+
+test('leftovers: desk monitor has a dark navy screen, dark grey bezel and no bright cyan', () => {
+  for (const d of [1, 2]) {
+    setDetail(d);
+    const s = buildComputerDeskSprite(0);
+    const cols = new Set();
+    for (const row of s.px) for (const c of row) if (c) cols.add(c);
+    assert.ok(cols.has('#1d2c5c'), 'navy glass present');
+    assert.ok(cols.has('#4a515e'), 'dark grey bezel present');
+    assert.ok(!cols.has('#4cb8e6') && !cols.has('#8fe0ff'), 'old bright cyan screen is gone');
+  }
+  setDetail(1);
+});
+
+test('leftovers: potted fern is wide and low, every green pixel is one connected plant', () => {
+  for (const d of [1, 2]) {
+    setDetail(d);
+    const s = buildPlantSprite();
+    const isGreen = (c) => {
+      if (!c || !/^#[0-9a-f]{6}$/i.test(c)) return false;
+      const [r, g, b] = [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16));
+      return g > r + 12 && g > b + 12;
+    };
+    const pts = [];
+    for (let y = 0; y < s.h; y++) for (let x = 0; x < s.w; x++) if (isGreen(s.px[y][x])) pts.push([x, y]);
+    assert.ok(pts.length > 100 * d * d, 'fern has real foliage');
+    const seen = new Set([pts[0].join()]);
+    const todo = [pts[0]];
+    const all = new Set(pts.map((p) => p.join()));
+    while (todo.length) {
+      const [x, y] = todo.pop();
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]) {
+        const k = `${x + dx},${y + dy}`;
+        if (all.has(k) && !seen.has(k)) { seen.add(k); todo.push([x + dx, y + dy]); }
+      }
+    }
+    assert.equal(seen.size, all.size, `all green pixels connect (detail ${d})`);
+    const xs = pts.map((p) => p[0]);
+    const ys = pts.map((p) => p[1]);
+    const w = Math.max(...xs) - Math.min(...xs) + 1;
+    const h = Math.max(...ys) - Math.min(...ys) + 1;
+    assert.ok(w > h * 1.2, `fern is wider than tall (${w}x${h})`);
+  }
+  setDetail(1);
 });

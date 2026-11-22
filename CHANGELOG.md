@@ -14,6 +14,13 @@ Art rework: new pixel style for characters, rooms, furniture, and city, plus a H
 
 ### Changed
 
+- **Art leftovers: crisp city backdrop, navy monitor, fern, street trees (`js/main.js`, `js/bakeSnap.js`, `js/render.js`, `js/sprites.js`, `scripts/leftovers-*.mjs`, `tests/logic.test.mjs`)**:
+  - City backdrop: High Sprite Detail now bakes the city layers at native 1:1 (crisp, integer CSS scale; falls back to 0.5 only above 6M pixels). Low keeps the 0.25 bake (0.5 measured 20.3-22.8 fps on `restaurant --mobile`, below the 25.2 floor) but every `fillRect` is snapped to whole bake pixels (`js/bakeSnap.js`), so edges are hard instead of blended. Low draws window panes as flat-topped rects because a slanted pane is only ~2 bake pixels wide. Hills, spires, pavement joints and beacons no longer use antialiased paths/arcs.
+  - Desk monitor: dark navy glass with a small glare patch, dark grey bezel, upright on neck and base.
+  - Potted fern: rebuilt as 10 continuous arching fronds over a tapered terracotta pot (lighter rim, dark soil); every green pixel connects.
+  - Street trees: trunk plus rounded lumpy canopy (flat ramp, mid-tone outline) instead of a green prism.
+  - Known limits: Low backdrop is still 4px blocks (non-integer zoom gives uneven block widths); street-level trees are not reachable by the room camera, so tree crops come from a Node render of the same code.
+
 - **Art rework review pass: furniture builders, city windows, street shots and 8x crops (`js/sprites.js`, `js/render.js`, `js/main.js`, `css/style.css`, `scripts/furniture-crops.mjs`, `tests/_png.mjs`, `tests/logic.test.mjs`)**:
   - Finished the Phase 3 furniture builder rework onto the Pass 14b `isoSprite`/`frameBox`/`tri` helper system (sofa, armchair, dining chair, stool, lamp, plant, suite bed, computer desk, bar counter, dining table, cafe table); restored `grain()`/wood-grain texturing as an automatic accent-only effect on box tops and lit faces (`mat: 'wood'` in `isoSprite`'s `paintBox`, driven by `woodStreak`), replacing the old all-over 3-stripe band version.
   - Fixed the one remaining manual `grain()` call site (`buildDiningBooth`'s plinth) which had silently become a no-op; it now uses the same `mat: 'wood'` accent path.
