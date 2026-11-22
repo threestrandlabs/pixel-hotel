@@ -990,6 +990,58 @@ export function drawBackground(ctx, width, height, phase, floor = 1, dpr = 1, no
   }
 }
 
+// Street tree (pixel style): a short trunk under a rounded, lumpy canopy. The canopy shape is a
+// fixed mask (union of ellipses) shaded with flat ramp steps (light top-left, base, dark
+// bottom-right), a mid-tone outline and a few leaf accent pixels; everything is fillRect runs.
+const TREE_W = 24;
+const TREE_H = 20;
+const TREE_LOBES = [[12, 10, 11, 9], [7, 12, 7, 6], [17, 12, 7, 6], [12, 6, 8, 6]];
+const TREE_MASK = (() => {
+  const inside = (x, y) => TREE_LOBES.some(([cx, cy, rx, ry]) => ((x + 0.5 - cx) / rx) ** 2 + ((y + 0.5 - cy) / ry) ** 2 <= 1);
+  const rows = [];
+  for (let y = 0; y < TREE_H; y++) {
+    const row = [];
+    for (let x = 0; x < TREE_W; x++) {
+      let k = 0; // 0 empty, 1 edge, 2 light, 3 base, 4 dark
+      if (inside(x, y)) {
+        if (!inside(x - 1, y) || !inside(x + 1, y) || !inside(x, y - 1) || !inside(x, y + 1)) k = 1;
+        else {
+          const d = x + y * 1.3;
+          k = d < 16 ? 2 : d > 32 ? 4 : 3;
+          const h = (x * 7 + y * 13) % 11;
+          if (h === 0 && k === 3) k = 2;
+          else if (h === 5 && k === 3) k = 4;
+        }
+      }
+      row.push(k);
+    }
+    rows.push(row);
+  }
+  return rows;
+})();
+
+export function drawStreetTree(g, bx, by, leaf, trunk) {
+  g.fillStyle = 'rgba(18, 12, 28, 0.22)';
+  g.fillRect(bx - 6, by - 2, 12, 3);
+  g.fillStyle = trunk;
+  g.fillRect(bx - 1, by - 11, 2, 11);
+  g.fillStyle = shadeColor(trunk, -0.2);
+  g.fillRect(bx, by - 11, 1, 11);
+  const cols = [null, midToneOutline(shadeColor(leaf, -0.14)), shadeColor(leaf, 0.12), leaf, shadeColor(leaf, -0.2)];
+  const x0 = bx - TREE_W / 2;
+  const y0 = by - 8 - TREE_H;
+  for (let y = 0; y < TREE_H; y++) {
+    let x = 0;
+    while (x < TREE_W) {
+      const k = TREE_MASK[y][x];
+      let e = x + 1;
+      while (e < TREE_W && TREE_MASK[y][e] === k) e++;
+      if (k) { g.fillStyle = cols[k]; g.fillRect(x0 + x, y0 + y, e - x, 1); }
+      x = e;
+    }
+  }
+}
+
 function drawIsoPrism(g, P, u0, v0, u1, v1, z0, z1, leftCol, rightCol, topCol) {
   fillPoly(g, [P(u0, v1, z1), P(u1, v1, z1), P(u1, v1, z0), P(u0, v1, z0)], leftCol);
   fillPoly(g, [P(u1, v0, z1), P(u1, v1, z1), P(u1, v1, z0), P(u1, v0, z0)], rightCol);
@@ -1141,16 +1193,10 @@ export function renderSkylineToCanvas(g, width, height, phase, floor, room = nul
   // Distant soft hills silhouette along horizon
   const hillColor = lerpColor('#151d3f', '#789ec8', day);
   g.fillStyle = hillColor;
-  g.beginPath();
-  g.moveTo(bx0, horizonY);
-  for (let x = bx0; x <= bx0 + bw; x += 40) {
-    const h = Math.sin(x * 0.0065 + 1.2) * 12 + Math.cos(x * 0.015) * 6 + 10;
-    g.lineTo(x, horizonY - h);
+  for (let x = bx0; x < bx0 + bw; x += 4) {
+    const h = Math.sin(x * 0.0065 + 1.2) * 12 + Math.cos(x * 0.015) * 6 + 10; // crisp 4px columns, no path AA
+    g.fillRect(x, Math.round(horizonY - h), 4, Math.round(h) + 8);
   }
-  g.lineTo(bx0 + bw, horizonY + 8);
-  g.lineTo(bx0, horizonY + 8);
-  g.closePath();
-  g.fill();
   } // end isSky
 
   if (isGround) {
@@ -1233,18 +1279,15 @@ export function renderSkylineToCanvas(g, width, height, phase, floor, room = nul
     const sPt = P(u1, v1, 0);
     if (sPt[1] > horizonY) {
       drawIsoPrism(g, P, u0, v0, u1, v1, 0, 3, paveLeft, paveRight, paveTop);
-      g.strokeStyle = lerpColor(shadeColor(basePaveTop, -0.1), hazeColor, haze);
-      g.lineWidth = 0.8;
-      g.beginPath();
+      const jointCol = lerpColor(shadeColor(basePaveTop, -0.1), hazeColor, haze);
       for (let u = u0 + 1.5; u < u1; u += 1.8) {
         const a = P(u, v0, 3), b = P(u, v1, 3);
-        g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]);
+        strokeCrispLine(g, a[0], a[1], b[0], b[1], jointCol);
       }
       for (let v = v0 + 1.5; v < v1; v += 1.8) {
         const a = P(u0, v, 3), b = P(u1, v, 3);
-        g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]);
+        strokeCrispLine(g, a[0], a[1], b[0], b[1], jointCol);
       }
-      g.stroke();
     }
 
     if (blk.kind === 'hotel') {
@@ -1303,13 +1346,13 @@ export function renderSkylineToCanvas(g, width, height, phase, floor, room = nul
         const wCol = w.lit
           ? lerpColor(w.tone === 'cyan' ? '#92e8ff' : '#ffd878', hazeColor, haze * 0.45)
           : lerpColor(dayWinLeft, hazeColor, haze);
-        fillPoly(g, [P(w.u0, w.v, w.z1), P(w.u1, w.v, w.z1), P(w.u1, w.v, w.z0), P(w.u0, w.v, w.z0)], wCol);
+        fillWindow(g, [P(w.u0, w.v, w.z1), P(w.u1, w.v, w.z1), P(w.u1, w.v, w.z0), P(w.u0, w.v, w.z0)], wCol);
       }
       for (const w of b.windowsRight) {
         const wCol = w.lit
           ? lerpColor(w.tone === 'cyan' ? '#7ad0ee' : '#f0bc5e', hazeColor, haze * 0.45)
           : lerpColor(dayWinRight, hazeColor, haze);
-        fillPoly(g, [P(w.u, w.v0, w.z1), P(w.u, w.v1, w.z1), P(w.u, w.v1, w.z0), P(w.u, w.v0, w.z0)], wCol);
+        fillWindow(g, [P(w.u, w.v0, w.z1), P(w.u, w.v1, w.z1), P(w.u, w.v1, w.z0), P(w.u, w.v0, w.z0)], wCol);
       }
 
       const mu = (b.u0 + b.u1) / 2;
@@ -1319,12 +1362,8 @@ export function renderSkylineToCanvas(g, width, height, phase, floor, room = nul
         if (b.stories >= 6) {
           const spBase = P(mu, mv, zTop + 16);
           const spTop = P(mu, mv, zTop + 32);
-          g.strokeStyle = rightCol;
-          g.lineWidth = 1.8;
-          g.beginPath();
-          g.moveTo(spBase[0], spBase[1]);
-          g.lineTo(spTop[0], spTop[1]);
-          g.stroke();
+          g.fillStyle = rightCol;
+          g.fillRect(Math.round(spTop[0] - 1), Math.round(spTop[1]), 2, Math.round(spBase[1] - spTop[1]));
         }
       } else if (b.roofStyle === 1) {
         drawIsoPrism(g, P, mu - 0.7, mv - 0.6, mu - 0.1, mv + 0.1, zTop, zTop + 8, leftCol, rightCol, shadeColor(roofCol, 0.1));
@@ -1341,12 +1380,8 @@ export function renderSkylineToCanvas(g, width, height, phase, floor, room = nul
         if (b.stories >= 6) {
           const spBase = P(mu, mv, zTop + 20);
           const spTop = P(mu, mv, zTop + 34);
-          g.strokeStyle = rightCol;
-          g.lineWidth = 1.8;
-          g.beginPath();
-          g.moveTo(spBase[0], spBase[1]);
-          g.lineTo(spTop[0], spTop[1]);
-          g.stroke();
+          g.fillStyle = rightCol;
+          g.fillRect(Math.round(spTop[0] - 1), Math.round(spTop[1]), 2, Math.round(spBase[1] - spTop[1]));
         }
       }
 
@@ -1372,17 +1407,11 @@ export function renderSkylineToCanvas(g, width, height, phase, floor, room = nul
     }
 
     const treeTop = lerpColor(lerpColor('#224830', '#54ac60', day), hazeColor, haze);
-    const treeLeft = shadeColor(treeTop, -0.14);
-    const treeRight = shadeColor(treeTop, -0.28);
     const trunkCol = lerpColor('#4e3624', hazeColor, haze);
     for (const tr of blk.trees) {
       const base = P(tr.u, tr.v, 3);
       if (base[1] < horizonY + 4 || base[1] > by1 + 20) continue;
-      g.fillStyle = 'rgba(18, 12, 28, 0.22)';
-      g.fillRect(Math.round(base[0] - 4), Math.round(base[1] - 2), 8, 4);
-      g.fillStyle = trunkCol;
-      g.fillRect(Math.round(base[0] - 1), Math.round(base[1] - 9), 2, 9);
-      drawIsoPrism(g, P, tr.u - 0.24, tr.v - 0.24, tr.u + 0.24, tr.v + 0.24, 9, 19, treeLeft, treeRight, treeTop);
+      drawStreetTree(g, Math.round(base[0]), Math.round(base[1]), treeTop, trunkCol);
     }
 
     const poleCol = lerpColor('#2c2a3a', hazeColor, haze);
@@ -1998,6 +2027,20 @@ function toSpriteKey(itemId) {
 // Crisp scanline polygon fill: samples pixel centres and rounds spans like sprites.js's
 // scanPoly, so diagonal/isometric edges (building facades, windows) rasterise with zero
 // antialiasing instead of relying on the canvas's own antialiased path fill.
+// Window pane: the real slanted quad, except on a sub-1 bake (g.lowBake, set by main.js's snapped
+// bake context) where a pane is ~2 bake pixels wide and a slanted quad rasterises ragged, so it
+// becomes a flat-topped rect spanning the pane's width and mean height.
+function fillWindow(g, pts, color) {
+  if (!g.lowBake) { fillPoly(g, pts, color); return; }
+  const xs = pts.map((p) => p[0]);
+  const x0 = Math.round(Math.min(...xs));
+  const x1 = Math.round(Math.max(...xs));
+  const yc = (pts[0][1] + pts[1][1] + pts[2][1] + pts[3][1]) / 4;
+  const hh = Math.abs(pts[3][1] - pts[0][1]) / 2;
+  g.fillStyle = color;
+  g.fillRect(x0, Math.round(yc - hh), x1 - x0, Math.round(hh * 2));
+}
+
 function fillPoly(ctx, pts, color) {
   let minY = Infinity;
   let maxY = -Infinity;

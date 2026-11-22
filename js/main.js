@@ -17,6 +17,7 @@ import {
 } from './render.js';
 import { FpsMonitor, resolveBackgroundDetail, resolveSpriteDetail } from './adaptiveQuality.js';
 import { setDetail, getDetail } from './pixelart.js';
+import { snapBakeCtx } from './bakeSnap.js';
 import { clearCharacterCache } from './voxel.js';
 import { audio, formatTime, trackForRoom } from './audio.js';
 import {
@@ -50,7 +51,19 @@ const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 ctx.imageSmoothingEnabled = false;
 
-const BG_SCALE = 0.25;
+// City backdrop bake scale. High Sprite Detail bakes at native 1:1 (crisp, integer CSS scale);
+// Low keeps the cheap 0.25 bake (phones, the 25.2 fps floor) but snaps every rect to whole bake
+// pixels so it reads as clean 4px blocks instead of blended, soft edges.
+const BG_SCALE_LOW = 0.25;
+const BG_SCALE_HIGH = 1;
+const BG_MAX_HIGH_PIXELS = 6e6; // shortcut: above this (huge zoom-out margins) fall back to 0.5, rarely hit
+let bgScale = BG_SCALE_LOW;
+
+function wantedBgScale(width, height, ox, oy) {
+  if (getDetail() < 2) return BG_SCALE_LOW;
+  return (width + 2 * ox) * (height + 2 * oy) > BG_MAX_HIGH_PIXELS ? 0.5 : BG_SCALE_HIGH;
+}
+
 const fpsMonitor = new FpsMonitor(2000, 45);
 
 const skyLayer = document.getElementById('skyLayer');
@@ -73,6 +86,7 @@ const bgState = {
   lastVehicleUpdateAt: 0,
   lastTransform: '',
   lastSkyTransform: '',
+  scale: BG_SCALE_LOW,
 };
 
 let rebakeHandle = null;
@@ -93,8 +107,10 @@ function performBackgroundBake(room, width, height, phase, ox, oy) {
   cancelPendingRebake();
   if (!bgCanvas) return;
   const floor = room?.floor || 1;
-  const bgW = Math.max(1, Math.round((width + 2 * ox) * BG_SCALE));
-  const bgH = Math.max(1, Math.round((height + 2 * oy) * BG_SCALE));
+  bgScale = wantedBgScale(width, height, ox, oy);
+  bgState.scale = bgScale;
+  const bgW = Math.max(1, Math.round((width + 2 * ox) * bgScale));
+  const bgH = Math.max(1, Math.round((height + 2 * oy) * bgScale));
 
   // Near layer (ground, roads, crossings, buildings, trees, lamps): baked at the
   // same origin the room/tower uses, and locked 1:1 to the camera at draw time
@@ -143,8 +159,9 @@ function performBackgroundBake(room, width, height, phase, ox, oy) {
   }
 
   const g = bgCanvas.getContext('2d');
-  g.setTransform(BG_SCALE, 0, 0, BG_SCALE, ox * BG_SCALE, oy * BG_SCALE);
+  g.setTransform(bgScale, 0, 0, bgScale, ox * bgScale, oy * bgScale);
   g.imageSmoothingEnabled = false;
+  snapBakeCtx(g, bgScale);
   renderSkylineToCanvas(g, width, height, phase, floor, room, ox, oy, 'ground');
 
   let beacons = [];
@@ -152,8 +169,9 @@ function performBackgroundBake(room, width, height, phase, ox, oy) {
     const bCtx = buildingsCanvas.getContext('2d');
     bCtx.setTransform(1, 0, 0, 1, 0, 0);
     bCtx.clearRect(0, 0, buildingsCanvas.width, buildingsCanvas.height);
-    bCtx.setTransform(BG_SCALE, 0, 0, BG_SCALE, ox * BG_SCALE, oy * BG_SCALE);
+    bCtx.setTransform(bgScale, 0, 0, bgScale, ox * bgScale, oy * bgScale);
     bCtx.imageSmoothingEnabled = false;
+    snapBakeCtx(bCtx, bgScale);
     beacons = renderSkylineToCanvas(bCtx, width, height, phase, floor, room, ox, oy, 'buildings');
   }
   bgState.beacons = beacons;
@@ -170,8 +188,9 @@ function performBackgroundBake(room, width, height, phase, ox, oy) {
     skyCanvas.style.width = `${width + 2 * ox}px`;
     skyCanvas.style.height = `${height + 2 * oy}px`;
     const sg = skyCanvas.getContext('2d');
-    sg.setTransform(BG_SCALE, 0, 0, BG_SCALE, ox * BG_SCALE, oy * BG_SCALE);
+    sg.setTransform(bgScale, 0, 0, bgScale, ox * bgScale, oy * bgScale);
     sg.imageSmoothingEnabled = false;
+    snapBakeCtx(sg, bgScale);
     renderSkylineToCanvas(sg, width, height, phase, floor, room, ox, oy, 'sky');
   }
 
@@ -257,7 +276,8 @@ function updateVehiclesAndBeacons(now, room, width, height, phase, ox, oy, quali
   const vCtx = vehicleCanvas.getContext('2d');
   vCtx.setTransform(1, 0, 0, 1, 0, 0);
   vCtx.clearRect(0, 0, vehicleCanvas.width, vehicleCanvas.height);
-  vCtx.setTransform(BG_SCALE, 0, 0, BG_SCALE, ox * BG_SCALE, oy * BG_SCALE);
+  vCtx.setTransform(bgScale, 0, 0, bgScale, ox * bgScale, oy * bgScale);
+  snapBakeCtx(vCtx, bgScale);
 
   const roomSpec = room || { id: 'lobby', width: 12, height: 9, floor: 1 };
   const layout = getCachedIsoCityLayout(roomSpec, width, height, phase, 400 + ox, 320 + oy);
@@ -273,18 +293,16 @@ function updateVehiclesAndBeacons(now, room, width, height, phase, ox, oy, quali
     const bCtx = beaconCanvas.getContext('2d');
     bCtx.setTransform(1, 0, 0, 1, 0, 0);
     bCtx.clearRect(0, 0, beaconCanvas.width, beaconCanvas.height);
-    bCtx.setTransform(BG_SCALE, 0, 0, BG_SCALE, ox * BG_SCALE, oy * BG_SCALE);
+    bCtx.setTransform(bgScale, 0, 0, bgScale, ox * bgScale, oy * bgScale);
+    snapBakeCtx(bCtx, bgScale);
     const blinkOn = Math.floor(now / 650) % 2 === 0;
     for (const b of (bgState.beacons || [])) {
+      // Square lights (no arcs): a flat alpha halo square, then the lamp itself.
       bCtx.fillStyle = blinkOn ? '#ff3b4e' : '#6e1c28';
-      bCtx.beginPath();
-      bCtx.arc(b.x, b.y, blinkOn ? 2.2 : 1.5, 0, Math.PI * 2);
-      bCtx.fill();
+      bCtx.fillRect(b.x - 2, b.y - 2, 4, 4);
       if (blinkOn) {
         bCtx.fillStyle = 'rgba(255, 70, 90, 0.28)';
-        bCtx.beginPath();
-        bCtx.arc(b.x, b.y, 5.5, 0, Math.PI * 2);
-        bCtx.fill();
+        bCtx.fillRect(b.x - 5, b.y - 5, 10, 10);
       }
     }
   }
@@ -319,6 +337,7 @@ function updateBackground(now, room, width, height, phase, camera, qualityMode) 
       Math.abs(bgState.width - width) > 60 ||
       Math.abs(bgState.height - height) > 60 ||
       Math.abs(bgState.phase - phase) >= 0.15 ||
+      bgState.scale !== wantedBgScale(width, height, Math.max(neededOx, bgState.ox), Math.max(neededOy, bgState.oy)) ||
       neededOx > bgState.ox ||
       neededOy > bgState.oy
     )
