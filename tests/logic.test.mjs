@@ -3338,3 +3338,20 @@ test('phase3 furniture: representative items (bed, sofa, desk, lamp, plant, coun
     assert.ok(Number.isFinite(s.ax) && Number.isFinite(s.ay), `${name} has finite anchor points`);
   }
 });
+
+// ======================= Phase 4: city, street, and tower exterior in the new pixel style =======================
+
+test('phase4 environment: city layout, roads, and vehicle proportions stay within bounded pixel dimensions', () => {
+  const layout = buildIsoCityLayout({ id: 'lobby', width: 12, height: 9, floor: 1 }, 960, 600, 0.5);
+  assert.ok(layout.roads.length > 0, 'city layout produces roads');
+  assert.ok(layout.crossings.length > 0, 'city layout produces zebra crossings');
+  assert.ok(layout.blocks.length > 0, 'city layout produces city blocks');
+
+  const vehicles = computeCityVehicles(layout, 1000, 0.5);
+  assert.ok(vehicles.length > 0, 'computeCityVehicles generates vehicles');
+  for (const v of vehicles) {
+    assert.ok(Number.isFinite(v.screenX) && Number.isFinite(v.screenY), `vehicle ${v.id} has finite screen coordinates`);
+    assert.ok(v.length <= 2.2, `vehicle ${v.id} length (${v.length}) does not exceed max bounds to prevent stretched streaks`);
+    assert.ok(v.width >= 0.25 && v.width <= 1.0, `vehicle ${v.id} width (${v.width}) within realistic lane bounds`);
+  }
+});

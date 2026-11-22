@@ -11,7 +11,7 @@ import {
   FURNITURE_BUILDERS, shadeColor, getSeatConfig, SEAT_CONFIGS,
 } from './sprites.js';
 import { LOOKS, getCharacterCanvas } from './voxel.js';
-import { getDetail, registerCacheClearHook } from './pixelart.js';
+import { getDetail, registerCacheClearHook, midToneOutline } from './pixelart.js';
 
 export { getSeatConfig, SEAT_CONFIGS };
 
@@ -678,10 +678,10 @@ export function getCachedIsoCityLayout(roomSpec, width, height, phase, padX, pad
 // ---------- Animated City Vehicles (Cars, Taxis, Buses, Scooters) ----------
 
 const VEHICLE_TYPES = {
-  car: { length: 1.3, width: 0.55, height: 8, speed: 0.0032 },
-  taxi: { length: 1.3, width: 0.55, height: 8, speed: 0.0033 },
-  bus: { length: 2.7, width: 0.72, height: 13, speed: 0.0024 },
-  scooter: { length: 0.7, width: 0.35, height: 6, speed: 0.0038 },
+  car: { length: 0.95, width: 0.52, height: 9, speed: 0.0032 },
+  taxi: { length: 0.95, width: 0.52, height: 9, speed: 0.0033 },
+  bus: { length: 1.8, width: 0.65, height: 13, speed: 0.0024 },
+  scooter: { length: 0.55, width: 0.32, height: 7, speed: 0.0038 },
 };
 
 const CAR_COLORS = ['#3f72af', '#c0392b', '#27ae60', '#e0e0e0', '#2c3e50', '#8e44ad', '#d35400'];
@@ -810,8 +810,8 @@ export function drawCityVehicles(ctx, layout, vehicles, phase = 0.5, dpr = 1) {
       v1 = v + width / 2;
     }
 
-    // Shadow on asphalt
-    fillPoly(ctx, [P(u0 - 0.08, v0 - 0.08, 0.2), P(u1 + 0.08, v0 - 0.08, 0.2), P(u1 + 0.08, v1 + 0.08, 0.2), P(u0 - 0.08, v1 + 0.08, 0.2)], 'rgba(15, 12, 24, 0.38)');
+    // Crisp contact shadow on asphalt
+    fillPoly(ctx, [P(u0 - 0.04, v0 - 0.04, 0.2), P(u1 + 0.04, v0 - 0.04, 0.2), P(u1 + 0.04, v1 + 0.04, 0.2), P(u0 - 0.04, v1 + 0.04, 0.2)], '#1a1824');
 
     // Headlight cones at night
     if (lightsOn) {
@@ -840,11 +840,12 @@ export function drawCityVehicles(ctx, layout, vehicles, phase = 0.5, dpr = 1) {
 
     drawIsoPrism(ctx, P, u0, v0, u1, v1, zBase, zBody, bodyLeft, bodyRight, bodyTop);
 
-    // Dark wheel blobs at the body corners, only resolvable at native bake density
+    // Dark wheel blocks at the body corners (crisp integer pixels, no AA circles)
     ctx.fillStyle = '#14141a';
+    const wsz = Math.max(1, Math.round(1.1 * dpr));
     for (const [wu, wv] of [[u0 + 0.08, v0 + 0.12], [u1 - 0.08, v0 + 0.12], [u0 + 0.08, v1 - 0.12], [u1 - 0.08, v1 - 0.12]]) {
       const wp = P(wu, wv, zBase);
-      ctx.beginPath(); ctx.arc(wp[0], wp[1], Math.max(1, 1.1 * dpr), 0, Math.PI * 2); ctx.fill();
+      ctx.fillRect(Math.round(wp[0] - wsz), Math.round(wp[1] - wsz), wsz * 2, wsz * 2);
     }
 
     // Upper cabin / windows for car / taxi / bus
@@ -860,7 +861,7 @@ export function drawCityVehicles(ctx, layout, vehicles, phase = 0.5, dpr = 1) {
       const cabGlass = day > 0.6 ? '#6cb0d8' : '#2c3e54';
       drawIsoPrism(ctx, P, cabU0, cabV0, cabU1, cabV1, zBody, zCabTop, shadeColor(cabGlass, -0.15), shadeColor(cabGlass, -0.28), bodyTop);
 
-      // central door-pillar mullion line across the cabin glass, only resolvable at native bake density
+      // central door-pillar mullion line across the cabin glass
       ctx.strokeStyle = shadeColor(bodyCol, -0.4);
       ctx.lineWidth = Math.max(0.6, 0.5 * dpr);
       ctx.beginPath();
@@ -883,12 +884,10 @@ export function drawCityVehicles(ctx, layout, vehicles, phase = 0.5, dpr = 1) {
     } else {
       const rHead = P(u, v, zBody + 5);
       ctx.fillStyle = '#f39c12';
-      ctx.beginPath();
-      ctx.arc(rHead[0], rHead[1], 2.4, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.fillRect(Math.round(rHead[0] - 2), Math.round(rHead[1] - 2), 4, 4);
     }
 
-    // Headlights and Taillights
+    // Headlights and Taillights (crisp integer pixels, no AA arcs)
     if (lightsOn) {
       ctx.save();
       const headCol = '#fff9a8';
@@ -910,12 +909,13 @@ export function drawCityVehicles(ctx, layout, vehicles, phase = 0.5, dpr = 1) {
       }
 
       ctx.fillStyle = headCol;
-      ctx.beginPath(); ctx.arc(frontPt1[0], frontPt1[1], 1.6, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.arc(frontPt2[0], frontPt2[1], 1.6, 0, Math.PI * 2); ctx.fill();
+      ctx.fillRect(Math.round(frontPt1[0] - 1), Math.round(frontPt1[1] - 1), 2, 2);
+      ctx.fillRect(Math.round(frontPt2[0] - 1), Math.round(frontPt2[1] - 1), 2, 2);
 
       ctx.fillStyle = tailCol;
-      ctx.beginPath(); ctx.arc(rearPt1[0], rearPt1[1], stopping ? 2.0 : 1.4, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.arc(rearPt2[0], rearPt2[1], stopping ? 2.0 : 1.4, 0, Math.PI * 2); ctx.fill();
+      const tailSz = stopping ? 3 : 2;
+      ctx.fillRect(Math.round(rearPt1[0] - tailSz / 2), Math.round(rearPt1[1] - tailSz / 2), tailSz, tailSz);
+      ctx.fillRect(Math.round(rearPt2[0] - tailSz / 2), Math.round(rearPt2[1] - tailSz / 2), tailSz, tailSz);
       ctx.restore();
     }
   }
@@ -981,14 +981,10 @@ export function drawBackground(ctx, width, height, phase, floor = 1, dpr = 1, no
   const blinkOn = Math.floor(now / 650) % 2 === 0;
   for (const b of (foregroundCache.beacons || [])) {
     ctx.fillStyle = blinkOn ? '#ff3b4e' : '#6e1c28';
-    ctx.beginPath();
-    ctx.arc(b.x, b.y, blinkOn ? 2.2 : 1.5, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.fillRect(Math.round(b.x - 1), Math.round(b.y - 1), 2, 2);
     if (blinkOn) {
       ctx.fillStyle = 'rgba(255, 70, 90, 0.28)';
-      ctx.beginPath();
-      ctx.arc(b.x, b.y, 5.5, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.fillRect(Math.round(b.x - 2), Math.round(b.y - 2), 4, 4);
     }
   }
 }
@@ -997,6 +993,25 @@ function drawIsoPrism(g, P, u0, v0, u1, v1, z0, z1, leftCol, rightCol, topCol) {
   fillPoly(g, [P(u0, v1, z1), P(u1, v1, z1), P(u1, v1, z0), P(u0, v1, z0)], leftCol);
   fillPoly(g, [P(u1, v0, z1), P(u1, v1, z1), P(u1, v1, z0), P(u1, v0, z0)], rightCol);
   fillPoly(g, [P(u0, v0, z1), P(u1, v0, z1), P(u1, v1, z1), P(u0, v1, z1)], topCol);
+
+  // Pass 14b pixel style: mid-tone outline along silhouette edges (never near-black #2a1d2e)
+  const lineCol = midToneOutline(topCol);
+  g.strokeStyle = lineCol;
+  g.lineWidth = 1;
+  const t0 = P(u0, v0, z1);
+  const t1 = P(u1, v0, z1);
+  const t2 = P(u1, v1, z1);
+  const t3 = P(u0, v1, z1);
+  g.beginPath();
+  g.moveTo(t0[0], t0[1]); g.lineTo(t1[0], t1[1]); g.lineTo(t2[0], t2[1]); g.lineTo(t3[0], t3[1]);
+  g.closePath();
+  const b0 = P(u0, v1, z0);
+  const b1 = P(u1, v1, z0);
+  const b2 = P(u1, v0, z0);
+  g.moveTo(t3[0], t3[1]); g.lineTo(b0[0], b0[1]);
+  g.moveTo(t2[0], t2[1]); g.lineTo(b1[0], b1[1]);
+  g.moveTo(t1[0], t1[1]); g.lineTo(b2[0], b2[1]);
+  g.stroke();
 }
 
 // renderSkylineToCanvas renders either the street/sky backdrop layer (layer === 'backdrop')
@@ -1029,15 +1044,27 @@ export function renderSkylineToCanvas(g, width, height, phase, floor, room = nul
   const hazeColor = lerpColor('#1d244b', '#9ec6ec', day);
 
   if (isSky) {
-  // 1. Sky backdrop gradient
-  const grad = g.createLinearGradient(0, 0, 0, horizonY + 50);
-  grad.addColorStop(0, skyTop);
-  grad.addColorStop(0.58, skyMid);
-  grad.addColorStop(1, skyBottom);
-  g.fillStyle = grad;
-  g.fillRect(bx0, by0, bw, bh);
+  // 1. Sky backdrop: flat discrete ramp bands (no smooth canvas gradients, per locked style)
+  const skySteps = 4;
+  const bandH = Math.ceil((horizonY + 50 - by0) / skySteps);
+  const skyBandColors = [
+    skyTop,
+    lerpColor(skyTop, skyMid, 0.45),
+    skyMid,
+    skyBottom,
+  ];
+  for (let s = 0; s < skySteps; s++) {
+    const y0 = by0 + s * bandH;
+    const y1 = (s === skySteps - 1) ? (horizonY + 50) : (y0 + bandH);
+    g.fillStyle = skyBandColors[s];
+    g.fillRect(bx0, y0, bw, y1 - y0);
+  }
+  if (horizonY + 50 < by0 + bh) {
+    g.fillStyle = skyBottom;
+    g.fillRect(bx0, horizonY + 50, bw, (by0 + bh) - (horizonY + 50));
+  }
 
-  // 2. Twinkling stars at night / twilight
+  // 2. Twinkling stars at night / twilight (crisp integer pixels, no fractional sizes)
   if (day < 0.72) {
     const starAlpha = Math.min(0.95, (0.72 - day) * 1.45);
     const rStar = seededRand(90421);
@@ -1045,13 +1072,13 @@ export function renderSkylineToCanvas(g, width, height, phase, floor, room = nul
       const sx = Math.round(bx0 + rStar() * bw);
       const sy = Math.round(by0 + rStar() * (horizonY - by0) * 0.85);
       const roll = rStar();
-      const sz = roll > 0.93 ? 2 : roll > 0.7 ? 1.2 : 0.6; // finer star grain, only resolvable at the doubled bake density
+      const sz = roll > 0.93 ? 2 : 1;
       g.fillStyle = `rgba(255, 248, 224, ${(starAlpha * (0.35 + rStar() * 0.65)).toFixed(2)})`;
       g.fillRect(sx, sy, sz, sz);
     }
   }
 
-  // 3. Sun & Moon arc above the horizon
+  // 3. Sun & Moon arc above the horizon (crisp pixel discs, no smooth radial gradient)
   const sunAngle = (phase - 0.22) * Math.PI * 1.8;
   const cx = width * 0.5;
   const rx = width * 0.38;
@@ -1060,51 +1087,39 @@ export function renderSkylineToCanvas(g, width, height, phase, floor, room = nul
     const sunX = cx - Math.cos(sunAngle) * rx;
     const sunY = horizonY * 0.78 - Math.sin(sunAngle) * ry;
     if (sunY < horizonY + 18) {
-      const glow = g.createRadialGradient(sunX, sunY, 4, sunX, sunY, 40);
-      glow.addColorStop(0, 'rgba(255, 246, 190, 0.95)');
-      glow.addColorStop(0.4, 'rgba(255, 200, 110, 0.35)');
-      glow.addColorStop(1, 'rgba(255, 180, 90, 0)');
-      g.fillStyle = glow;
-      g.beginPath();
-      g.arc(sunX, sunY, 40, 0, Math.PI * 2);
-      g.fill();
+      g.fillStyle = 'rgba(255, 220, 120, 0.35)';
+      g.fillRect(Math.round(sunX - 16), Math.round(sunY - 16), 32, 32);
       g.fillStyle = '#fff5c0';
-      g.beginPath();
-      g.arc(sunX, sunY, 13, 0, Math.PI * 2);
-      g.fill();
+      g.fillRect(Math.round(sunX - 10), Math.round(sunY - 10), 20, 20);
     }
   }
   if (day < 0.65) {
     const moonAngle = ((phase + 0.5) % 1) * Math.PI;
     const moonX = width * 0.16 + Math.cos(moonAngle * 0.7) * (width * 0.25);
     const moonY = Math.max(32, horizonY * 0.34);
-    g.fillStyle = 'rgba(210, 228, 255, 0.18)';
-    g.beginPath();
-    g.arc(moonX, moonY, 24, 0, Math.PI * 2);
-    g.fill();
+    g.fillStyle = 'rgba(210, 228, 255, 0.22)';
+    g.fillRect(Math.round(moonX - 12), Math.round(moonY - 12), 24, 24);
     g.fillStyle = '#eef4ff';
-    g.beginPath();
-    g.arc(moonX, moonY, 11, 0, Math.PI * 2);
-    g.fill();
+    g.fillRect(Math.round(moonX - 8), Math.round(moonY - 8), 16, 16);
   }
 
   // Distant city skyline silhouette along the horizon (procedural stepped towers and spires)
   const skylineCol1 = lerpColor('#0e132c', '#6086af', day);
   const skylineCol2 = lerpColor('#151c3d', '#7ba1c8', day);
   const rDistant = seededRand(88219);
-  const distSkyGrad = g.createLinearGradient(0, horizonY - 140, 0, horizonY);
-  distSkyGrad.addColorStop(0, skylineCol1);
-  distSkyGrad.addColorStop(1, skylineCol2);
-  g.fillStyle = distSkyGrad;
 
   for (let x = bx0; x < bx0 + bw; ) {
     const tw = Math.round(20 + rDistant() * 38);
     const th = Math.round(30 + rDistant() * 110 + (Math.sin(x * 0.003) + 1) * 20);
+    g.fillStyle = skylineCol1;
     g.fillRect(x, horizonY - th, tw - 2, th);
-    // fine vertical facade seam lines, only resolvable at the doubled bake density
-    g.fillStyle = lerpColor(skylineCol1, '#000000', 0.18);
-    for (let sx2 = x + 6; sx2 < x + tw - 4; sx2 += 6) g.fillRect(sx2, horizonY - th, 1, th);
-    g.fillStyle = distSkyGrad;
+    // Facade shading
+    g.fillStyle = skylineCol2;
+    g.fillRect(x + Math.round((tw - 2) / 2), horizonY - th, Math.round((tw - 2) / 2), th);
+    // Mid-tone silhouette edge line along tower top
+    g.fillStyle = midToneOutline(skylineCol1);
+    g.fillRect(x, horizonY - th, tw - 2, 1);
+
     if (rDistant() > 0.45) {
       const spireH = Math.round(12 + rDistant() * 26);
       g.fillRect(Math.round(x + tw / 2 - 1), horizonY - th - spireH, 2, spireH);
@@ -1115,11 +1130,10 @@ export function renderSkylineToCanvas(g, width, height, phase, floor, room = nul
         for (let wx = x + 4; wx < x + tw - 4; wx += 6) {
           if (rDistant() > 0.55) {
             g.fillStyle = `rgba(255, 235, 160, ${(winAlpha * (0.6 + rDistant() * 0.4)).toFixed(2)})`;
-            g.fillRect(wx, wy, 1.4, 1.4);
+            g.fillRect(wx, wy, 2, 2);
           }
         }
       }
-      g.fillStyle = distSkyGrad;
     }
     x += tw;
   }
@@ -1149,12 +1163,20 @@ export function renderSkylineToCanvas(g, width, height, phase, floor, room = nul
   g.rect(bx0, horizonY, bw, by1 - horizonY);
   g.clip();
 
-  const groundGrad = g.createLinearGradient(0, horizonY, 0, by1);
-  groundGrad.addColorStop(0, asphaltFar);
-  groundGrad.addColorStop(0.38, lerpColor(asphaltNear, hazeColor, 0.18));
-  groundGrad.addColorStop(1, asphaltNear);
-  g.fillStyle = groundGrad;
-  g.fillRect(bx0, horizonY, bw, by1 - horizonY);
+  // Stepped asphalt depth bands (flat ramp shades only, no smooth canvas gradient)
+  const groundSteps = 3;
+  const gH = Math.ceil((by1 - horizonY) / groundSteps);
+  const gBands = [
+    asphaltFar,
+    lerpColor(asphaltNear, hazeColor, 0.18),
+    asphaltNear,
+  ];
+  for (let s = 0; s < groundSteps; s++) {
+    const gy0 = horizonY + s * gH;
+    const gy1 = (s === groundSteps - 1) ? by1 : (gy0 + gH);
+    g.fillStyle = gBands[s];
+    g.fillRect(bx0, gy0, bw, gy1 - gy0);
+  }
 
   // Isometric road corridors & centre lane dashes aligned with hotel (u, v) axes
   const roadSurfCol = lerpColor('#161622', '#454c58', day);
@@ -1181,14 +1203,6 @@ export function renderSkylineToCanvas(g, width, height, phase, floor, room = nul
   } // end isGround
 
   if (isSky) {
-  // Soft distance haze ribbon along the horizon (drawn before 3D buildings so towers rise cleanly through it)
-  const mistGrad = g.createLinearGradient(0, horizonY - 12, 0, horizonY + 28);
-  mistGrad.addColorStop(0, 'rgba(255,255,255,0)');
-  mistGrad.addColorStop(0.45, lerpColor('#1d244b', '#cde4fa', day) + '55');
-  mistGrad.addColorStop(1, 'rgba(255,255,255,0)');
-  g.fillStyle = mistGrad;
-  g.fillRect(bx0, horizonY - 12, bw, 40);
-
   // High-altitude atmospheric cloud ribbons on upper tower floors (Floors 7-10)
   if (floor >= 7) {
     const cloudAlpha = day > 0.5 ? 0.18 : 0.08;
@@ -1196,9 +1210,7 @@ export function renderSkylineToCanvas(g, width, height, phase, floor, room = nul
     for (let i = 0; i < 5; i++) {
       const cx0 = ((i * 210 + floor * 37) % (width - 80));
       const cy0 = 38 + (i % 3) * 32;
-      g.beginPath();
-      g.ellipse(cx0 + 50, cy0, 56, 9, 0, 0, Math.PI * 2);
-      g.fill();
+      g.fillRect(Math.round(cx0 - 6), Math.round(cy0 - 3), 112, 6);
     }
   }
   } // end isSky
@@ -1367,11 +1379,9 @@ export function renderSkylineToCanvas(g, width, height, phase, floor, room = nul
       const base = P(tr.u, tr.v, 3);
       if (base[1] < horizonY + 4 || base[1] > by1 + 20) continue;
       g.fillStyle = 'rgba(18, 12, 28, 0.22)';
-      g.beginPath();
-      g.ellipse(base[0], base[1], 7, 3.5, 0, 0, Math.PI * 2);
-      g.fill();
+      g.fillRect(Math.round(base[0] - 4), Math.round(base[1] - 2), 8, 4);
       g.fillStyle = trunkCol;
-      g.fillRect(Math.round(base[0] - 1.5), Math.round(base[1] - 9), 3, 9);
+      g.fillRect(Math.round(base[0] - 1), Math.round(base[1] - 9), 2, 9);
       drawIsoPrism(g, P, tr.u - 0.24, tr.v - 0.24, tr.u + 0.24, tr.v + 0.24, 9, 19, treeLeft, treeRight, treeTop);
     }
 
@@ -1381,16 +1391,12 @@ export function renderSkylineToCanvas(g, width, height, phase, floor, room = nul
       if (base[1] < horizonY + 4 || base[1] > by1 + 20) continue;
       if (day < 0.72) {
         g.fillStyle = `rgba(255, 214, 120, ${(0.22 * (1 - haze)).toFixed(2)})`;
-        g.beginPath();
-        g.ellipse(base[0], base[1], 16, 8, 0, 0, Math.PI * 2);
-        g.fill();
+        g.fillRect(Math.round(base[0] - 6), Math.round(base[1] - 3), 12, 6);
       }
       g.fillStyle = poleCol;
       g.fillRect(Math.round(base[0] - 1), Math.round(base[1] - 18), 2, 18);
       g.fillStyle = day < 0.72 ? '#ffe492' : '#d8dce8';
-      g.beginPath();
-      g.arc(base[0], base[1] - 19, 2.6, 0, Math.PI * 2);
-      g.fill();
+      g.fillRect(Math.round(base[0] - 1), Math.round(base[1] - 20), 3, 3);
     }
   }
   } // end isBuildings
@@ -1454,7 +1460,7 @@ function drawTowerCutawayUnder(ctx, room, originX, originY, height, phase) {
   const groundDy = computeGroundDy(floorNo);
   const gL = (pt) => [pt[0], pt[1] + groundDy];
 
-  // Outer left & right structural corner columns
+  // Outer left & right structural corner columns with mid-tone outlines
   const colTopOffset = room.isRooftop ? 0 : WALL_H;
   fillPoly(ctx, [
     [westPt[0] - 8, westPt[1] - colTopOffset],
@@ -1462,12 +1468,25 @@ function drawTowerCutawayUnder(ctx, room, originX, originY, height, phase) {
     gL(westPt),
     [westPt[0] - 8, gL(westPt)[1]],
   ], colLeft);
+  ctx.strokeStyle = midToneOutline(colLeft);
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(westPt[0] - 8, westPt[1] - colTopOffset);
+  ctx.lineTo(westPt[0] - 8, gL(westPt)[1]);
+  ctx.stroke();
+
   fillPoly(ctx, [
     [eastPt[0], eastPt[1] - colTopOffset],
     [eastPt[0] + 8, eastPt[1] - colTopOffset],
     [eastPt[0] + 8, gL(eastPt)[1]],
     gL(eastPt),
   ], colRight);
+  ctx.strokeStyle = midToneOutline(colRight);
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(eastPt[0] + 8, eastPt[1] - colTopOffset);
+  ctx.lineTo(eastPt[0] + 8, gL(eastPt)[1]);
+  ctx.stroke();
 
   // Cut-away Upper Story hint above the back walls (only for non-rooftop floors)
   if (!room.isRooftop) {
@@ -1712,20 +1731,35 @@ function drawTowerCutawayOver(ctx, room, originX, originY) {
   const wUp = [westPt[0], westPt[1] - WALL_H];
   const eUp = [eastPt[0], eastPt[1] - WALL_H];
 
-  // Upper concrete floor slab capping the cut-away walls
+  // Upper concrete floor slab capping the cut-away walls with mid-tone outlines
   const SLAB_TOP = 12;
+  const slabLeftCol = '#8c889a';
+  const slabRightCol = '#686478';
   fillPoly(ctx, [
     [wUp[0] - 10, wUp[1] + 2],
     [nwUp[0], nwUp[1] + 2],
     [nwUp[0], nwUp[1] - SLAB_TOP],
     [wUp[0] - 10, wUp[1] - SLAB_TOP],
-  ], '#8c889a');
+  ], slabLeftCol);
+  ctx.strokeStyle = midToneOutline(slabLeftCol);
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(wUp[0] - 10, wUp[1] - SLAB_TOP);
+  ctx.lineTo(nwUp[0], nwUp[1] - SLAB_TOP);
+  ctx.stroke();
+
   fillPoly(ctx, [
     [nwUp[0], nwUp[1] + 2],
     [eUp[0] + 10, eUp[1] + 2],
     [eUp[0] + 10, eUp[1] - SLAB_TOP],
     [nwUp[0], nwUp[1] - SLAB_TOP],
-  ], '#686478');
+  ], slabRightCol);
+  ctx.strokeStyle = midToneOutline(slabRightCol);
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(nwUp[0], nwUp[1] - SLAB_TOP);
+  ctx.lineTo(eUp[0] + 10, eUp[1] - SLAB_TOP);
+  ctx.stroke();
 
   // Rebar / structural girder markers in the upper cut concrete slab
   for (let i = 1; i <= 4; i++) {

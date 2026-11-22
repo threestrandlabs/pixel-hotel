@@ -9,6 +9,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
+- **Art rework phase 4: city, street and tower exterior in the new pixel style (`js/render.js`, `tests/logic.test.mjs`)**:
+  - Re-architected procedural sky and ground in `renderSkylineToCanvas` with discrete flat ramp steps, eliminating all smooth canvas gradients (`createLinearGradient`, `createRadialGradient`).
+  - Added silhouette mid-tone outlines (`midToneOutline`) across all 3D isometric buildings, rooftops, structural corner columns, and cutaway floor slabs in `drawIsoPrism`, `drawTowerCutawayUnder`, and `drawTowerCutawayOver`.
+  - Re-tuned vehicle dimensions in `VEHICLE_TYPES` to compact, natural isometric proportions, resolving the elongated stretched streak bug while preserving distinct silhouettes for cars, taxis, buses, and scooters.
+  - Eliminated vector antialiasing curves across city street environments: wheels, scooter rider helmets, headlights, taillights, streetlamps, trees, warning beacons, and sun/moon bodies now render as crisp integer pixel shapes.
+  - Removed horizon mist rectangle that previously produced floating flat shadow lines across background buildings.
+  - Added Phase 4 unit tests verifying city layout generation, zebra crossings, and bounded vehicle dimensions.
+
+
 - **Art rework phase 3: furniture and props in the new pixel style (`js/sprites.js`, `js/render.js`, `tests/logic.test.mjs`)**:
   - Unified all catalogue furniture and prop rasterisation in `js/render.js` onto crisp, nearest-neighbour pixel grids (`sprite.px`), eliminating the legacy antialiased vector 3D-prism rasteriser, continuous gradients, crease lines, and near-black outlines.
   - Re-anchored outlines across all 91 catalogue items and props via `midToneOutline`, matching neighbour ramp hues and strictly banishing near-black `#2a1d2e`.
