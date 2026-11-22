@@ -37,7 +37,7 @@ import {
   projectIsoCityPoint, buildIsoCityLayout, computeCityVehicles, drawBackground,
   clampZoom, zoomAtPoint, centerCameraOnTile, screenToTile, worldToScreen,
   DEFAULT_ZOOM, MIN_ZOOM, MAX_ZOOM, deviceScale, deadzoneCameraTarget, CAMERA_DEADZONE_MARGIN,
-  nearCityLayerTransform, getCachedIsoCityLayout, renderSkylineToCanvas, getSeatConfig,
+  nearCityLayerTransform, getCachedIsoCityLayout, renderSkylineToCanvas, drawStreetTree, getSeatConfig,
   TILE_W, TILE_H, drawDiamondOverlay, ensureCameraTransform, ensureDeviceTransform,
   setActiveCamMatrix, drawSwimWaterlineOverlay, drawPoolWaterLayer, drawCharacter,
   cutawayBakeScale, CUTAWAY_BAKE_SCALE_MAX, drawTowerCutawayUnderCached, renderRoom,
@@ -3377,20 +3377,22 @@ test('leftovers: snapBakeCtx lands every rect on whole bake pixels at 0.25 and r
   assert.equal(g.lowBake, false);
 });
 
-test('leftovers: desk monitor has a dark navy screen, dark grey bezel and no bright cyan', () => {
+test('leftovers: desk monitor has a dark navy screen, subtle highlight, dark grey bezel and no bright cyan/blue blob', () => {
   for (const d of [1, 2]) {
     setDetail(d);
     const s = buildComputerDeskSprite(0);
     const cols = new Set();
     for (const row of s.px) for (const c of row) if (c) cols.add(c);
     assert.ok(cols.has('#1d2c5c'), 'navy glass present');
+    assert.ok(cols.has('#2c437e'), 'one-step-lighter navy highlight present');
     assert.ok(cols.has('#4a515e'), 'dark grey bezel present');
     assert.ok(!cols.has('#4cb8e6') && !cols.has('#8fe0ff'), 'old bright cyan screen is gone');
+    assert.ok(!cols.has('#5b7fd0') && !cols.has('#4a68b8'), 'bright-blue glare blob is gone');
   }
   setDetail(1);
 });
 
-test('leftovers: potted fern is wide and low, every green pixel is one connected plant', () => {
+test('leftovers: potted fern is wide and low, every green pixel is one connected plant, and front pot rim and soil read clearly', () => {
   for (const d of [1, 2]) {
     setDetail(d);
     const s = buildPlantSprite();
@@ -3400,8 +3402,21 @@ test('leftovers: potted fern is wide and low, every green pixel is one connected
       return g > r + 12 && g > b + 12;
     };
     const pts = [];
-    for (let y = 0; y < s.h; y++) for (let x = 0; x < s.w; x++) if (isGreen(s.px[y][x])) pts.push([x, y]);
+    let rimPx = 0;
+    let soilPx = 0;
+    const rimCols = new Set([materialRamp('#ee9a68').top, materialRamp('#ee9a68').left]);
+    const soilCols = new Set([materialRamp('#5a3e2c').top, materialRamp('#5a3e2c').left]);
+    for (let y = 0; y < s.h; y++) {
+      for (let x = 0; x < s.w; x++) {
+        const c = s.px[y][x];
+        if (isGreen(c)) pts.push([x, y]);
+        if (rimCols.has(c)) rimPx++;
+        if (soilCols.has(c)) soilPx++;
+      }
+    }
     assert.ok(pts.length > 100 * d * d, 'fern has real foliage');
+    assert.ok(rimPx >= 40 * d * d, `lighter pot rim reads clearly (${rimPx} px at detail ${d})`);
+    assert.ok(soilPx >= 25 * d * d, `dark soil reads clearly (${soilPx} px at detail ${d})`);
     const seen = new Set([pts[0].join()]);
     const todo = [pts[0]];
     const all = new Set(pts.map((p) => p.join()));
@@ -3420,4 +3435,20 @@ test('leftovers: potted fern is wide and low, every green pixel is one connected
     assert.ok(w > h * 1.2, `fern is wider than tall (${w}x${h})`);
   }
   setDetail(1);
+});
+
+test('leftovers: street tree uses mid-tone green outline and softened canopy bottom', () => {
+  const rects = [];
+  const g = {
+    fillStyle: '',
+    fillRect(x, y, w, h) { rects.push({ x, y, w, h, c: this.fillStyle }); },
+  };
+  drawStreetTree(g, 50, 50, '#54ac60', '#4e3624');
+  const canopy = rects.filter((r) => r.c.startsWith('#') && r.c !== '#4e3624' && r.c !== '#3e2b1d');
+  const maxY = Math.max(...canopy.map((r) => r.y));
+  const bottomW = canopy.filter((r) => r.y === maxY).reduce((s, r) => s + r.w, 0);
+  assert.ok(bottomW <= 10, `canopy bottom is softened (${bottomW}px wide, not flat 14px)`);
+  const rmp = materialRamp('#54ac60');
+  assert.ok(canopy.some((r) => r.c === rmp.right), 'mid-tone green outline present');
+  assert.ok(!canopy.some((r) => r.c === rmp.line), 'dark outline tone replaced by mid-tone green');
 });

@@ -14,6 +14,12 @@ Art rework: new pixel style for characters, rooms, furniture, and city, plus a H
 
 ### Changed
 
+- **Art leftovers round 2: subtle monitor glare, trimmed fern front fronds, slanted Low city windows, softer street-tree canopy (`js/sprites.js`, `js/render.js`, `js/bakeSnap.js`, `js/main.js`, `tests/logic.test.mjs`)**:
+  - Desk monitor: replaced the saturated blue glare patch with a small, thin diagonal highlight (`#2c437e`, one step lighter than the `#1d2c5c` navy glass, flat without 3D side shading).
+  - Potted fern: redirected the front fronds outward past the pot flanks (`FERN_SPEC`) so the lighter terracotta rim and dark soil read clearly while keeping 10 continuous connected fronds in a wide fountain shape.
+  - Low city backdrop: `fillWindow` now draws 2-bake-pixel column pairs stepping along the facade's 2:1 isometric slope on sub-1 bakes instead of flat-topped upright rectangles. Cached the bake transform once per `snapBakeCtx` call and divided `pan` by actual zoom in `requiredCityMargin`, keeping `restaurant --mobile` at 30.5 / 32.3 / 33.0 fps (>= 25.2 floor).
+  - Street trees: softened the flat canopy bottom with a lower centre lobe and lightened the outline to a mid-tone green (`shadeColor(leaf, -0.1)`).
+
 - **Art leftovers: crisp city backdrop, navy monitor, fern, street trees (`js/main.js`, `js/bakeSnap.js`, `js/render.js`, `js/sprites.js`, `scripts/leftovers-*.mjs`, `tests/logic.test.mjs`)**:
   - City backdrop: High Sprite Detail now bakes the city layers at native 1:1 (crisp, integer CSS scale; falls back to 0.5 only above 6M pixels). Low keeps the 0.25 bake (0.5 measured 20.3-22.8 fps on `restaurant --mobile`, below the 25.2 floor) but every `fillRect` is snapped to whole bake pixels (`js/bakeSnap.js`), so edges are hard instead of blended. Low draws window panes as flat-topped rects because a slanted pane is only ~2 bake pixels wide. Hills, spires, pavement joints and beacons no longer use antialiased paths/arcs.
   - Desk monitor: dark navy glass with a small glare patch, dark grey bezel, upright on neck and base.
