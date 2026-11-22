@@ -1,3 +1,4 @@
+node_modules
 node_modules/
 test-results/
 tests/screenshots/*.png
@@ -9,3 +10,16 @@ claude_run*.log
 .env*
 .refs/
 .claude/settings.local.json
+
+# Local-only gamedev agent skills (symlinks to /workspace/tools/awesome-gamedev-agent-skills).
+# Do not commit; impeccable stays tracked.
+.agents/
+.claude/skills/*
+!.claude/skills/impeccable/
+!.claude/skills/impeccable/**
+.gemini/skills/*
+!.gemini/skills/impeccable/
+!.gemini/skills/impeccable/**
+.agent/skills/*
+!.agent/skills/impeccable/
+!.agent/skills/impeccable/**

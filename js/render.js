@@ -113,88 +113,12 @@ function bakeSprite(key, spriteOrFactory, dpr = 1) {
   if (canvasCache.has(cacheKey)) return canvasCache.get(cacheKey);
   const sprite = typeof spriteOrFactory === 'function' ? spriteOrFactory() : spriteOrFactory;
 
-  // High-resolution native DPR rasterisation for volumetric 3D prism furniture
-  if (sprite.boxes && sprite.boxes.length > 0) {
-    const W = Math.max(1, Math.round(sprite.w * scale));
-    const H = Math.max(1, Math.round(sprite.h * scale));
-    const body = document.createElement('canvas');
-    body.width = W;
-    body.height = H;
-    const g = body.getContext('2d');
-    const px0 = sprite.th * 32 + 1;
-    const py0 = sprite.height + 1;
-    const P = (u, v, z) => [(px0 + (u - v) * 32) * scale, (py0 + (u + v) * 16 - z) * scale];
-    const poly = (pts, color) => {
-      g.fillStyle = color;
-      g.strokeStyle = color;
-      g.lineWidth = Math.max(0.75, 0.6 * scale);
-      g.beginPath();
-      pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
-      g.closePath();
-      g.fill();
-      g.stroke();
-    };
-    for (const b of sprite.boxes) {
-      const { u0, v0, u1, v1, z0, z1, topC, leftC, rightC } = b;
-      poly([P(u0, v1, z1), P(u1, v1, z1), P(u1, v1, z0), P(u0, v1, z0)], leftC);
-      poly([P(u1, v0, z1), P(u1, v1, z1), P(u1, v1, z0), P(u1, v0, z0)], rightC);
-      poly([P(u0, v0, z1), P(u1, v0, z1), P(u1, v1, z1), P(u0, v1, z1)], topC);
-      // subtle crease highlight along top front edges
-      g.strokeStyle = 'rgba(255,255,255,0.16)';
-      g.lineWidth = Math.max(0.75, 0.55 * scale);
-      g.beginPath();
-      const [ax, ay] = P(u0, v1, z1);
-      const [bx, by] = P(u1, v1, z1);
-      const [cx, cy] = P(u1, v0, z1);
-      g.moveTo(ax, ay);
-      g.lineTo(bx, by);
-      g.lineTo(cx, cy);
-      g.stroke();
-      // fine grounding AO along the base and a polished vertical highlight along
-      // the nearest front corner — genuine extra finishing detail only resolvable
-      // at the doubled bake density, applied to every box of every furniture piece
-      const [dx0, dy0] = P(u0, v1, z0);
-      const [ex0, ey0] = P(u1, v1, z0);
-      const [fx0, fy0] = P(u1, v0, z0);
-      g.strokeStyle = 'rgba(0,0,0,0.22)';
-      g.lineWidth = Math.max(0.75, 0.5 * scale);
-      g.beginPath();
-      g.moveTo(dx0, dy0);
-      g.lineTo(ex0, ey0);
-      g.lineTo(fx0, fy0);
-      g.stroke();
-      g.strokeStyle = 'rgba(255,255,255,0.22)';
-      g.lineWidth = Math.max(0.65, 0.4 * scale);
-      g.beginPath();
-      g.moveTo(bx, by);
-      g.lineTo(ex0, ey0);
-      g.stroke();
-    }
-    const out = document.createElement('canvas');
-    out.width = W;
-    out.height = H;
-    const og = out.getContext('2d');
-    const d = Math.max(1, Math.round(scale));
-    for (const [dx, dy] of [[-d, 0], [d, 0], [0, -d], [0, d], [-d, -d], [d, d], [-d, d], [d, -d]]) {
-      og.drawImage(body, dx, dy);
-    }
-    og.globalCompositeOperation = 'source-in';
-    og.fillStyle = '#2a1d2e';
-    og.fillRect(0, 0, W, H);
-    og.globalCompositeOperation = 'source-over';
-    og.drawImage(body, 0, 0);
-    out.ax = sprite.ax ?? sprite.w / 2;
-    out.ay = sprite.ay ?? sprite.h - TILE_H / 2;
-    out.scale = scale;
-    canvasCache.set(cacheKey, out);
-    return out;
-  }
-
-  // Raster px-grid sprites (floor/wall/door/window/elevator/balustrade) are authored
-  // at ART× the on-screen footprint (see sprites.js) — rasterise each fine grid cell
-  // at scale/ART device pixels so the baked bitmap keeps the exact same CSS/world
-  // size as before, just built from a finer, more detailed source grid.
-  const fine = scale / ART;
+  // Unified pixel art rasteriser (furniture, props, room-shell):
+  // All sprites are rendered from pixel grids (sprite.px) with nearest-neighbour
+  // scaling and imageSmoothingEnabled = false. Zero anti-aliasing, zero continuous
+  // gradients, and mid-tone outlines per locked Pass 14b style.
+  const artScale = sprite.artScale || (sprite.boxes ? 1 : ART);
+  const fine = scale / artScale;
   const W = Math.max(1, Math.round(sprite.w * fine));
   const H = Math.max(1, Math.round(sprite.h * fine));
   const c = document.createElement('canvas');
@@ -214,8 +138,8 @@ function bakeSprite(key, spriteOrFactory, dpr = 1) {
       ctx.fillRect(x0, y0, Math.max(1, x1 - x0), Math.max(1, y1 - y0));
     }
   }
-  c.ax = (sprite.ax ?? sprite.w / 2) / ART;
-  c.ay = (sprite.ay ?? (sprite.h - TILE_H * ART / 2)) / ART;
+  c.ax = (sprite.ax ?? sprite.w / 2) / artScale;
+  c.ay = (sprite.ay ?? (sprite.h - TILE_H * artScale / 2)) / artScale;
   c.scale = scale;
   canvasCache.set(cacheKey, c);
   return c;
@@ -2048,7 +1972,7 @@ function fillPoly(ctx, pts, color) {
   ctx.stroke();
 }
 
-function drawFurniture(ctx, f, originX, originY, dpr = 1, off = false, layer = 'all') {
+function drawFurniture(ctx, f, originX, originY, dpr = 1, off = false, layer = 'all', player = null) {
   const anchorX = f.x + f.footprint.w / 2 - 0.5;
   const anchorY = f.y + f.footprint.h / 2 - 0.5;
   const { sx, sy } = tileToScreen(anchorX, anchorY, originX, originY);
@@ -2079,8 +2003,20 @@ function drawFurniture(ctx, f, originX, originY, dpr = 1, off = false, layer = '
     }
   }
 
+  // Guide 8.11: Translucent canopy for the local player when standing under it
+  const isCanopy = f.itemId === 'pool_umbrella' || f.itemId === 'canopy_bed';
+  let fade = false;
+  if (isCanopy && player) {
+    const fx = f.x + (f.footprint?.w || 1) / 2 - 0.5;
+    const fy = f.y + (f.footprint?.h || 1) / 2 - 0.5;
+    if (Math.hypot(fx - player.x, fy - player.y) < 1.5) {
+      fade = true;
+    }
+  }
+  if (fade) ctx.globalAlpha = 0.35;
   const canvas = furnitureCanvas(f.itemId, f.rot, dpr, off, layer);
   blitDeviceAligned(ctx, canvas, sx - canvas.ax, sy - canvas.ay, dpr);
+  if (fade) ctx.globalAlpha = 1.0;
 }
 
 // Continuous low glass railing along the south/east floor edges of outdoor
@@ -2497,6 +2433,7 @@ export function renderRoom(ctx, opts) {
     width, height, dpr = 1, now = 0, elevatorAnim = null, camera = null, lightsOn = true,
   } = opts;
   entityScreenBounds.clear();
+  const localPlayer = entities?.find(e => e.isPlayer || e.id === 'player');
 
   const zoom = camera?.zoom ?? 1;
   const panX = camera?.panX ?? 0;
@@ -2690,7 +2627,7 @@ export function renderRoom(ctx, opts) {
   for (const d of drawables) {
     if (d.type === 'furniture') {
       const fItem = getCatalogueItem(d.data.itemId);
-      drawFurniture(ctx, d.data, originX, originY, ds, Boolean(fItem?.lightSource) && !lightsOn, d.layer || 'all');
+      drawFurniture(ctx, d.data, originX, originY, ds, Boolean(fItem?.lightSource) && !lightsOn, d.layer || 'all', localPlayer);
     } else if (d.type === 'edgerail') {
       drawEdgeRail(ctx, d.data.edge, d.data.x, d.data.y, originX, originY, ds);
     } else {
@@ -2724,7 +2661,7 @@ export function renderRoom(ctx, opts) {
     const { sx, sy } = tileToScreen(anchorX, anchorY, originX, originY);
     if (camera && (sx < viewMinX - 80 || sx > viewMaxX + 80 || sy < viewMinY - 180 || sy > viewMaxY + 80)) continue;
     const oItem = getCatalogueItem(f.itemId);
-    drawFurniture(ctx, f, originX, originY, ds, Boolean(oItem?.lightSource) && !lightsOn);
+    drawFurniture(ctx, f, originX, originY, ds, Boolean(oItem?.lightSource) && !lightsOn, 'all', localPlayer);
   }
 
   // Ambient lighting & localized warm emissive light pools (both night-time and per-room ambient lighting)

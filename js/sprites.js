@@ -8,7 +8,7 @@
 // chunky retro-pixel look (no smoothing, no sub-pixel positions).
 
 import {
-  getDetail, materialRamp, woodStreak,
+  getDetail, materialRamp, woodStreak, midToneOutline, textureFill, highlightPixels,
 } from './pixelart.js';
 
 function makeGrid(w, h) {
@@ -72,8 +72,10 @@ function fillDiamond(sprite, cx, cy, halfW, halfH, color) {
   }
 }
 
-function outline(sprite, color) {
-  // Adds a 1px outline around any opaque pixel that borders transparency.
+// Adds a 1px outline around any opaque pixel that borders transparency, in a
+// mid-tone shade of whichever opaque neighbour it touches (never a fixed
+// near-black constant, per the locked Pass 14b style).
+function outline(sprite) {
   const out = makeGrid(sprite.w, sprite.h);
   for (let y = 0; y < sprite.h; y++) {
     for (let x = 0; x < sprite.w; x++) out.px[y][x] = sprite.px[y][x];
@@ -87,7 +89,7 @@ function outline(sprite, color) {
         const ny = y + dy;
         if (nx < 0 || ny < 0 || nx >= sprite.w || ny >= sprite.h) continue;
         if (sprite.px[ny][nx]) {
-          out.px[y][x] = color;
+          out.px[y][x] = midToneOutline(sprite.px[ny][nx]);
           break;
         }
       }
@@ -96,16 +98,18 @@ function outline(sprite, color) {
   return out;
 }
 
+// Snaps any requested lightness delta onto the nearest of the input color's
+// fixed 4-tone materialRamp shade (top/left/right/line) instead of computing
+// an arbitrary continuous gradient. Keeps every item builder's existing
+// shade(color, amt) call sites hue-true and limited to the locked Pass 14b
+// 3-4 fixed shades per material, with no near-black outline tone.
 function shade(hex, amt) {
   if (!hex || typeof hex !== 'string') return '#000000';
-  const c = hex.replace('#', '');
-  const num = parseInt(c, 16);
-  let r = (num >> 16) & 0xff;
-  let g = (num >> 8) & 0xff;
-  let b = num & 0xff;
-  const f = (v) => Math.max(0, Math.min(255, Math.round(v + v * amt)));
-  r = f(r); g = f(g); b = f(b);
-  return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
+  const rmp = materialRamp(hex);
+  if (amt >= 0.04) return rmp.top;
+  if (amt <= -0.26) return rmp.line;
+  if (amt <= -0.03) return rmp.right;
+  return rmp.left;
 }
 
 // ---------- Floor / wall tiles ----------
@@ -721,7 +725,7 @@ export function isoSprite(tw, th, height, draw) {
     fillPolygon(s, [P(u0, v0, z1), P(u1, v0, z1), P(u1, v1, z1), P(u0, v1, z1)], topC);
   };
   draw(box, P, s);
-  const out = outline(s, '#2a1d2e');
+  const out = outline(s);
   const c = P(tw / 2, th / 2, 0);
   out.ax = c[0];
   out.ay = c[1];

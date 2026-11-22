@@ -27,6 +27,8 @@ import {
   buildFloorTile, buildWallSegment, buildDoorSegment, buildElevatorDoorSegment,
   buildStairwellDoorSegment, buildElevatorTile, buildEdgeRailSegment, buildDoorTile,
   FLOOR_MATERIALS, ISO,
+  buildSuiteBedSprite, buildSofaSprite, buildComputerDeskSprite, buildLampSprite,
+  buildPlantSprite, buildBarCounter, buildArmchairSprite, buildDiningTableSprite, buildDiningChairSprite,
 } from '../js/sprites.js';
 import { materialRamp, getDetail, setDetail } from '../js/pixelart.js';
 import {
@@ -3294,5 +3296,45 @@ test('phase2 perf guard: room-shell sprite canvases (wall/floor/window/door/elev
     }
   } finally {
     setDetail(prevDetail);
+  }
+});
+
+// ======================= Phase 3: furniture and props in the new pixel style =======================
+
+test('phase3 furniture: all catalogue furniture items use midToneOutline and never near-black #2a1d2e', () => {
+  for (const item of CATALOGUE) {
+    const builder = FURNITURE_BUILDERS[item.spriteKey];
+    assert.ok(builder, `missing sprite builder for catalogue item ${item.id}`);
+    for (const rot of [0, 1]) {
+      const s = builder(rot);
+      assert.ok(s && s.w > 0 && s.h > 0, `valid sprite for ${item.id} rot ${rot}`);
+      for (let y = 0; y < s.h; y++) {
+        for (let x = 0; x < s.w; x++) {
+          const c = s.px[y][x];
+          assert.notEqual(c, '#2a1d2e', `item ${item.id} rot ${rot} pixel (${x},${y}) must not use near-black #2a1d2e`);
+        }
+      }
+    }
+  }
+});
+
+test('phase3 furniture: representative items (bed, sofa, desk, lamp, plant, counter, bookshelf, armchair) meet checked sizes and bounds', () => {
+  const reps = {
+    bed: buildSuiteBedSprite(0),
+    sofa: buildSofaSprite('#e2607a', 0),
+    desk: buildComputerDeskSprite(0),
+    lamp: buildLampSprite(),
+    plant: buildPlantSprite(),
+    counter: buildBarCounter(0),
+    bookshelf: buildBookshelf(0),
+    armchair: buildArmchairSprite(0),
+    dining_table: buildDiningTableSprite(0),
+    dining_chair: buildDiningChairSprite(0),
+  };
+  for (const [name, s] of Object.entries(reps)) {
+    assert.ok(s.w > 0 && s.h > 0, `${name} has positive dimensions`);
+    assert.ok(s.w <= 200 && s.h <= 200, `${name} dimensions (${s.w}x${s.h}) stay within bounds`);
+    assert.ok(s.boxes && s.boxes.length > 0, `${name} retains volumetric box metadata`);
+    assert.ok(Number.isFinite(s.ax) && Number.isFinite(s.ay), `${name} has finite anchor points`);
   }
 });

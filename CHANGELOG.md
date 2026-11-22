@@ -9,6 +9,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
+- **Art rework phase 3: furniture and props in the new pixel style (`js/sprites.js`, `js/render.js`, `tests/logic.test.mjs`)**:
+  - Unified all catalogue furniture and prop rasterisation in `js/render.js` onto crisp, nearest-neighbour pixel grids (`sprite.px`), eliminating the legacy antialiased vector 3D-prism rasteriser, continuous gradients, crease lines, and near-black outlines.
+  - Re-anchored outlines across all 91 catalogue items and props via `midToneOutline`, matching neighbour ramp hues and strictly banishing near-black `#2a1d2e`.
+  - Snapped `shade(hex, amt)` calls across all item builders onto 4-tone `materialRamp` shades (`top`, `left`, `right`, `line`), preserving hue-true construction without arbitrary continuous gradients.
+  - Implemented Guide 8.11 translucent canopy fading for local player when standing under pool umbrellas and overhead canopies.
+  - Added unit test guards verifying every catalogue item and rotation contains zero `#2a1d2e` pixels, adheres to bounded audit footprints, and preserves volumetric metadata and seat configs.
+
+
 - **Art rework phase 2: rooms, walls, floors, windows and doors (`js/sprites.js`, `tests/logic.test.mjs`)**:
   - Walls are now one solid piece per the locked style: a plain 4-shade ramp fill (lit/shaded face, wall-top cap, skirting board), with no panel lines, no per-tile seams, and mid-tone (never near-black) outlines.
   - Reworked every floor material (`lobby_marble`, `dark_parquet`, `kitchen_tile`, `gym_rubber`, `spa_stone`, `library_carpet`, `arcade_neon`, `glasshouse_tile`, `grass`, `stone_path`, `timber_deck`, `default`) with calm, regular accent patterns (grout lines, broken plank grain, diamond lattices) instead of dense dither/speckle, all strictly limited to each material's 4-shade ramp.
