@@ -3293,7 +3293,7 @@ window.__pixelHotel = Object.assign(window.__pixelHotel || {}, {
     performBackgroundBake(currentRoomDef(), ui.cssW, ui.cssH, ui.phase, ox, oy);
   }, // 0.5 noon, 0 midnight
   getSaveVersion: () => SAVE_VERSION,
-  getVersion: () => '0.12.7',
+  getVersion: () => '0.13.0',
   getBackgroundDetail: () => state.settings.backgroundDetail || 'auto',
   setBackgroundDetail: (mode) => {
     state.settings.backgroundDetail = mode;

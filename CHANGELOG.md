@@ -7,6 +7,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-11-22
+
+Art rework: new pixel style for characters, rooms, furniture, and city, plus a High/Low quality toggle.
+
+
 ### Changed
 
 - **Art rework review pass: furniture builders, city windows, street shots and 8x crops (`js/sprites.js`, `js/render.js`, `js/main.js`, `css/style.css`, `scripts/furniture-crops.mjs`, `tests/_png.mjs`, `tests/logic.test.mjs`)**:
