@@ -811,7 +811,8 @@ function sortParts(parts) {
   return order;
 }
 
-export function isoSprite(tw, th, height, draw) {
+// `after(s, P, R)` (optional) paints straight into the grid on top of every box, before the outline.
+export function isoSprite(tw, th, height, draw, after) {
   const R = getDetail();
   const q = 16 * R; // snap steps per tile
   const s = makeGrid(((tw + th) * 32 + 2) * R, ((tw + th) * 16 + height + 2) * R);
@@ -934,6 +935,7 @@ export function isoSprite(tw, th, height, draw) {
   draw(box, P, s);
 
   for (const part of sortParts(parts)) (part.kind === 'cyl' ? paintCyl : paintBox)(part);
+  if (after) after(s, P, R);
 
   const out = outline(s);
   const c = P(tw / 2, th / 2, 0);
@@ -5733,30 +5735,64 @@ export function buildLampSprite() {
   });
 }
 
-// Potted fern: terracotta pot with a lit rim and soil, a fan of vertical blades and drooping outer fronds.
+// Potted fern: wide and low like a fountain. A tapered terracotta pot (lighter rim, dark soil) under
+// 10 continuous fronds. Each frond is one cubic curve that rises from the soil centre and arches
+// down past the rim, drawn as a tapering blade with a light top edge and a dark underside, so every
+// green pixel connects to the same centre. Back fronds are darker and stay above the rim.
+const FERN_FRONDS = 10;
+function paintFern(s, P, R) {
+  const [cx, cy] = P(0.5, 0.5, 15);
+  const G = tri('#58b24a'); // lit top, base, shadow
+  const order = [];
+  for (let i = 0; i < FERN_FRONDS; i++) {
+    const phi = (i / FERN_FRONDS) * Math.PI * 2 + 0.31 + (i % 3) * 0.05;
+    order.push({ phi, c: Math.cos(phi), n: Math.sin(phi), i });
+  }
+  order.sort((a, b) => a.n - b.n); // back (up the screen) first
+  for (const f of order) {
+    const back = f.n < -0.35;
+    const reach = (back ? 16 : (21 + (f.i % 3) * 2) * (1 - 0.35 * Math.max(0, f.n))) * R; // px; the y axis is squashed 2:1 below
+    const h = (back ? 9 : 7 + (f.i % 4)) * R;
+    const drop = (back ? -2 : 2) * R;
+    const ex = f.c * reach;
+    const ey = f.n * reach * 0.5;
+    const pts = [
+      [0, 0], [ex * 0.2, ey * 0.2 - h * 1.7], [ex * 0.7, ey * 0.7 - h * 1.3], [ex, ey + drop],
+    ];
+    const mask = new Set();
+    const N = 90;
+    for (let k = 0; k <= N; k++) {
+      const t = k / N;
+      const m = 1 - t;
+      const x = cx + m * m * m * pts[0][0] + 3 * m * m * t * pts[1][0] + 3 * m * t * t * pts[2][0] + t * t * t * pts[3][0];
+      const y = cy + m * m * m * pts[0][1] + 3 * m * m * t * pts[1][1] + 3 * m * t * t * pts[2][1] + t * t * t * pts[3][1];
+      const rad = (0.7 + 1.0 * Math.sin(Math.PI * Math.min(1, t * 1.05))) * R;
+      for (let yy = Math.floor(y - rad); yy <= Math.ceil(y + rad); yy++) {
+        for (let xx = Math.floor(x - rad); xx <= Math.ceil(x + rad); xx++) {
+          if ((xx - x) ** 2 + (yy - y) ** 2 <= rad * rad + 0.3) mask.add(yy * 4096 + xx);
+        }
+      }
+    }
+    const [lit, base, dark] = back ? [G[1], G[2], shade(G[2], -0.3)] : G;
+    for (const key of mask) {
+      const yy = Math.floor(key / 4096);
+      const xx = key - yy * 4096;
+      setPixel(s, xx, yy, mask.has((yy - 1) * 4096 + xx) ? (mask.has((yy + 1) * 4096 + xx) ? base : dark) : lit);
+    }
+  }
+}
+
 export function buildPlantSprite() {
   const pot = tri('#c8683a');
-  const potRim = tri('#e08a52');
-  const soil = tri('#7a5638');
-  const inner = tri('#3f9a3e');
-  const mid = tri('#52b04a');
-  const outer = tri('#6cc352');
+  const potRim = tri('#ee9a68');
+  const soil = tri('#5a3e2c');
   return isoSprite(1, 1, 44, (box) => {
-        box.cyl(0.5, 0.5, 0.2, 0, 4, ...pot, { chamfer: 0.45 });
-    box.cyl(0.5, 0.5, 0.27, 4, 13, ...pot, { chamfer: 0.45 });
-    box.cyl(0.5, 0.5, 0.31, 13, 17, ...potRim, { chamfer: 0.45 });
-    box.cyl(0.5, 0.5, 0.25, 17, 18, ...soil, { chamfer: 0.45, rim: false });
-    // fern crown: a tall centre column, a ring of rounded lumps at varied heights (light tops), and
-    // short drooping fronds that hang over the pot rim
-    const lump = (a, b, r, z1, cols) => box.cyl(a, b, r, 17, z1, ...cols, { chamfer: 0.5, rim: false });
-    const ring = [[-1, -0.35, 31, mid], [-0.35, -1, 34, outer], [0.7, -0.75, 30, mid], [1, 0.15, 33, outer], [0.45, 1, 29, mid], [-0.6, 0.85, 32, outer]];
-    for (const [dx, dy, t, cols] of ring) lump(0.5 + dx * 0.19, 0.5 + dy * 0.19, 0.12, t, cols);
-    lump(0.5, 0.5, 0.17, 41, inner);
-    lump(0.5, 0.5, 0.1, 44, outer);
-    for (const [dx, dy] of [[-1, 0.2], [0.2, -1], [1, -0.1], [-0.1, 1]]) {
-      box.cyl(0.5 + dx * 0.33, 0.5 + dy * 0.33, 0.07, 19, 29, ...outer, { chamfer: 0.5, rim: false });
-    }
-  });
+    box.cyl(0.5, 0.5, 0.15, 0, 3, ...pot, { chamfer: 0.45 });
+    box.cyl(0.5, 0.5, 0.18, 3, 7, ...pot, { chamfer: 0.45 });
+    box.cyl(0.5, 0.5, 0.21, 7, 11, ...pot, { chamfer: 0.45 });
+    box.cyl(0.5, 0.5, 0.25, 11, 14, ...potRim, { chamfer: 0.45 });
+    box.cyl(0.5, 0.5, 0.2, 14, 15, ...soil, { chamfer: 0.45, rim: false });
+  }, paintFern);
 }
 
 export function buildSuiteBedSprite(rot = 0) {
@@ -5788,8 +5824,9 @@ export function buildComputerDeskSprite(rot = 0) {
   const side = tri('#9b6a38');
   const inside = tri('#7e5430');
   const drawer = tri('#c48f52');
-  const screen = ['#8fe0ff', '#4cb8e6', '#4cb8e6'];
-  const bezel = tri('#4a5568');
+  const screen = ['#2c437e', '#1d2c5c', '#16224a']; // dark navy glass
+  const glare = ['#5b7fd0', '#5b7fd0', '#4a68b8'];
+  const bezel = ['#6d7482', '#4a515e', '#383e4a']; // dark grey
   return isoSprite(tw, th, 46, (box) => {
     const L = frameBox(box, r, 2, 1);
     // side panels, modesty back and a pedestal with three drawers: open kneehole in mid-tone wood
@@ -5807,6 +5844,8 @@ export function buildComputerDeskSprite(rot = 0) {
     L(0.55, 0.36, 0.67, 0.44, 27, 32, ...bezel, { rim: false });
     L(0.24, 0.3, 0.98, 0.4, 31, 46, ...bezel);
     L(0.3, 0.4, 0.92, 0.44, 33, 44, ...screen, { rim: false });
+    L(0.36, 0.4, 0.52, 0.44, 40, 42.5, ...glare, { rim: false }); // small glow / glare patch, coplanar with the glass
+    L(0.36, 0.4, 0.4, 0.44, 37, 40, ...glare, { rim: false });
     L(1.0, 0.56, 1.5, 0.78, 26, 27.5, ...CREAM, { rim: false }); // keyboard
     L(1.6, 0.6, 1.7, 0.7, 26, 27.5, ...CREAM, { rim: false }); // mouse
   });
