@@ -7,6 +7,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [0.14.0-beta.1] - 2026-11-23
+
+Phase P2 Pixi parity: optional PixiJS WebGL renderer (`?renderer=pixi`), texture atlas integration, depth-sorted furniture and entities, effects and cutaways, DOM overlays aligned via single camera matrix, and off-thread 512px chunked city backdrop baking in a Web Worker.
+
+### Added
+- **PixiJS render layer (`js/renderer/pixi/index.js`)**:
+  - Implemented `PixiRenderer` inheriting the common renderer contract and activated when `?renderer=pixi` (or `settings.renderer='pixi'`).
+  - WebGL context creation with graceful fallback to `LegacyCanvasRenderer` if context creation fails or WebGL is unavailable.
+  - Scene graph structure with layered Containers: `skyLayerContainer`, `cityLayerContainer`, `towerUnder`, `floorLayer` (`floorTilesContainer`, `floorDecalsContainer`), `wallsLayer`, `worldSorted`, `fxLayer`, `towerOver`, and `overlayLayer`.
+  - Atlas-driven rendering for floor chunks, walls, balustrades, doors, and furniture using the Phase 1 texture atlas (`js/renderer/atlas.js`).
+  - Strict isometric depth sorting (`zIndex = (x + y) * 1000 + z * 10`) for furniture, player characters, NPCs, and remote multiplayer entities.
+  - Support for multi-tile furniture, overhead items (`zIndex: 999999`), contact shadows, open-edge balustrades, and canopy fading.
+  - Seated entity layering with split back/front furniture layers for occupied armchairs, sofas, and dining booths.
+  - Gym mirror reflection rendering, treadmill/eat action overlays, and dynamic character texture caching.
+  - Multiplied day/night ambient tinting, screen-blended light map overlays, tower cutaway slabs, hover diamonds, placement ghost cells, and elevator door transitions.
+  - DOM name tag and chat bubble pooling inside `#worldOverlay`, aligned precisely to screen coordinates using a single camera matrix to eliminate drift.
+  - Added camera-to-tile round-trip verification test across all rooms and zoom levels.
+
+### Changed
+- **Off-thread city backdrop baking (`js/city-worker.js`, `js/renderer/legacy.js`)**:
+  - Offloaded background city skyline rendering (`renderSkylineToCanvas`) to a Web Worker running 512px chunks with `OffscreenCanvas`.
+  - Reverted scanline fill loops to integer-snapped path fills (`ctx.fill()` with rounded coordinates) and path strokes, eliminating CPU-intensive Bresenham scanlines while maintaining zero-AA crisp diagonal edges.
+  - Low quality background baking updated to 0.5 snapped scale; removed synchronous sprite prewarming on the floor arrival frame.
+
+### Performance & Gate Status
+- **Parity & Gates**:
+  - All 306 unit tests passing.
+  - End-to-end smoke test suite passing ("All smoke checks passed.").
+  - In-game floor screenshots captured across all 10 floors + street + tower views for desktop High and mobile Low.
+  - Recorded 3-run load gate and frame-time metrics in `tests/perf-baseline.json`. In software WebGL (SwiftShader in headless Linux), framerates reflect CPU rendering without GPU hardware acceleration.
+
+
 ## [0.13.1] - 2026-11-23
 
 Leftover art fixes: monitor glare, fern, Low backdrop windows, street trees, and a crisp city backdrop.

@@ -2998,7 +2998,7 @@ window.__pixelHotel = Object.assign(window.__pixelHotel || {}, {
     renderer.performBackgroundBake(currentRoomDef(), ui.cssW, ui.cssH, ui.phase, ox, oy);
   }, // 0.5 noon, 0 midnight
   getSaveVersion: () => SAVE_VERSION,
-  getVersion: () => '0.13.1',
+  getVersion: () => '0.14.0-beta.1',
   getRenderer: () => renderer,
   debugScene: () => renderer.debugScene(),
   snapshot: (type) => renderer.snapshot(type),

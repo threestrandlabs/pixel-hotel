@@ -265,6 +265,7 @@ export async function runFloorShots(opts = {}) {
         document.getElementById('helpOverlay')?.classList.add('hidden');
         if (window.__pixelHotel.setBackgroundDetail) window.__pixelHotel.setBackgroundDetail(q);
         if (window.__pixelHotel.setSpriteDetail) window.__pixelHotel.setSpriteDetail(q);
+        if (window.__pixelHotel.setDayPhase) window.__pixelHotel.setDayPhase(0.5);
       }, prof.quality);
       await page.waitForTimeout(300);
 

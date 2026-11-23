@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-23T08:44:15.521Z",
-  "description": "Per-floor performance baseline for v0.12.7 and v0.13.1 across desktop_high (1440x900 DPR2) and mobile_low (390x844 DPR3 CPU 4x), 3 runs each.",
+  "generatedAt": "2026-11-23T12:17:47.821Z",
+  "description": "Per-floor performance baseline for v0.12.7, v0.13.1, and v0.14.0-beta.1 (pixi) across desktop_high (1440x900 DPR2) and mobile_low (390x844 DPR3 CPU 4x), 3 runs each.",
   "baselines": {
     "v0.12.7": {
       "version": "0.12.7",
@@ -2021,6 +2021,2034 @@
                   "longTasksOver50ms": 6,
                   "longTasksOver100ms": 3,
                   "totalFrames": 28
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "v0.14.0-beta.1": {
+      "version": "0.14.0-beta.1",
+      "renderer": "pixi",
+      "root": "/workspace/ph-pixi",
+      "runs": 3,
+      "entryWindowMs": 3000,
+      "timestamp": "2026-11-23T11:59:00.907Z",
+      "profiles": {
+        "desktop_high": {
+          "label": "Desktop High (1440x900 @ 2x DPR)",
+          "viewport": {
+            "width": 1440,
+            "height": 900
+          },
+          "deviceScaleFactor": 2,
+          "cpuThrottle": 1,
+          "quality": "high",
+          "floors": {
+            "lobby": {
+              "avgFps": 2.9,
+              "p95Fps": 2.5,
+              "p95FrameMs": 400,
+              "maxFrameMs": 466.7,
+              "framesOver50ms": 10,
+              "framesOver100ms": 10,
+              "framesOver250ms": 10,
+              "longTasksOver50ms": 10,
+              "longTasksOver100ms": 10,
+              "runs": [
+                {
+                  "avgFps": 2.5,
+                  "p95Fps": 2.1,
+                  "p95FrameMs": 466.6,
+                  "maxFrameMs": 466.7,
+                  "framesOver50ms": 9,
+                  "framesOver100ms": 9,
+                  "framesOver250ms": 9,
+                  "longTasksOver50ms": 8,
+                  "longTasksOver100ms": 8,
+                  "totalFrames": 9
+                },
+                {
+                  "avgFps": 2.9,
+                  "p95Fps": 2.7,
+                  "p95FrameMs": 366.6,
+                  "maxFrameMs": 416.7,
+                  "framesOver50ms": 9,
+                  "framesOver100ms": 9,
+                  "framesOver250ms": 9,
+                  "longTasksOver50ms": 9,
+                  "longTasksOver100ms": 9,
+                  "totalFrames": 9
+                },
+                {
+                  "avgFps": 3.3,
+                  "p95Fps": 2.7,
+                  "p95FrameMs": 366.7,
+                  "maxFrameMs": 383.3,
+                  "framesOver50ms": 10,
+                  "framesOver100ms": 10,
+                  "framesOver250ms": 10,
+                  "longTasksOver50ms": 10,
+                  "longTasksOver100ms": 10,
+                  "totalFrames": 10
+                }
+              ]
+            },
+            "cafe": {
+              "avgFps": 2.3,
+              "p95Fps": 1.9,
+              "p95FrameMs": 538.8,
+              "maxFrameMs": 600,
+              "framesOver50ms": 7,
+              "framesOver100ms": 7,
+              "framesOver250ms": 7,
+              "longTasksOver50ms": 8,
+              "longTasksOver100ms": 7,
+              "runs": [
+                {
+                  "avgFps": 2.3,
+                  "p95Fps": 2,
+                  "p95FrameMs": 500,
+                  "maxFrameMs": 500,
+                  "framesOver50ms": 7,
+                  "framesOver100ms": 7,
+                  "framesOver250ms": 7,
+                  "longTasksOver50ms": 7,
+                  "longTasksOver100ms": 7,
+                  "totalFrames": 7
+                },
+                {
+                  "avgFps": 2.3,
+                  "p95Fps": 1.9,
+                  "p95FrameMs": 516.5,
+                  "maxFrameMs": 516.5,
+                  "framesOver50ms": 7,
+                  "framesOver100ms": 7,
+                  "framesOver250ms": 7,
+                  "longTasksOver50ms": 7,
+                  "longTasksOver100ms": 7,
+                  "totalFrames": 7
+                },
+                {
+                  "avgFps": 2.2,
+                  "p95Fps": 1.7,
+                  "p95FrameMs": 600,
+                  "maxFrameMs": 600,
+                  "framesOver50ms": 7,
+                  "framesOver100ms": 7,
+                  "framesOver250ms": 7,
+                  "longTasksOver50ms": 8,
+                  "longTasksOver100ms": 7,
+                  "totalFrames": 7
+                }
+              ]
+            },
+            "restaurant": {
+              "avgFps": 2.6,
+              "p95Fps": 2.4,
+              "p95FrameMs": 411.1,
+              "maxFrameMs": 450.1,
+              "framesOver50ms": 8,
+              "framesOver100ms": 8,
+              "framesOver250ms": 8,
+              "longTasksOver50ms": 8,
+              "longTasksOver100ms": 8,
+              "runs": [
+                {
+                  "avgFps": 2.7,
+                  "p95Fps": 2.5,
+                  "p95FrameMs": 400,
+                  "maxFrameMs": 449.9,
+                  "framesOver50ms": 8,
+                  "framesOver100ms": 8,
+                  "framesOver250ms": 8,
+                  "longTasksOver50ms": 8,
+                  "longTasksOver100ms": 8,
+                  "totalFrames": 8
+                },
+                {
+                  "avgFps": 2.6,
+                  "p95Fps": 2.5,
+                  "p95FrameMs": 400,
+                  "maxFrameMs": 450.1,
+                  "framesOver50ms": 8,
+                  "framesOver100ms": 8,
+                  "framesOver250ms": 8,
+                  "longTasksOver50ms": 8,
+                  "longTasksOver100ms": 8,
+                  "totalFrames": 8
+                },
+                {
+                  "avgFps": 2.5,
+                  "p95Fps": 2.3,
+                  "p95FrameMs": 433.4,
+                  "maxFrameMs": 433.4,
+                  "framesOver50ms": 8,
+                  "framesOver100ms": 8,
+                  "framesOver250ms": 8,
+                  "longTasksOver50ms": 8,
+                  "longTasksOver100ms": 8,
+                  "totalFrames": 8
+                }
+              ]
+            },
+            "gym": {
+              "avgFps": 2.3,
+              "p95Fps": 2,
+              "p95FrameMs": 500,
+              "maxFrameMs": 516.6,
+              "framesOver50ms": 7,
+              "framesOver100ms": 7,
+              "framesOver250ms": 7,
+              "longTasksOver50ms": 7,
+              "longTasksOver100ms": 7,
+              "runs": [
+                {
+                  "avgFps": 2.3,
+                  "p95Fps": 1.9,
+                  "p95FrameMs": 516.6,
+                  "maxFrameMs": 516.6,
+                  "framesOver50ms": 7,
+                  "framesOver100ms": 7,
+                  "framesOver250ms": 7,
+                  "longTasksOver50ms": 7,
+                  "longTasksOver100ms": 7,
+                  "totalFrames": 7
+                },
+                {
+                  "avgFps": 2.3,
+                  "p95Fps": 2.1,
+                  "p95FrameMs": 483.3,
+                  "maxFrameMs": 483.3,
+                  "framesOver50ms": 7,
+                  "framesOver100ms": 7,
+                  "framesOver250ms": 7,
+                  "longTasksOver50ms": 6,
+                  "longTasksOver100ms": 6,
+                  "totalFrames": 7
+                },
+                {
+                  "avgFps": 2.2,
+                  "p95Fps": 2,
+                  "p95FrameMs": 500,
+                  "maxFrameMs": 500,
+                  "framesOver50ms": 7,
+                  "framesOver100ms": 7,
+                  "framesOver250ms": 7,
+                  "longTasksOver50ms": 7,
+                  "longTasksOver100ms": 7,
+                  "totalFrames": 7
+                }
+              ]
+            },
+            "pool": {
+              "avgFps": 2.3,
+              "p95Fps": 2,
+              "p95FrameMs": 500,
+              "maxFrameMs": 516.7,
+              "framesOver50ms": 8,
+              "framesOver100ms": 8,
+              "framesOver250ms": 8,
+              "longTasksOver50ms": 7,
+              "longTasksOver100ms": 7,
+              "runs": [
+                {
+                  "avgFps": 2.4,
+                  "p95Fps": 2.1,
+                  "p95FrameMs": 466.7,
+                  "maxFrameMs": 466.7,
+                  "framesOver50ms": 8,
+                  "framesOver100ms": 8,
+                  "framesOver250ms": 8,
+                  "longTasksOver50ms": 7,
+                  "longTasksOver100ms": 7,
+                  "totalFrames": 8
+                },
+                {
+                  "avgFps": 2.2,
+                  "p95Fps": 1.9,
+                  "p95FrameMs": 516.5,
+                  "maxFrameMs": 516.5,
+                  "framesOver50ms": 7,
+                  "framesOver100ms": 7,
+                  "framesOver250ms": 7,
+                  "longTasksOver50ms": 7,
+                  "longTasksOver100ms": 7,
+                  "totalFrames": 7
+                },
+                {
+                  "avgFps": 2.2,
+                  "p95Fps": 1.9,
+                  "p95FrameMs": 516.7,
+                  "maxFrameMs": 516.7,
+                  "framesOver50ms": 7,
+                  "framesOver100ms": 7,
+                  "framesOver250ms": 7,
+                  "longTasksOver50ms": 7,
+                  "longTasksOver100ms": 7,
+                  "totalFrames": 7
+                }
+              ]
+            },
+            "arcade": {
+              "avgFps": 2.1,
+              "p95Fps": 1.8,
+              "p95FrameMs": 561.1,
+              "maxFrameMs": 616.6,
+              "framesOver50ms": 7,
+              "framesOver100ms": 7,
+              "framesOver250ms": 7,
+              "longTasksOver50ms": 7,
+              "longTasksOver100ms": 7,
+              "runs": [
+                {
+                  "avgFps": 2.1,
+                  "p95Fps": 1.9,
+                  "p95FrameMs": 533.3,
+                  "maxFrameMs": 533.3,
+                  "framesOver50ms": 7,
+                  "framesOver100ms": 7,
+                  "framesOver250ms": 7,
+                  "longTasksOver50ms": 6,
+                  "longTasksOver100ms": 6,
+                  "totalFrames": 7
+                },
+                {
+                  "avgFps": 2.1,
+                  "p95Fps": 1.9,
+                  "p95FrameMs": 533.3,
+                  "maxFrameMs": 533.3,
+                  "framesOver50ms": 7,
+                  "framesOver100ms": 7,
+                  "framesOver250ms": 7,
+                  "longTasksOver50ms": 6,
+                  "longTasksOver100ms": 6,
+                  "totalFrames": 7
+                },
+                {
+                  "avgFps": 2,
+                  "p95Fps": 1.6,
+                  "p95FrameMs": 616.6,
+                  "maxFrameMs": 616.6,
+                  "framesOver50ms": 7,
+                  "framesOver100ms": 7,
+                  "framesOver250ms": 7,
+                  "longTasksOver50ms": 7,
+                  "longTasksOver100ms": 7,
+                  "totalFrames": 7
+                }
+              ]
+            },
+            "library": {
+              "avgFps": 1.8,
+              "p95Fps": 1.6,
+              "p95FrameMs": 611.1,
+              "maxFrameMs": 616.7,
+              "framesOver50ms": 6,
+              "framesOver100ms": 6,
+              "framesOver250ms": 6,
+              "longTasksOver50ms": 7,
+              "longTasksOver100ms": 6,
+              "runs": [
+                {
+                  "avgFps": 1.8,
+                  "p95Fps": 1.6,
+                  "p95FrameMs": 616.7,
+                  "maxFrameMs": 616.7,
+                  "framesOver50ms": 6,
+                  "framesOver100ms": 6,
+                  "framesOver250ms": 6,
+                  "longTasksOver50ms": 7,
+                  "longTasksOver100ms": 6,
+                  "totalFrames": 6
+                },
+                {
+                  "avgFps": 1.8,
+                  "p95Fps": 1.6,
+                  "p95FrameMs": 616.6,
+                  "maxFrameMs": 616.6,
+                  "framesOver50ms": 6,
+                  "framesOver100ms": 6,
+                  "framesOver250ms": 6,
+                  "longTasksOver50ms": 7,
+                  "longTasksOver100ms": 6,
+                  "totalFrames": 6
+                },
+                {
+                  "avgFps": 1.9,
+                  "p95Fps": 1.7,
+                  "p95FrameMs": 599.9,
+                  "maxFrameMs": 599.9,
+                  "framesOver50ms": 6,
+                  "framesOver100ms": 6,
+                  "framesOver250ms": 6,
+                  "longTasksOver50ms": 7,
+                  "longTasksOver100ms": 6,
+                  "totalFrames": 6
+                }
+              ]
+            },
+            "garden": {
+              "avgFps": 2.3,
+              "p95Fps": 2,
+              "p95FrameMs": 488.9,
+              "maxFrameMs": 516.7,
+              "framesOver50ms": 8,
+              "framesOver100ms": 8,
+              "framesOver250ms": 8,
+              "longTasksOver50ms": 9,
+              "longTasksOver100ms": 8,
+              "runs": [
+                {
+                  "avgFps": 2.2,
+                  "p95Fps": 2.1,
+                  "p95FrameMs": 483.4,
+                  "maxFrameMs": 483.4,
+                  "framesOver50ms": 7,
+                  "framesOver100ms": 7,
+                  "framesOver250ms": 7,
+                  "longTasksOver50ms": 8,
+                  "longTasksOver100ms": 7,
+                  "totalFrames": 7
+                },
+                {
+                  "avgFps": 2.4,
+                  "p95Fps": 1.9,
+                  "p95FrameMs": 516.7,
+                  "maxFrameMs": 516.7,
+                  "framesOver50ms": 8,
+                  "framesOver100ms": 8,
+                  "framesOver250ms": 8,
+                  "longTasksOver50ms": 8,
+                  "longTasksOver100ms": 7,
+                  "totalFrames": 8
+                },
+                {
+                  "avgFps": 2.4,
+                  "p95Fps": 2.1,
+                  "p95FrameMs": 466.6,
+                  "maxFrameMs": 466.6,
+                  "framesOver50ms": 8,
+                  "framesOver100ms": 8,
+                  "framesOver250ms": 8,
+                  "longTasksOver50ms": 9,
+                  "longTasksOver100ms": 8,
+                  "totalFrames": 8
+                }
+              ]
+            },
+            "myroom": {
+              "avgFps": 3.6,
+              "p95Fps": 3.3,
+              "p95FrameMs": 305.6,
+              "maxFrameMs": 433.4,
+              "framesOver50ms": 11,
+              "framesOver100ms": 11,
+              "framesOver250ms": 11,
+              "longTasksOver50ms": 12,
+              "longTasksOver100ms": 11,
+              "runs": [
+                {
+                  "avgFps": 3.7,
+                  "p95Fps": 3.5,
+                  "p95FrameMs": 283.4,
+                  "maxFrameMs": 366.7,
+                  "framesOver50ms": 11,
+                  "framesOver100ms": 11,
+                  "framesOver250ms": 11,
+                  "longTasksOver50ms": 12,
+                  "longTasksOver100ms": 11,
+                  "totalFrames": 11
+                },
+                {
+                  "avgFps": 3.3,
+                  "p95Fps": 3,
+                  "p95FrameMs": 333.4,
+                  "maxFrameMs": 433.4,
+                  "framesOver50ms": 10,
+                  "framesOver100ms": 10,
+                  "framesOver250ms": 10,
+                  "longTasksOver50ms": 11,
+                  "longTasksOver100ms": 10,
+                  "totalFrames": 10
+                },
+                {
+                  "avgFps": 3.7,
+                  "p95Fps": 3.3,
+                  "p95FrameMs": 299.9,
+                  "maxFrameMs": 350,
+                  "framesOver50ms": 11,
+                  "framesOver100ms": 11,
+                  "framesOver250ms": 11,
+                  "longTasksOver50ms": 12,
+                  "longTasksOver100ms": 11,
+                  "totalFrames": 11
+                }
+              ]
+            },
+            "rooftop": {
+              "avgFps": 2.1,
+              "p95Fps": 1.7,
+              "p95FrameMs": 572.2,
+              "maxFrameMs": 583.4,
+              "framesOver50ms": 7,
+              "framesOver100ms": 7,
+              "framesOver250ms": 7,
+              "longTasksOver50ms": 8,
+              "longTasksOver100ms": 8,
+              "runs": [
+                {
+                  "avgFps": 2.3,
+                  "p95Fps": 1.8,
+                  "p95FrameMs": 550,
+                  "maxFrameMs": 550,
+                  "framesOver50ms": 7,
+                  "framesOver100ms": 7,
+                  "framesOver250ms": 7,
+                  "longTasksOver50ms": 8,
+                  "longTasksOver100ms": 8,
+                  "totalFrames": 7
+                },
+                {
+                  "avgFps": 2,
+                  "p95Fps": 1.7,
+                  "p95FrameMs": 583.4,
+                  "maxFrameMs": 583.4,
+                  "framesOver50ms": 7,
+                  "framesOver100ms": 7,
+                  "framesOver250ms": 7,
+                  "longTasksOver50ms": 8,
+                  "longTasksOver100ms": 7,
+                  "totalFrames": 7
+                },
+                {
+                  "avgFps": 2.1,
+                  "p95Fps": 1.7,
+                  "p95FrameMs": 583.3,
+                  "maxFrameMs": 583.3,
+                  "framesOver50ms": 7,
+                  "framesOver100ms": 7,
+                  "framesOver250ms": 7,
+                  "longTasksOver50ms": 7,
+                  "longTasksOver100ms": 7,
+                  "totalFrames": 7
+                }
+              ]
+            }
+          }
+        },
+        "mobile_low": {
+          "label": "Mobile Low (390x844 @ 3x DPR, 4x CPU throttle)",
+          "viewport": {
+            "width": 390,
+            "height": 844
+          },
+          "deviceScaleFactor": 3,
+          "cpuThrottle": 4,
+          "quality": "low",
+          "floors": {
+            "lobby": {
+              "avgFps": 9,
+              "p95Fps": 5.7,
+              "p95FrameMs": 194.5,
+              "maxFrameMs": 450,
+              "framesOver50ms": 27,
+              "framesOver100ms": 13,
+              "framesOver250ms": 2,
+              "longTasksOver50ms": 27,
+              "longTasksOver100ms": 18,
+              "runs": [
+                {
+                  "avgFps": 8.5,
+                  "p95Fps": 4.6,
+                  "p95FrameMs": 216.7,
+                  "maxFrameMs": 316.7,
+                  "framesOver50ms": 27,
+                  "framesOver100ms": 11,
+                  "framesOver250ms": 1,
+                  "longTasksOver50ms": 27,
+                  "longTasksOver100ms": 14,
+                  "totalFrames": 27
+                },
+                {
+                  "avgFps": 9.8,
+                  "p95Fps": 8.6,
+                  "p95FrameMs": 116.7,
+                  "maxFrameMs": 416.6,
+                  "framesOver50ms": 23,
+                  "framesOver100ms": 13,
+                  "framesOver250ms": 2,
+                  "longTasksOver50ms": 24,
+                  "longTasksOver100ms": 18,
+                  "totalFrames": 23
+                },
+                {
+                  "avgFps": 8.8,
+                  "p95Fps": 4,
+                  "p95FrameMs": 250,
+                  "maxFrameMs": 450,
+                  "framesOver50ms": 25,
+                  "framesOver100ms": 12,
+                  "framesOver250ms": 1,
+                  "longTasksOver50ms": 25,
+                  "longTasksOver100ms": 16,
+                  "totalFrames": 25
+                }
+              ]
+            },
+            "cafe": {
+              "avgFps": 8.2,
+              "p95Fps": 5.8,
+              "p95FrameMs": 200,
+              "maxFrameMs": 300.1,
+              "framesOver50ms": 26,
+              "framesOver100ms": 23,
+              "framesOver250ms": 1,
+              "longTasksOver50ms": 26,
+              "longTasksOver100ms": 25,
+              "runs": [
+                {
+                  "avgFps": 8.3,
+                  "p95Fps": 7.5,
+                  "p95FrameMs": 133.4,
+                  "maxFrameMs": 266.6,
+                  "framesOver50ms": 24,
+                  "framesOver100ms": 20,
+                  "framesOver250ms": 1,
+                  "longTasksOver50ms": 24,
+                  "longTasksOver100ms": 24,
+                  "totalFrames": 24
+                },
+                {
+                  "avgFps": 8.7,
+                  "p95Fps": 6.7,
+                  "p95FrameMs": 150,
+                  "maxFrameMs": 300.1,
+                  "framesOver50ms": 23,
+                  "framesOver100ms": 19,
+                  "framesOver250ms": 1,
+                  "longTasksOver50ms": 23,
+                  "longTasksOver100ms": 23,
+                  "totalFrames": 23
+                },
+                {
+                  "avgFps": 7.5,
+                  "p95Fps": 3.2,
+                  "p95FrameMs": 316.7,
+                  "maxFrameMs": 183.3,
+                  "framesOver50ms": 26,
+                  "framesOver100ms": 23,
+                  "framesOver250ms": 0,
+                  "longTasksOver50ms": 26,
+                  "longTasksOver100ms": 25,
+                  "totalFrames": 26
+                }
+              ]
+            },
+            "restaurant": {
+              "avgFps": 8.1,
+              "p95Fps": 6.5,
+              "p95FrameMs": 155.6,
+              "maxFrameMs": 316.7,
+              "framesOver50ms": 25,
+              "framesOver100ms": 20,
+              "framesOver250ms": 2,
+              "longTasksOver50ms": 26,
+              "longTasksOver100ms": 24,
+              "runs": [
+                {
+                  "avgFps": 8.2,
+                  "p95Fps": 6,
+                  "p95FrameMs": 166.7,
+                  "maxFrameMs": 316.7,
+                  "framesOver50ms": 23,
+                  "framesOver100ms": 18,
+                  "framesOver250ms": 1,
+                  "longTasksOver50ms": 24,
+                  "longTasksOver100ms": 24,
+                  "totalFrames": 23
+                },
+                {
+                  "avgFps": 8.4,
+                  "p95Fps": 7.5,
+                  "p95FrameMs": 133.4,
+                  "maxFrameMs": 266.7,
+                  "framesOver50ms": 25,
+                  "framesOver100ms": 18,
+                  "framesOver250ms": 1,
+                  "longTasksOver50ms": 26,
+                  "longTasksOver100ms": 22,
+                  "totalFrames": 25
+                },
+                {
+                  "avgFps": 7.6,
+                  "p95Fps": 6,
+                  "p95FrameMs": 166.6,
+                  "maxFrameMs": 316.6,
+                  "framesOver50ms": 20,
+                  "framesOver100ms": 20,
+                  "framesOver250ms": 2,
+                  "longTasksOver50ms": 20,
+                  "longTasksOver100ms": 20,
+                  "totalFrames": 20
+                }
+              ]
+            },
+            "gym": {
+              "avgFps": 8.1,
+              "p95Fps": 5,
+              "p95FrameMs": 216.7,
+              "maxFrameMs": 283.3,
+              "framesOver50ms": 27,
+              "framesOver100ms": 20,
+              "framesOver250ms": 1,
+              "longTasksOver50ms": 27,
+              "longTasksOver100ms": 23,
+              "runs": [
+                {
+                  "avgFps": 8.2,
+                  "p95Fps": 3.3,
+                  "p95FrameMs": 300,
+                  "maxFrameMs": 166.7,
+                  "framesOver50ms": 27,
+                  "framesOver100ms": 14,
+                  "framesOver250ms": 0,
+                  "longTasksOver50ms": 27,
+                  "longTasksOver100ms": 21,
+                  "totalFrames": 27
+                },
+                {
+                  "avgFps": 8,
+                  "p95Fps": 6.7,
+                  "p95FrameMs": 150,
+                  "maxFrameMs": 266.7,
+                  "framesOver50ms": 24,
+                  "framesOver100ms": 20,
+                  "framesOver250ms": 1,
+                  "longTasksOver50ms": 25,
+                  "longTasksOver100ms": 23,
+                  "totalFrames": 24
+                },
+                {
+                  "avgFps": 8.1,
+                  "p95Fps": 5,
+                  "p95FrameMs": 200.1,
+                  "maxFrameMs": 283.3,
+                  "framesOver50ms": 23,
+                  "framesOver100ms": 19,
+                  "framesOver250ms": 1,
+                  "longTasksOver50ms": 23,
+                  "longTasksOver100ms": 23,
+                  "totalFrames": 23
+                }
+              ]
+            },
+            "pool": {
+              "avgFps": 8.4,
+              "p95Fps": 6.5,
+              "p95FrameMs": 155.5,
+              "maxFrameMs": 283.2,
+              "framesOver50ms": 25,
+              "framesOver100ms": 21,
+              "framesOver250ms": 2,
+              "longTasksOver50ms": 25,
+              "longTasksOver100ms": 25,
+              "runs": [
+                {
+                  "avgFps": 8.4,
+                  "p95Fps": 6,
+                  "p95FrameMs": 166.6,
+                  "maxFrameMs": 233.4,
+                  "framesOver50ms": 25,
+                  "framesOver100ms": 21,
+                  "framesOver250ms": 0,
+                  "longTasksOver50ms": 25,
+                  "longTasksOver100ms": 25,
+                  "totalFrames": 25
+                },
+                {
+                  "avgFps": 8.4,
+                  "p95Fps": 6.7,
+                  "p95FrameMs": 150,
+                  "maxFrameMs": 283.2,
+                  "framesOver50ms": 21,
+                  "framesOver100ms": 21,
+                  "framesOver250ms": 2,
+                  "longTasksOver50ms": 22,
+                  "longTasksOver100ms": 22,
+                  "totalFrames": 21
+                },
+                {
+                  "avgFps": 8.4,
+                  "p95Fps": 6.7,
+                  "p95FrameMs": 150,
+                  "maxFrameMs": 266.6,
+                  "framesOver50ms": 23,
+                  "framesOver100ms": 18,
+                  "framesOver250ms": 2,
+                  "longTasksOver50ms": 24,
+                  "longTasksOver100ms": 24,
+                  "totalFrames": 23
+                }
+              ]
+            },
+            "arcade": {
+              "avgFps": 7.6,
+              "p95Fps": 6.5,
+              "p95FrameMs": 155.5,
+              "maxFrameMs": 350,
+              "framesOver50ms": 22,
+              "framesOver100ms": 22,
+              "framesOver250ms": 1,
+              "longTasksOver50ms": 23,
+              "longTasksOver100ms": 22,
+              "runs": [
+                {
+                  "avgFps": 7.7,
+                  "p95Fps": 6,
+                  "p95FrameMs": 166.6,
+                  "maxFrameMs": 250,
+                  "framesOver50ms": 22,
+                  "framesOver100ms": 22,
+                  "framesOver250ms": 0,
+                  "longTasksOver50ms": 23,
+                  "longTasksOver100ms": 22,
+                  "totalFrames": 22
+                },
+                {
+                  "avgFps": 7.5,
+                  "p95Fps": 6.7,
+                  "p95FrameMs": 150,
+                  "maxFrameMs": 266.7,
+                  "framesOver50ms": 22,
+                  "framesOver100ms": 22,
+                  "framesOver250ms": 1,
+                  "longTasksOver50ms": 22,
+                  "longTasksOver100ms": 21,
+                  "totalFrames": 22
+                },
+                {
+                  "avgFps": 7.5,
+                  "p95Fps": 6.7,
+                  "p95FrameMs": 150,
+                  "maxFrameMs": 350,
+                  "framesOver50ms": 21,
+                  "framesOver100ms": 21,
+                  "framesOver250ms": 1,
+                  "longTasksOver50ms": 21,
+                  "longTasksOver100ms": 21,
+                  "totalFrames": 21
+                }
+              ]
+            },
+            "library": {
+              "avgFps": 7,
+              "p95Fps": 4.9,
+              "p95FrameMs": 222.2,
+              "maxFrameMs": 350,
+              "framesOver50ms": 23,
+              "framesOver100ms": 23,
+              "framesOver250ms": 1,
+              "longTasksOver50ms": 22,
+              "longTasksOver100ms": 22,
+              "runs": [
+                {
+                  "avgFps": 7.3,
+                  "p95Fps": 3.2,
+                  "p95FrameMs": 316.6,
+                  "maxFrameMs": 183.3,
+                  "framesOver50ms": 23,
+                  "framesOver100ms": 23,
+                  "framesOver250ms": 0,
+                  "longTasksOver50ms": 22,
+                  "longTasksOver100ms": 22,
+                  "totalFrames": 23
+                },
+                {
+                  "avgFps": 6.9,
+                  "p95Fps": 5.5,
+                  "p95FrameMs": 183.3,
+                  "maxFrameMs": 350,
+                  "framesOver50ms": 21,
+                  "framesOver100ms": 21,
+                  "framesOver250ms": 1,
+                  "longTasksOver50ms": 21,
+                  "longTasksOver100ms": 21,
+                  "totalFrames": 21
+                },
+                {
+                  "avgFps": 6.9,
+                  "p95Fps": 6,
+                  "p95FrameMs": 166.7,
+                  "maxFrameMs": 333.2,
+                  "framesOver50ms": 21,
+                  "framesOver100ms": 21,
+                  "framesOver250ms": 1,
+                  "longTasksOver50ms": 21,
+                  "longTasksOver100ms": 21,
+                  "totalFrames": 21
+                }
+              ]
+            },
+            "garden": {
+              "avgFps": 7.6,
+              "p95Fps": 5.5,
+              "p95FrameMs": 205.6,
+              "maxFrameMs": 333.3,
+              "framesOver50ms": 24,
+              "framesOver100ms": 21,
+              "framesOver250ms": 1,
+              "longTasksOver50ms": 24,
+              "longTasksOver100ms": 24,
+              "runs": [
+                {
+                  "avgFps": 7.8,
+                  "p95Fps": 6.7,
+                  "p95FrameMs": 150,
+                  "maxFrameMs": 333.3,
+                  "framesOver50ms": 21,
+                  "framesOver100ms": 21,
+                  "framesOver250ms": 1,
+                  "longTasksOver50ms": 22,
+                  "longTasksOver100ms": 22,
+                  "totalFrames": 21
+                },
+                {
+                  "avgFps": 7.5,
+                  "p95Fps": 3.2,
+                  "p95FrameMs": 316.7,
+                  "maxFrameMs": 183.4,
+                  "framesOver50ms": 24,
+                  "framesOver100ms": 21,
+                  "framesOver250ms": 0,
+                  "longTasksOver50ms": 24,
+                  "longTasksOver100ms": 24,
+                  "totalFrames": 24
+                },
+                {
+                  "avgFps": 7.6,
+                  "p95Fps": 6.7,
+                  "p95FrameMs": 150,
+                  "maxFrameMs": 300,
+                  "framesOver50ms": 21,
+                  "framesOver100ms": 21,
+                  "framesOver250ms": 1,
+                  "longTasksOver50ms": 22,
+                  "longTasksOver100ms": 22,
+                  "totalFrames": 21
+                }
+              ]
+            },
+            "myroom": {
+              "avgFps": 8.5,
+              "p95Fps": 5,
+              "p95FrameMs": 222.3,
+              "maxFrameMs": 333.3,
+              "framesOver50ms": 27,
+              "framesOver100ms": 20,
+              "framesOver250ms": 1,
+              "longTasksOver50ms": 27,
+              "longTasksOver100ms": 24,
+              "runs": [
+                {
+                  "avgFps": 8.4,
+                  "p95Fps": 3.7,
+                  "p95FrameMs": 266.8,
+                  "maxFrameMs": 150,
+                  "framesOver50ms": 27,
+                  "framesOver100ms": 18,
+                  "framesOver250ms": 0,
+                  "longTasksOver50ms": 26,
+                  "longTasksOver100ms": 24,
+                  "totalFrames": 27
+                },
+                {
+                  "avgFps": 8.7,
+                  "p95Fps": 3.8,
+                  "p95FrameMs": 266.6,
+                  "maxFrameMs": 150,
+                  "framesOver50ms": 27,
+                  "framesOver100ms": 19,
+                  "framesOver250ms": 0,
+                  "longTasksOver50ms": 27,
+                  "longTasksOver100ms": 24,
+                  "totalFrames": 27
+                },
+                {
+                  "avgFps": 8.5,
+                  "p95Fps": 7.5,
+                  "p95FrameMs": 133.4,
+                  "maxFrameMs": 333.3,
+                  "framesOver50ms": 23,
+                  "framesOver100ms": 20,
+                  "framesOver250ms": 1,
+                  "longTasksOver50ms": 24,
+                  "longTasksOver100ms": 24,
+                  "totalFrames": 23
+                }
+              ]
+            },
+            "rooftop": {
+              "avgFps": 7.8,
+              "p95Fps": 7.2,
+              "p95FrameMs": 138.9,
+              "maxFrameMs": 466.7,
+              "framesOver50ms": 21,
+              "framesOver100ms": 21,
+              "framesOver250ms": 1,
+              "longTasksOver50ms": 22,
+              "longTasksOver100ms": 22,
+              "runs": [
+                {
+                  "avgFps": 7.8,
+                  "p95Fps": 7.5,
+                  "p95FrameMs": 133.4,
+                  "maxFrameMs": 400,
+                  "framesOver50ms": 21,
+                  "framesOver100ms": 21,
+                  "framesOver250ms": 1,
+                  "longTasksOver50ms": 22,
+                  "longTasksOver100ms": 22,
+                  "totalFrames": 21
+                },
+                {
+                  "avgFps": 7.7,
+                  "p95Fps": 6.7,
+                  "p95FrameMs": 150,
+                  "maxFrameMs": 466.7,
+                  "framesOver50ms": 20,
+                  "framesOver100ms": 20,
+                  "framesOver250ms": 1,
+                  "longTasksOver50ms": 21,
+                  "longTasksOver100ms": 21,
+                  "totalFrames": 20
+                },
+                {
+                  "avgFps": 7.9,
+                  "p95Fps": 7.5,
+                  "p95FrameMs": 133.4,
+                  "maxFrameMs": 466.6,
+                  "framesOver50ms": 19,
+                  "framesOver100ms": 19,
+                  "framesOver250ms": 1,
+                  "longTasksOver50ms": 20,
+                  "longTasksOver100ms": 20,
+                  "totalFrames": 19
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "pixi": {
+      "version": "0.14.0-beta.1",
+      "renderer": "pixi",
+      "root": "/workspace/ph-pixi",
+      "runs": 3,
+      "entryWindowMs": 3000,
+      "timestamp": "2026-11-23T11:59:00.907Z",
+      "profiles": {
+        "desktop_high": {
+          "label": "Desktop High (1440x900 @ 2x DPR)",
+          "viewport": {
+            "width": 1440,
+            "height": 900
+          },
+          "deviceScaleFactor": 2,
+          "cpuThrottle": 1,
+          "quality": "high",
+          "floors": {
+            "lobby": {
+              "avgFps": 2.9,
+              "p95Fps": 2.5,
+              "p95FrameMs": 400,
+              "maxFrameMs": 466.7,
+              "framesOver50ms": 10,
+              "framesOver100ms": 10,
+              "framesOver250ms": 10,
+              "longTasksOver50ms": 10,
+              "longTasksOver100ms": 10,
+              "runs": [
+                {
+                  "avgFps": 2.5,
+                  "p95Fps": 2.1,
+                  "p95FrameMs": 466.6,
+                  "maxFrameMs": 466.7,
+                  "framesOver50ms": 9,
+                  "framesOver100ms": 9,
+                  "framesOver250ms": 9,
+                  "longTasksOver50ms": 8,
+                  "longTasksOver100ms": 8,
+                  "totalFrames": 9
+                },
+                {
+                  "avgFps": 2.9,
+                  "p95Fps": 2.7,
+                  "p95FrameMs": 366.6,
+                  "maxFrameMs": 416.7,
+                  "framesOver50ms": 9,
+                  "framesOver100ms": 9,
+                  "framesOver250ms": 9,
+                  "longTasksOver50ms": 9,
+                  "longTasksOver100ms": 9,
+                  "totalFrames": 9
+                },
+                {
+                  "avgFps": 3.3,
+                  "p95Fps": 2.7,
+                  "p95FrameMs": 366.7,
+                  "maxFrameMs": 383.3,
+                  "framesOver50ms": 10,
+                  "framesOver100ms": 10,
+                  "framesOver250ms": 10,
+                  "longTasksOver50ms": 10,
+                  "longTasksOver100ms": 10,
+                  "totalFrames": 10
+                }
+              ]
+            },
+            "cafe": {
+              "avgFps": 2.3,
+              "p95Fps": 1.9,
+              "p95FrameMs": 538.8,
+              "maxFrameMs": 600,
+              "framesOver50ms": 7,
+              "framesOver100ms": 7,
+              "framesOver250ms": 7,
+              "longTasksOver50ms": 8,
+              "longTasksOver100ms": 7,
+              "runs": [
+                {
+                  "avgFps": 2.3,
+                  "p95Fps": 2,
+                  "p95FrameMs": 500,
+                  "maxFrameMs": 500,
+                  "framesOver50ms": 7,
+                  "framesOver100ms": 7,
+                  "framesOver250ms": 7,
+                  "longTasksOver50ms": 7,
+                  "longTasksOver100ms": 7,
+                  "totalFrames": 7
+                },
+                {
+                  "avgFps": 2.3,
+                  "p95Fps": 1.9,
+                  "p95FrameMs": 516.5,
+                  "maxFrameMs": 516.5,
+                  "framesOver50ms": 7,
+                  "framesOver100ms": 7,
+                  "framesOver250ms": 7,
+                  "longTasksOver50ms": 7,
+                  "longTasksOver100ms": 7,
+                  "totalFrames": 7
+                },
+                {
+                  "avgFps": 2.2,
+                  "p95Fps": 1.7,
+                  "p95FrameMs": 600,
+                  "maxFrameMs": 600,
+                  "framesOver50ms": 7,
+                  "framesOver100ms": 7,
+                  "framesOver250ms": 7,
+                  "longTasksOver50ms": 8,
+                  "longTasksOver100ms": 7,
+                  "totalFrames": 7
+                }
+              ]
+            },
+            "restaurant": {
+              "avgFps": 2.6,
+              "p95Fps": 2.4,
+              "p95FrameMs": 411.1,
+              "maxFrameMs": 450.1,
+              "framesOver50ms": 8,
+              "framesOver100ms": 8,
+              "framesOver250ms": 8,
+              "longTasksOver50ms": 8,
+              "longTasksOver100ms": 8,
+              "runs": [
+                {
+                  "avgFps": 2.7,
+                  "p95Fps": 2.5,
+                  "p95FrameMs": 400,
+                  "maxFrameMs": 449.9,
+                  "framesOver50ms": 8,
+                  "framesOver100ms": 8,
+                  "framesOver250ms": 8,
+                  "longTasksOver50ms": 8,
+                  "longTasksOver100ms": 8,
+                  "totalFrames": 8
+                },
+                {
+                  "avgFps": 2.6,
+                  "p95Fps": 2.5,
+                  "p95FrameMs": 400,
+                  "maxFrameMs": 450.1,
+                  "framesOver50ms": 8,
+                  "framesOver100ms": 8,
+                  "framesOver250ms": 8,
+                  "longTasksOver50ms": 8,
+                  "longTasksOver100ms": 8,
+                  "totalFrames": 8
+                },
+                {
+                  "avgFps": 2.5,
+                  "p95Fps": 2.3,
+                  "p95FrameMs": 433.4,
+                  "maxFrameMs": 433.4,
+                  "framesOver50ms": 8,
+                  "framesOver100ms": 8,
+                  "framesOver250ms": 8,
+                  "longTasksOver50ms": 8,
+                  "longTasksOver100ms": 8,
+                  "totalFrames": 8
+                }
+              ]
+            },
+            "gym": {
+              "avgFps": 2.3,
+              "p95Fps": 2,
+              "p95FrameMs": 500,
+              "maxFrameMs": 516.6,
+              "framesOver50ms": 7,
+              "framesOver100ms": 7,
+              "framesOver250ms": 7,
+              "longTasksOver50ms": 7,
+              "longTasksOver100ms": 7,
+              "runs": [
+                {
+                  "avgFps": 2.3,
+                  "p95Fps": 1.9,
+                  "p95FrameMs": 516.6,
+                  "maxFrameMs": 516.6,
+                  "framesOver50ms": 7,
+                  "framesOver100ms": 7,
+                  "framesOver250ms": 7,
+                  "longTasksOver50ms": 7,
+                  "longTasksOver100ms": 7,
+                  "totalFrames": 7
+                },
+                {
+                  "avgFps": 2.3,
+                  "p95Fps": 2.1,
+                  "p95FrameMs": 483.3,
+                  "maxFrameMs": 483.3,
+                  "framesOver50ms": 7,
+                  "framesOver100ms": 7,
+                  "framesOver250ms": 7,
+                  "longTasksOver50ms": 6,
+                  "longTasksOver100ms": 6,
+                  "totalFrames": 7
+                },
+                {
+                  "avgFps": 2.2,
+                  "p95Fps": 2,
+                  "p95FrameMs": 500,
+                  "maxFrameMs": 500,
+                  "framesOver50ms": 7,
+                  "framesOver100ms": 7,
+                  "framesOver250ms": 7,
+                  "longTasksOver50ms": 7,
+                  "longTasksOver100ms": 7,
+                  "totalFrames": 7
+                }
+              ]
+            },
+            "pool": {
+              "avgFps": 2.3,
+              "p95Fps": 2,
+              "p95FrameMs": 500,
+              "maxFrameMs": 516.7,
+              "framesOver50ms": 8,
+              "framesOver100ms": 8,
+              "framesOver250ms": 8,
+              "longTasksOver50ms": 7,
+              "longTasksOver100ms": 7,
+              "runs": [
+                {
+                  "avgFps": 2.4,
+                  "p95Fps": 2.1,
+                  "p95FrameMs": 466.7,
+                  "maxFrameMs": 466.7,
+                  "framesOver50ms": 8,
+                  "framesOver100ms": 8,
+                  "framesOver250ms": 8,
+                  "longTasksOver50ms": 7,
+                  "longTasksOver100ms": 7,
+                  "totalFrames": 8
+                },
+                {
+                  "avgFps": 2.2,
+                  "p95Fps": 1.9,
+                  "p95FrameMs": 516.5,
+                  "maxFrameMs": 516.5,
+                  "framesOver50ms": 7,
+                  "framesOver100ms": 7,
+                  "framesOver250ms": 7,
+                  "longTasksOver50ms": 7,
+                  "longTasksOver100ms": 7,
+                  "totalFrames": 7
+                },
+                {
+                  "avgFps": 2.2,
+                  "p95Fps": 1.9,
+                  "p95FrameMs": 516.7,
+                  "maxFrameMs": 516.7,
+                  "framesOver50ms": 7,
+                  "framesOver100ms": 7,
+                  "framesOver250ms": 7,
+                  "longTasksOver50ms": 7,
+                  "longTasksOver100ms": 7,
+                  "totalFrames": 7
+                }
+              ]
+            },
+            "arcade": {
+              "avgFps": 2.1,
+              "p95Fps": 1.8,
+              "p95FrameMs": 561.1,
+              "maxFrameMs": 616.6,
+              "framesOver50ms": 7,
+              "framesOver100ms": 7,
+              "framesOver250ms": 7,
+              "longTasksOver50ms": 7,
+              "longTasksOver100ms": 7,
+              "runs": [
+                {
+                  "avgFps": 2.1,
+                  "p95Fps": 1.9,
+                  "p95FrameMs": 533.3,
+                  "maxFrameMs": 533.3,
+                  "framesOver50ms": 7,
+                  "framesOver100ms": 7,
+                  "framesOver250ms": 7,
+                  "longTasksOver50ms": 6,
+                  "longTasksOver100ms": 6,
+                  "totalFrames": 7
+                },
+                {
+                  "avgFps": 2.1,
+                  "p95Fps": 1.9,
+                  "p95FrameMs": 533.3,
+                  "maxFrameMs": 533.3,
+                  "framesOver50ms": 7,
+                  "framesOver100ms": 7,
+                  "framesOver250ms": 7,
+                  "longTasksOver50ms": 6,
+                  "longTasksOver100ms": 6,
+                  "totalFrames": 7
+                },
+                {
+                  "avgFps": 2,
+                  "p95Fps": 1.6,
+                  "p95FrameMs": 616.6,
+                  "maxFrameMs": 616.6,
+                  "framesOver50ms": 7,
+                  "framesOver100ms": 7,
+                  "framesOver250ms": 7,
+                  "longTasksOver50ms": 7,
+                  "longTasksOver100ms": 7,
+                  "totalFrames": 7
+                }
+              ]
+            },
+            "library": {
+              "avgFps": 1.8,
+              "p95Fps": 1.6,
+              "p95FrameMs": 611.1,
+              "maxFrameMs": 616.7,
+              "framesOver50ms": 6,
+              "framesOver100ms": 6,
+              "framesOver250ms": 6,
+              "longTasksOver50ms": 7,
+              "longTasksOver100ms": 6,
+              "runs": [
+                {
+                  "avgFps": 1.8,
+                  "p95Fps": 1.6,
+                  "p95FrameMs": 616.7,
+                  "maxFrameMs": 616.7,
+                  "framesOver50ms": 6,
+                  "framesOver100ms": 6,
+                  "framesOver250ms": 6,
+                  "longTasksOver50ms": 7,
+                  "longTasksOver100ms": 6,
+                  "totalFrames": 6
+                },
+                {
+                  "avgFps": 1.8,
+                  "p95Fps": 1.6,
+                  "p95FrameMs": 616.6,
+                  "maxFrameMs": 616.6,
+                  "framesOver50ms": 6,
+                  "framesOver100ms": 6,
+                  "framesOver250ms": 6,
+                  "longTasksOver50ms": 7,
+                  "longTasksOver100ms": 6,
+                  "totalFrames": 6
+                },
+                {
+                  "avgFps": 1.9,
+                  "p95Fps": 1.7,
+                  "p95FrameMs": 599.9,
+                  "maxFrameMs": 599.9,
+                  "framesOver50ms": 6,
+                  "framesOver100ms": 6,
+                  "framesOver250ms": 6,
+                  "longTasksOver50ms": 7,
+                  "longTasksOver100ms": 6,
+                  "totalFrames": 6
+                }
+              ]
+            },
+            "garden": {
+              "avgFps": 2.3,
+              "p95Fps": 2,
+              "p95FrameMs": 488.9,
+              "maxFrameMs": 516.7,
+              "framesOver50ms": 8,
+              "framesOver100ms": 8,
+              "framesOver250ms": 8,
+              "longTasksOver50ms": 9,
+              "longTasksOver100ms": 8,
+              "runs": [
+                {
+                  "avgFps": 2.2,
+                  "p95Fps": 2.1,
+                  "p95FrameMs": 483.4,
+                  "maxFrameMs": 483.4,
+                  "framesOver50ms": 7,
+                  "framesOver100ms": 7,
+                  "framesOver250ms": 7,
+                  "longTasksOver50ms": 8,
+                  "longTasksOver100ms": 7,
+                  "totalFrames": 7
+                },
+                {
+                  "avgFps": 2.4,
+                  "p95Fps": 1.9,
+                  "p95FrameMs": 516.7,
+                  "maxFrameMs": 516.7,
+                  "framesOver50ms": 8,
+                  "framesOver100ms": 8,
+                  "framesOver250ms": 8,
+                  "longTasksOver50ms": 8,
+                  "longTasksOver100ms": 7,
+                  "totalFrames": 8
+                },
+                {
+                  "avgFps": 2.4,
+                  "p95Fps": 2.1,
+                  "p95FrameMs": 466.6,
+                  "maxFrameMs": 466.6,
+                  "framesOver50ms": 8,
+                  "framesOver100ms": 8,
+                  "framesOver250ms": 8,
+                  "longTasksOver50ms": 9,
+                  "longTasksOver100ms": 8,
+                  "totalFrames": 8
+                }
+              ]
+            },
+            "myroom": {
+              "avgFps": 3.6,
+              "p95Fps": 3.3,
+              "p95FrameMs": 305.6,
+              "maxFrameMs": 433.4,
+              "framesOver50ms": 11,
+              "framesOver100ms": 11,
+              "framesOver250ms": 11,
+              "longTasksOver50ms": 12,
+              "longTasksOver100ms": 11,
+              "runs": [
+                {
+                  "avgFps": 3.7,
+                  "p95Fps": 3.5,
+                  "p95FrameMs": 283.4,
+                  "maxFrameMs": 366.7,
+                  "framesOver50ms": 11,
+                  "framesOver100ms": 11,
+                  "framesOver250ms": 11,
+                  "longTasksOver50ms": 12,
+                  "longTasksOver100ms": 11,
+                  "totalFrames": 11
+                },
+                {
+                  "avgFps": 3.3,
+                  "p95Fps": 3,
+                  "p95FrameMs": 333.4,
+                  "maxFrameMs": 433.4,
+                  "framesOver50ms": 10,
+                  "framesOver100ms": 10,
+                  "framesOver250ms": 10,
+                  "longTasksOver50ms": 11,
+                  "longTasksOver100ms": 10,
+                  "totalFrames": 10
+                },
+                {
+                  "avgFps": 3.7,
+                  "p95Fps": 3.3,
+                  "p95FrameMs": 299.9,
+                  "maxFrameMs": 350,
+                  "framesOver50ms": 11,
+                  "framesOver100ms": 11,
+                  "framesOver250ms": 11,
+                  "longTasksOver50ms": 12,
+                  "longTasksOver100ms": 11,
+                  "totalFrames": 11
+                }
+              ]
+            },
+            "rooftop": {
+              "avgFps": 2.1,
+              "p95Fps": 1.7,
+              "p95FrameMs": 572.2,
+              "maxFrameMs": 583.4,
+              "framesOver50ms": 7,
+              "framesOver100ms": 7,
+              "framesOver250ms": 7,
+              "longTasksOver50ms": 8,
+              "longTasksOver100ms": 8,
+              "runs": [
+                {
+                  "avgFps": 2.3,
+                  "p95Fps": 1.8,
+                  "p95FrameMs": 550,
+                  "maxFrameMs": 550,
+                  "framesOver50ms": 7,
+                  "framesOver100ms": 7,
+                  "framesOver250ms": 7,
+                  "longTasksOver50ms": 8,
+                  "longTasksOver100ms": 8,
+                  "totalFrames": 7
+                },
+                {
+                  "avgFps": 2,
+                  "p95Fps": 1.7,
+                  "p95FrameMs": 583.4,
+                  "maxFrameMs": 583.4,
+                  "framesOver50ms": 7,
+                  "framesOver100ms": 7,
+                  "framesOver250ms": 7,
+                  "longTasksOver50ms": 8,
+                  "longTasksOver100ms": 7,
+                  "totalFrames": 7
+                },
+                {
+                  "avgFps": 2.1,
+                  "p95Fps": 1.7,
+                  "p95FrameMs": 583.3,
+                  "maxFrameMs": 583.3,
+                  "framesOver50ms": 7,
+                  "framesOver100ms": 7,
+                  "framesOver250ms": 7,
+                  "longTasksOver50ms": 7,
+                  "longTasksOver100ms": 7,
+                  "totalFrames": 7
+                }
+              ]
+            }
+          }
+        },
+        "mobile_low": {
+          "label": "Mobile Low (390x844 @ 3x DPR, 4x CPU throttle)",
+          "viewport": {
+            "width": 390,
+            "height": 844
+          },
+          "deviceScaleFactor": 3,
+          "cpuThrottle": 4,
+          "quality": "low",
+          "floors": {
+            "lobby": {
+              "avgFps": 9,
+              "p95Fps": 5.7,
+              "p95FrameMs": 194.5,
+              "maxFrameMs": 450,
+              "framesOver50ms": 27,
+              "framesOver100ms": 13,
+              "framesOver250ms": 2,
+              "longTasksOver50ms": 27,
+              "longTasksOver100ms": 18,
+              "runs": [
+                {
+                  "avgFps": 8.5,
+                  "p95Fps": 4.6,
+                  "p95FrameMs": 216.7,
+                  "maxFrameMs": 316.7,
+                  "framesOver50ms": 27,
+                  "framesOver100ms": 11,
+                  "framesOver250ms": 1,
+                  "longTasksOver50ms": 27,
+                  "longTasksOver100ms": 14,
+                  "totalFrames": 27
+                },
+                {
+                  "avgFps": 9.8,
+                  "p95Fps": 8.6,
+                  "p95FrameMs": 116.7,
+                  "maxFrameMs": 416.6,
+                  "framesOver50ms": 23,
+                  "framesOver100ms": 13,
+                  "framesOver250ms": 2,
+                  "longTasksOver50ms": 24,
+                  "longTasksOver100ms": 18,
+                  "totalFrames": 23
+                },
+                {
+                  "avgFps": 8.8,
+                  "p95Fps": 4,
+                  "p95FrameMs": 250,
+                  "maxFrameMs": 450,
+                  "framesOver50ms": 25,
+                  "framesOver100ms": 12,
+                  "framesOver250ms": 1,
+                  "longTasksOver50ms": 25,
+                  "longTasksOver100ms": 16,
+                  "totalFrames": 25
+                }
+              ]
+            },
+            "cafe": {
+              "avgFps": 8.2,
+              "p95Fps": 5.8,
+              "p95FrameMs": 200,
+              "maxFrameMs": 300.1,
+              "framesOver50ms": 26,
+              "framesOver100ms": 23,
+              "framesOver250ms": 1,
+              "longTasksOver50ms": 26,
+              "longTasksOver100ms": 25,
+              "runs": [
+                {
+                  "avgFps": 8.3,
+                  "p95Fps": 7.5,
+                  "p95FrameMs": 133.4,
+                  "maxFrameMs": 266.6,
+                  "framesOver50ms": 24,
+                  "framesOver100ms": 20,
+                  "framesOver250ms": 1,
+                  "longTasksOver50ms": 24,
+                  "longTasksOver100ms": 24,
+                  "totalFrames": 24
+                },
+                {
+                  "avgFps": 8.7,
+                  "p95Fps": 6.7,
+                  "p95FrameMs": 150,
+                  "maxFrameMs": 300.1,
+                  "framesOver50ms": 23,
+                  "framesOver100ms": 19,
+                  "framesOver250ms": 1,
+                  "longTasksOver50ms": 23,
+                  "longTasksOver100ms": 23,
+                  "totalFrames": 23
+                },
+                {
+                  "avgFps": 7.5,
+                  "p95Fps": 3.2,
+                  "p95FrameMs": 316.7,
+                  "maxFrameMs": 183.3,
+                  "framesOver50ms": 26,
+                  "framesOver100ms": 23,
+                  "framesOver250ms": 0,
+                  "longTasksOver50ms": 26,
+                  "longTasksOver100ms": 25,
+                  "totalFrames": 26
+                }
+              ]
+            },
+            "restaurant": {
+              "avgFps": 8.1,
+              "p95Fps": 6.5,
+              "p95FrameMs": 155.6,
+              "maxFrameMs": 316.7,
+              "framesOver50ms": 25,
+              "framesOver100ms": 20,
+              "framesOver250ms": 2,
+              "longTasksOver50ms": 26,
+              "longTasksOver100ms": 24,
+              "runs": [
+                {
+                  "avgFps": 8.2,
+                  "p95Fps": 6,
+                  "p95FrameMs": 166.7,
+                  "maxFrameMs": 316.7,
+                  "framesOver50ms": 23,
+                  "framesOver100ms": 18,
+                  "framesOver250ms": 1,
+                  "longTasksOver50ms": 24,
+                  "longTasksOver100ms": 24,
+                  "totalFrames": 23
+                },
+                {
+                  "avgFps": 8.4,
+                  "p95Fps": 7.5,
+                  "p95FrameMs": 133.4,
+                  "maxFrameMs": 266.7,
+                  "framesOver50ms": 25,
+                  "framesOver100ms": 18,
+                  "framesOver250ms": 1,
+                  "longTasksOver50ms": 26,
+                  "longTasksOver100ms": 22,
+                  "totalFrames": 25
+                },
+                {
+                  "avgFps": 7.6,
+                  "p95Fps": 6,
+                  "p95FrameMs": 166.6,
+                  "maxFrameMs": 316.6,
+                  "framesOver50ms": 20,
+                  "framesOver100ms": 20,
+                  "framesOver250ms": 2,
+                  "longTasksOver50ms": 20,
+                  "longTasksOver100ms": 20,
+                  "totalFrames": 20
+                }
+              ]
+            },
+            "gym": {
+              "avgFps": 8.1,
+              "p95Fps": 5,
+              "p95FrameMs": 216.7,
+              "maxFrameMs": 283.3,
+              "framesOver50ms": 27,
+              "framesOver100ms": 20,
+              "framesOver250ms": 1,
+              "longTasksOver50ms": 27,
+              "longTasksOver100ms": 23,
+              "runs": [
+                {
+                  "avgFps": 8.2,
+                  "p95Fps": 3.3,
+                  "p95FrameMs": 300,
+                  "maxFrameMs": 166.7,
+                  "framesOver50ms": 27,
+                  "framesOver100ms": 14,
+                  "framesOver250ms": 0,
+                  "longTasksOver50ms": 27,
+                  "longTasksOver100ms": 21,
+                  "totalFrames": 27
+                },
+                {
+                  "avgFps": 8,
+                  "p95Fps": 6.7,
+                  "p95FrameMs": 150,
+                  "maxFrameMs": 266.7,
+                  "framesOver50ms": 24,
+                  "framesOver100ms": 20,
+                  "framesOver250ms": 1,
+                  "longTasksOver50ms": 25,
+                  "longTasksOver100ms": 23,
+                  "totalFrames": 24
+                },
+                {
+                  "avgFps": 8.1,
+                  "p95Fps": 5,
+                  "p95FrameMs": 200.1,
+                  "maxFrameMs": 283.3,
+                  "framesOver50ms": 23,
+                  "framesOver100ms": 19,
+                  "framesOver250ms": 1,
+                  "longTasksOver50ms": 23,
+                  "longTasksOver100ms": 23,
+                  "totalFrames": 23
+                }
+              ]
+            },
+            "pool": {
+              "avgFps": 8.4,
+              "p95Fps": 6.5,
+              "p95FrameMs": 155.5,
+              "maxFrameMs": 283.2,
+              "framesOver50ms": 25,
+              "framesOver100ms": 21,
+              "framesOver250ms": 2,
+              "longTasksOver50ms": 25,
+              "longTasksOver100ms": 25,
+              "runs": [
+                {
+                  "avgFps": 8.4,
+                  "p95Fps": 6,
+                  "p95FrameMs": 166.6,
+                  "maxFrameMs": 233.4,
+                  "framesOver50ms": 25,
+                  "framesOver100ms": 21,
+                  "framesOver250ms": 0,
+                  "longTasksOver50ms": 25,
+                  "longTasksOver100ms": 25,
+                  "totalFrames": 25
+                },
+                {
+                  "avgFps": 8.4,
+                  "p95Fps": 6.7,
+                  "p95FrameMs": 150,
+                  "maxFrameMs": 283.2,
+                  "framesOver50ms": 21,
+                  "framesOver100ms": 21,
+                  "framesOver250ms": 2,
+                  "longTasksOver50ms": 22,
+                  "longTasksOver100ms": 22,
+                  "totalFrames": 21
+                },
+                {
+                  "avgFps": 8.4,
+                  "p95Fps": 6.7,
+                  "p95FrameMs": 150,
+                  "maxFrameMs": 266.6,
+                  "framesOver50ms": 23,
+                  "framesOver100ms": 18,
+                  "framesOver250ms": 2,
+                  "longTasksOver50ms": 24,
+                  "longTasksOver100ms": 24,
+                  "totalFrames": 23
+                }
+              ]
+            },
+            "arcade": {
+              "avgFps": 7.6,
+              "p95Fps": 6.5,
+              "p95FrameMs": 155.5,
+              "maxFrameMs": 350,
+              "framesOver50ms": 22,
+              "framesOver100ms": 22,
+              "framesOver250ms": 1,
+              "longTasksOver50ms": 23,
+              "longTasksOver100ms": 22,
+              "runs": [
+                {
+                  "avgFps": 7.7,
+                  "p95Fps": 6,
+                  "p95FrameMs": 166.6,
+                  "maxFrameMs": 250,
+                  "framesOver50ms": 22,
+                  "framesOver100ms": 22,
+                  "framesOver250ms": 0,
+                  "longTasksOver50ms": 23,
+                  "longTasksOver100ms": 22,
+                  "totalFrames": 22
+                },
+                {
+                  "avgFps": 7.5,
+                  "p95Fps": 6.7,
+                  "p95FrameMs": 150,
+                  "maxFrameMs": 266.7,
+                  "framesOver50ms": 22,
+                  "framesOver100ms": 22,
+                  "framesOver250ms": 1,
+                  "longTasksOver50ms": 22,
+                  "longTasksOver100ms": 21,
+                  "totalFrames": 22
+                },
+                {
+                  "avgFps": 7.5,
+                  "p95Fps": 6.7,
+                  "p95FrameMs": 150,
+                  "maxFrameMs": 350,
+                  "framesOver50ms": 21,
+                  "framesOver100ms": 21,
+                  "framesOver250ms": 1,
+                  "longTasksOver50ms": 21,
+                  "longTasksOver100ms": 21,
+                  "totalFrames": 21
+                }
+              ]
+            },
+            "library": {
+              "avgFps": 7,
+              "p95Fps": 4.9,
+              "p95FrameMs": 222.2,
+              "maxFrameMs": 350,
+              "framesOver50ms": 23,
+              "framesOver100ms": 23,
+              "framesOver250ms": 1,
+              "longTasksOver50ms": 22,
+              "longTasksOver100ms": 22,
+              "runs": [
+                {
+                  "avgFps": 7.3,
+                  "p95Fps": 3.2,
+                  "p95FrameMs": 316.6,
+                  "maxFrameMs": 183.3,
+                  "framesOver50ms": 23,
+                  "framesOver100ms": 23,
+                  "framesOver250ms": 0,
+                  "longTasksOver50ms": 22,
+                  "longTasksOver100ms": 22,
+                  "totalFrames": 23
+                },
+                {
+                  "avgFps": 6.9,
+                  "p95Fps": 5.5,
+                  "p95FrameMs": 183.3,
+                  "maxFrameMs": 350,
+                  "framesOver50ms": 21,
+                  "framesOver100ms": 21,
+                  "framesOver250ms": 1,
+                  "longTasksOver50ms": 21,
+                  "longTasksOver100ms": 21,
+                  "totalFrames": 21
+                },
+                {
+                  "avgFps": 6.9,
+                  "p95Fps": 6,
+                  "p95FrameMs": 166.7,
+                  "maxFrameMs": 333.2,
+                  "framesOver50ms": 21,
+                  "framesOver100ms": 21,
+                  "framesOver250ms": 1,
+                  "longTasksOver50ms": 21,
+                  "longTasksOver100ms": 21,
+                  "totalFrames": 21
+                }
+              ]
+            },
+            "garden": {
+              "avgFps": 7.6,
+              "p95Fps": 5.5,
+              "p95FrameMs": 205.6,
+              "maxFrameMs": 333.3,
+              "framesOver50ms": 24,
+              "framesOver100ms": 21,
+              "framesOver250ms": 1,
+              "longTasksOver50ms": 24,
+              "longTasksOver100ms": 24,
+              "runs": [
+                {
+                  "avgFps": 7.8,
+                  "p95Fps": 6.7,
+                  "p95FrameMs": 150,
+                  "maxFrameMs": 333.3,
+                  "framesOver50ms": 21,
+                  "framesOver100ms": 21,
+                  "framesOver250ms": 1,
+                  "longTasksOver50ms": 22,
+                  "longTasksOver100ms": 22,
+                  "totalFrames": 21
+                },
+                {
+                  "avgFps": 7.5,
+                  "p95Fps": 3.2,
+                  "p95FrameMs": 316.7,
+                  "maxFrameMs": 183.4,
+                  "framesOver50ms": 24,
+                  "framesOver100ms": 21,
+                  "framesOver250ms": 0,
+                  "longTasksOver50ms": 24,
+                  "longTasksOver100ms": 24,
+                  "totalFrames": 24
+                },
+                {
+                  "avgFps": 7.6,
+                  "p95Fps": 6.7,
+                  "p95FrameMs": 150,
+                  "maxFrameMs": 300,
+                  "framesOver50ms": 21,
+                  "framesOver100ms": 21,
+                  "framesOver250ms": 1,
+                  "longTasksOver50ms": 22,
+                  "longTasksOver100ms": 22,
+                  "totalFrames": 21
+                }
+              ]
+            },
+            "myroom": {
+              "avgFps": 8.5,
+              "p95Fps": 5,
+              "p95FrameMs": 222.3,
+              "maxFrameMs": 333.3,
+              "framesOver50ms": 27,
+              "framesOver100ms": 20,
+              "framesOver250ms": 1,
+              "longTasksOver50ms": 27,
+              "longTasksOver100ms": 24,
+              "runs": [
+                {
+                  "avgFps": 8.4,
+                  "p95Fps": 3.7,
+                  "p95FrameMs": 266.8,
+                  "maxFrameMs": 150,
+                  "framesOver50ms": 27,
+                  "framesOver100ms": 18,
+                  "framesOver250ms": 0,
+                  "longTasksOver50ms": 26,
+                  "longTasksOver100ms": 24,
+                  "totalFrames": 27
+                },
+                {
+                  "avgFps": 8.7,
+                  "p95Fps": 3.8,
+                  "p95FrameMs": 266.6,
+                  "maxFrameMs": 150,
+                  "framesOver50ms": 27,
+                  "framesOver100ms": 19,
+                  "framesOver250ms": 0,
+                  "longTasksOver50ms": 27,
+                  "longTasksOver100ms": 24,
+                  "totalFrames": 27
+                },
+                {
+                  "avgFps": 8.5,
+                  "p95Fps": 7.5,
+                  "p95FrameMs": 133.4,
+                  "maxFrameMs": 333.3,
+                  "framesOver50ms": 23,
+                  "framesOver100ms": 20,
+                  "framesOver250ms": 1,
+                  "longTasksOver50ms": 24,
+                  "longTasksOver100ms": 24,
+                  "totalFrames": 23
+                }
+              ]
+            },
+            "rooftop": {
+              "avgFps": 7.8,
+              "p95Fps": 7.2,
+              "p95FrameMs": 138.9,
+              "maxFrameMs": 466.7,
+              "framesOver50ms": 21,
+              "framesOver100ms": 21,
+              "framesOver250ms": 1,
+              "longTasksOver50ms": 22,
+              "longTasksOver100ms": 22,
+              "runs": [
+                {
+                  "avgFps": 7.8,
+                  "p95Fps": 7.5,
+                  "p95FrameMs": 133.4,
+                  "maxFrameMs": 400,
+                  "framesOver50ms": 21,
+                  "framesOver100ms": 21,
+                  "framesOver250ms": 1,
+                  "longTasksOver50ms": 22,
+                  "longTasksOver100ms": 22,
+                  "totalFrames": 21
+                },
+                {
+                  "avgFps": 7.7,
+                  "p95Fps": 6.7,
+                  "p95FrameMs": 150,
+                  "maxFrameMs": 466.7,
+                  "framesOver50ms": 20,
+                  "framesOver100ms": 20,
+                  "framesOver250ms": 1,
+                  "longTasksOver50ms": 21,
+                  "longTasksOver100ms": 21,
+                  "totalFrames": 20
+                },
+                {
+                  "avgFps": 7.9,
+                  "p95Fps": 7.5,
+                  "p95FrameMs": 133.4,
+                  "maxFrameMs": 466.6,
+                  "framesOver50ms": 19,
+                  "framesOver100ms": 19,
+                  "framesOver250ms": 1,
+                  "longTasksOver50ms": 20,
+                  "longTasksOver100ms": 20,
+                  "totalFrames": 19
                 }
               ]
             }
