@@ -835,7 +835,7 @@ test('v0.5.0 rooms: irregular VOID cutouts, zone tiles, door landing clearance, 
   };
   const stool = getCatalogueItem('stool');
   const rug = getCatalogueItem('rug');
-  assert.equal(canPlaceAt(lobbyRoom, stool, 14, 10, 0).reason, 'blocked_tile', 'cannot place on TILE.VOID cutout');
+  assert.equal(canPlaceAt(lobbyRoom, stool, 60, 44, 0).reason, 'blocked_tile', 'cannot place on TILE.VOID cutout');
   // Lobby elevator door is at (4, 0), so (4, 1) is the door landing apron
   assert.equal(canPlaceAt(lobbyRoom, stool, 4, 1, 0).reason, 'door_clearance', 'cannot place solid item on door apron');
   assert.equal(canPlaceAt(lobbyRoom, rug, 4, 1, 0).ok, true, 'flat rug allowed on door apron');
@@ -851,12 +851,12 @@ test('v0.5.0 migration: v2 save migrates to the latest version, pruning items on
       lobby: {
         placed: [
           { instanceId: 'valid_stool', itemId: 'stool', x: 2, y: 2, rot: 0 },
-          { instanceId: 'void_stool', itemId: 'stool', x: 14, y: 10, rot: 0 }, // (14,10) is VOID in Grand Lobby
+          { instanceId: 'void_stool', itemId: 'stool', x: 60, y: 44, rot: 0 }, // (60,44) is VOID in Grand Lobby outer cutout
         ],
       },
     },
     quests: {},
-    player: { room: 'lobby', x: 14, y: 10, dir: 'down', sitting: null },
+    player: { room: 'lobby', x: 60, y: 44, dir: 'down', sitting: null },
   };
   const storage = makeFakeStorage({ [SAVE_KEY]: JSON.stringify(v2Save) });
   const loaded = loadState(storage);
@@ -3630,4 +3630,18 @@ test('p1 atlas runtime: time-sliced fallback packer caches by version+DETAIL and
   const stats = charAtlas.stats();
   assert.equal(stats.size, 3);
   assert.equal(stats.evictions, 1);
+});
+
+test('p1 data: J10/F1 lobby crevice cutout {14..15, 10..11} removed and all TILE.VOID tiles connect to room outer boundary', async () => {
+  const { checkNoInteriorVoidTiles } = await import('./complaints-checklist.mjs');
+  const res = checkNoInteriorVoidTiles();
+  assert.equal(res.ok, true, `expected zero interior VOID tiles, found: ${res.offenders.join(', ')}`);
+  assert.equal(res.offenders.length, 0);
+
+  // Directly verify lobby grid tiles (14,10), (15,10), (14,11), (15,11) are FLOOR tiles
+  for (let y = 10; y <= 11; y++) {
+    for (let x = 14; x <= 15; x++) {
+      assert.equal(ROOMS.lobby.grid[y][x], TILE.FLOOR, `lobby tile (${x},${y}) should be FLOOR`);
+    }
+  }
 });

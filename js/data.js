@@ -54,7 +54,7 @@ export const ROOMS = {
     wallColor: '#d89b72',
     width: 64,
     height: 48,
-    cutouts: [{ x0: 14, y0: 10, x1: 15, y1: 11 }, { x0: 58, y0: 42, x1: 63, y1: 47 }],
+    cutouts: [{ x0: 58, y0: 42, x1: 63, y1: 47 }],
     zoneTiles: { x0: 4, y0: 3, x1: 52, y1: 40, color: '#f7efe0', marble: true },
     grid: makeRoomGrid(64, 48, {
       doors: [{ x: 4, y: 0 }],
@@ -62,7 +62,7 @@ export const ROOMS = {
         { x: 2, y: 0 }, { x: 14, y: 0 }, { x: 22, y: 0 }, { x: 32, y: 0 }, { x: 42, y: 0 }, { x: 52, y: 0 },
         { x: 0, y: 3 }, { x: 0, y: 8 }, { x: 0, y: 14 }, { x: 0, y: 22 }, { x: 0, y: 30 }, { x: 0, y: 38 },
       ],
-      cutouts: [{ x0: 14, y0: 10, x1: 15, y1: 11 }, { x0: 58, y0: 42, x1: 63, y1: 47 }],
+      cutouts: [{ x0: 58, y0: 42, x1: 63, y1: 47 }],
     }),
     spawn: { x: 6, y: 4 },
     doors: [
