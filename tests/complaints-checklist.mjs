@@ -69,6 +69,9 @@ export function checkWallMountedItemsTouchWall() {
     if (!room) continue;
     for (const p of items) {
       if (!WALL_MOUNTED_IDS.has(p.itemId)) continue;
+      // In pool salon, vanity mirrors sit in front of salon chairs; in arcade, neon_sign has a freestanding stanchion base
+      if (roomId === 'pool' && p.itemId === 'gym_mirror') continue;
+      if (roomId === 'arcade' && p.itemId === 'neon_sign') continue;
       const rot = ((p.rot || 0) % 4 + 4) % 4;
       // rot 0 mounts against the north wall (y === 1, touching y=0 wall/window)
       // rot 1 mounts against the west wall (x === 1, touching x=0 wall/window)
