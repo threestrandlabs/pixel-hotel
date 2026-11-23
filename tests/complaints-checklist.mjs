@@ -146,13 +146,22 @@ export function checkCafeRugGroupsCentered() {
 export function checkLobbyLampsNotBehindArmchairs() {
   const lobbyItems = SEED_FURNITURE.lobby || [];
   const lamps = lobbyItems.filter((p) => p.itemId === 'lamp');
-  const armchairs = lobbyItems.filter((p) => p.itemId === 'armchair');
+  const seats = lobbyItems.filter((p) => p.itemId === 'armchair' || p.itemId === 'sofa');
   const offenders = [];
   for (const lamp of lamps) {
-    for (const chair of armchairs) {
-      // Directly behind chair along y on the same x column (lamp.x === chair.x && lamp.y === chair.y - 1)
-      if (lamp.x === chair.x && lamp.y === chair.y - 1) {
-        offenders.push(`lamp@(${lamp.x},${lamp.y}) directly behind armchair@(${chair.x},${chair.y})`);
+    for (const seat of seats) {
+      // Must maintain at least one clear tile from every seat (Chebyshev distance >= 2)
+      const cat = getCatalogueItem(seat.itemId);
+      const fp = rotatedFootprint(cat.footprint, seat.rot || 0);
+      for (let dy = 0; dy < fp.h; dy++) {
+        for (let dx = 0; dx < fp.w; dx++) {
+          const sx = seat.x + dx;
+          const sy = seat.y + dy;
+          const dist = Math.max(Math.abs(lamp.x - sx), Math.abs(lamp.y - sy));
+          if (dist < 2) {
+            offenders.push(`lamp@(${lamp.x},${lamp.y}) has <1 clear tile to ${seat.itemId}@(${sx},${sy})`);
+          }
+        }
       }
     }
   }
