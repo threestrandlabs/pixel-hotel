@@ -20,7 +20,7 @@ export {
   rawScreenToTile as screenToTile, rawHitTestNpc as hitTestNpc, rawGetItemIconDataUrl as getItemIconDataUrl,
 };
 
-const BG_SCALE_LOW = 0.25;
+const BG_SCALE_LOW = 0.5;
 const BG_SCALE_HIGH = 1;
 const BG_MAX_HIGH_PIXELS = 6e6; // shortcut: above this (huge zoom-out margins) fall back to 0.5, rarely hit
 const VEHICLE_UPDATE_INTERVAL = 1000 / 12; // ~83.3ms for 12 Hz
@@ -82,6 +82,8 @@ export class LegacyCanvasRenderer {
       lastSkyTransform: '',
       scale: BG_SCALE_LOW,
     };
+    this.cityWorker = null;
+    this.currentCityJobId = 0;
   }
 
   init(canvasHost, opts = {}) {
@@ -104,7 +106,53 @@ export class LegacyCanvasRenderer {
       this.buildingsCanvas = doc.getElementById('buildingsCanvas');
       this.beaconCanvas = doc.getElementById('beaconCanvas');
     }
+
+    if (typeof Worker !== 'undefined' && typeof OffscreenCanvas !== 'undefined' && !this.cityWorker) {
+      try {
+        this.cityWorker = new Worker(new URL('../city-worker.js', import.meta.url), { type: 'module' });
+        this.cityWorker.onmessage = (e) => this._onCityWorkerMessage(e.data);
+      } catch (err) {
+        console.warn('City backdrop Web Worker init failed; using main-thread bake:', err);
+        this.cityWorker = null;
+      }
+    }
     return this;
+  }
+
+  _onCityWorkerMessage(data) {
+    if (data.jobId !== this.currentCityJobId) {
+      if (data.bitmap) data.bitmap.close();
+      return;
+    }
+    if (data.bitmap) {
+      let targetCanvas = null;
+      if (data.layer === 'ground') targetCanvas = this.bgCanvas;
+      else if (data.layer === 'buildings') {
+        targetCanvas = this.buildingsCanvas;
+        if (!this.buildingsClearedForJob || this.buildingsClearedForJob !== data.jobId) {
+          this.buildingsClearedForJob = data.jobId;
+          if (targetCanvas) {
+            const ctx = targetCanvas.getContext('2d');
+            ctx.clearRect(0, 0, targetCanvas.width, targetCanvas.height);
+          }
+        }
+      }
+      else if (data.layer === 'sky') targetCanvas = this.skyCanvas;
+
+      if (targetCanvas) {
+        const ctx = targetCanvas.getContext('2d');
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(data.bitmap, data.x0, data.y0);
+      }
+      data.bitmap.close();
+    }
+    if (data.beacons) {
+      this.bgState.beacons = data.beacons;
+      this.lastBeaconsCount = data.beacons.length;
+    }
+    if (data.done) {
+      this.bgState.baking = false;
+    }
   }
 
   resize(cssW, cssH, dpr = 1) {
@@ -161,9 +209,6 @@ export class LegacyCanvasRenderer {
     this.currentRoom = roomDef;
     this.currentPlaced = placed;
     this.currentLook = look;
-    if (roomDef) {
-      warmUpRoomSprites(roomDef, placed, dpr || 1);
-    }
   }
 
   cancelPendingRebake() {
@@ -188,7 +233,7 @@ export class LegacyCanvasRenderer {
     const bgW = Math.max(1, Math.round((width + 2 * ox) * bgScale));
     const bgH = Math.max(1, Math.round((height + 2 * oy) * bgScale));
 
-    for (const c of [this.bgCanvas, this.vehicleCanvas, this.buildingsCanvas, this.beaconCanvas]) {
+    for (const c of [this.bgCanvas, this.vehicleCanvas, this.buildingsCanvas, this.beaconCanvas, this.skyCanvas]) {
       if (!c) continue;
       if (c.width !== bgW || c.height !== bgH) {
         c.width = bgW;
@@ -198,6 +243,30 @@ export class LegacyCanvasRenderer {
       c.style.top = `${-oy}px`;
       c.style.width = `${width + 2 * ox}px`;
       c.style.height = `${height + 2 * oy}px`;
+    }
+
+    if (this.cityWorker) {
+      this.currentCityJobId = (this.currentCityJobId || 0) + 1;
+      this.bgState.baking = true;
+      this.cityWorker.postMessage({
+        jobId: this.currentCityJobId,
+        width,
+        height,
+        phase,
+        floor,
+        room: room ? { id: room.id, floor: room.floor, width: room.width, height: room.height } : null,
+        ox,
+        oy,
+        scale: bgScale,
+        chunkSize: 512,
+      });
+      this.bgState.floor = floor;
+      this.bgState.width = width;
+      this.bgState.height = height;
+      this.bgState.phase = phase;
+      this.bgState.ox = ox;
+      this.bgState.oy = oy;
+      return;
     }
 
     const g = this.bgCanvas.getContext('2d');
@@ -352,7 +421,7 @@ export class LegacyCanvasRenderer {
     const floor = room?.floor || 1;
 
     if (this.bgState.floor === null) {
-      this.performBackgroundBake(room, width, height, phase, neededOx, neededOy);
+      this.scheduleBackgroundRebake(room, width, height, phase, neededOx, neededOy, getLivePhase);
     } else if (
       !playerWalking && (
         this.bgState.floor !== floor ||
@@ -480,6 +549,12 @@ export class LegacyCanvasRenderer {
 
   destroy() {
     this.cancelPendingRebake();
+    if (this.cityWorker) {
+      try {
+        this.cityWorker.terminate();
+      } catch (_) {}
+      this.cityWorker = null;
+    }
     clearSpriteCache();
     clearCharacterCache();
     this.lastFrameState = null;

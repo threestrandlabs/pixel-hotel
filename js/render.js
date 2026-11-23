@@ -1048,22 +1048,27 @@ function drawIsoPrism(g, P, u0, v0, u1, v1, z0, z1, leftCol, rightCol, topCol) {
   fillPoly(g, [P(u0, v0, z1), P(u1, v0, z1), P(u1, v1, z1), P(u0, v1, z1)], topCol);
 
   // Pass 14b pixel style: mid-tone outline along silhouette edges (never near-black #2a1d2e),
-  // drawn as crisp integer-pixel lines so the diagonal isometric edges show zero antialiasing.
+  // drawn as integer-snapped path strokes that stay crisp without scanline overhead.
   const lineCol = midToneOutline(topCol);
+  g.strokeStyle = lineCol;
+  g.lineWidth = 1;
   const t0 = P(u0, v0, z1);
   const t1 = P(u1, v0, z1);
   const t2 = P(u1, v1, z1);
   const t3 = P(u0, v1, z1);
+  g.beginPath();
+  g.moveTo(Math.round(t0[0]), Math.round(t0[1]));
+  g.lineTo(Math.round(t1[0]), Math.round(t1[1]));
+  g.lineTo(Math.round(t2[0]), Math.round(t2[1]));
+  g.lineTo(Math.round(t3[0]), Math.round(t3[1]));
+  g.closePath();
   const b0 = P(u0, v1, z0);
   const b1 = P(u1, v1, z0);
   const b2 = P(u1, v0, z0);
-  strokeCrispLine(g, t0[0], t0[1], t1[0], t1[1], lineCol);
-  strokeCrispLine(g, t1[0], t1[1], t2[0], t2[1], lineCol);
-  strokeCrispLine(g, t2[0], t2[1], t3[0], t3[1], lineCol);
-  strokeCrispLine(g, t3[0], t3[1], t0[0], t0[1], lineCol);
-  strokeCrispLine(g, t3[0], t3[1], b0[0], b0[1], lineCol);
-  strokeCrispLine(g, t2[0], t2[1], b1[0], b1[1], lineCol);
-  strokeCrispLine(g, t1[0], t1[1], b2[0], b2[1], lineCol);
+  g.moveTo(Math.round(t3[0]), Math.round(t3[1])); g.lineTo(Math.round(b0[0]), Math.round(b0[1]));
+  g.moveTo(Math.round(t2[0]), Math.round(t2[1])); g.lineTo(Math.round(b1[0]), Math.round(b1[1]));
+  g.moveTo(Math.round(t1[0]), Math.round(t1[1])); g.lineTo(Math.round(b2[0]), Math.round(b2[1]));
+  g.stroke();
 }
 
 // renderSkylineToCanvas renders either the street/sky backdrop layer (layer === 'backdrop')
@@ -1280,14 +1285,20 @@ export function renderSkylineToCanvas(g, width, height, phase, floor, room = nul
     if (sPt[1] > horizonY) {
       drawIsoPrism(g, P, u0, v0, u1, v1, 0, 3, paveLeft, paveRight, paveTop);
       const jointCol = lerpColor(shadeColor(basePaveTop, -0.1), hazeColor, haze);
+      g.strokeStyle = jointCol;
+      g.lineWidth = 1;
+      g.beginPath();
       for (let u = u0 + 1.5; u < u1; u += 1.8) {
         const a = P(u, v0, 3), b = P(u, v1, 3);
-        strokeCrispLine(g, a[0], a[1], b[0], b[1], jointCol);
+        g.moveTo(Math.round(a[0]), Math.round(a[1]));
+        g.lineTo(Math.round(b[0]), Math.round(b[1]));
       }
       for (let v = v0 + 1.5; v < v1; v += 1.8) {
         const a = P(u0, v, 3), b = P(u1, v, 3);
-        strokeCrispLine(g, a[0], a[1], b[0], b[1], jointCol);
+        g.moveTo(Math.round(a[0]), Math.round(a[1]));
+        g.lineTo(Math.round(b[0]), Math.round(b[1]));
       }
+      g.stroke();
     }
 
     if (blk.kind === 'hotel') {
@@ -2061,50 +2072,19 @@ function fillWindow(g, pts, color) {
 }
 
 function fillPoly(ctx, pts, color) {
-  let minY = Infinity;
-  let maxY = -Infinity;
-  for (const p of pts) { if (p[1] < minY) minY = p[1]; if (p[1] > maxY) maxY = p[1]; }
-  const y0 = Math.floor(minY);
-  const y1 = Math.ceil(maxY);
   ctx.fillStyle = color;
-  for (let y = y0; y < y1; y++) {
-    const yc = y + 0.5;
-    let xa = Infinity;
-    let xb = -Infinity;
-    for (let i = 0; i < pts.length; i++) {
-      const [x1, py1] = pts[i];
-      const [x2, py2] = pts[(i + 1) % pts.length];
-      if ((py1 <= yc && py2 > yc) || (py2 <= yc && py1 > yc)) {
-        const x = x1 + ((yc - py1) / (py2 - py1)) * (x2 - x1);
-        if (x < xa) xa = x;
-        if (x > xb) xb = x;
-      }
-    }
-    if (xb > xa) {
-      const xi0 = Math.ceil(xa - 0.5);
-      const xi1 = Math.ceil(xb - 0.5);
-      if (xi1 > xi0) ctx.fillRect(xi0, y, xi1 - xi0, 1);
-    }
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let i = 0; i < pts.length; i++) {
+    const px = Math.round(pts[i][0]);
+    const py = Math.round(pts[i][1]);
+    if (i === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
   }
-}
-
-// Crisp integer-pixel Bresenham line: used for the mid-tone silhouette outline so diagonal
-// isometric edges never pick up the canvas's default line antialiasing.
-function strokeCrispLine(ctx, x0, y0, x1, y1, color) {
-  x0 = Math.round(x0); y0 = Math.round(y0); x1 = Math.round(x1); y1 = Math.round(y1);
-  const dx = Math.abs(x1 - x0);
-  const sx = x0 < x1 ? 1 : -1;
-  const dy = -Math.abs(y1 - y0);
-  const sy = y0 < y1 ? 1 : -1;
-  let err = dx + dy;
-  ctx.fillStyle = color;
-  for (;;) {
-    ctx.fillRect(x0, y0, 1, 1);
-    if (x0 === x1 && y0 === y1) break;
-    const e2 = 2 * err;
-    if (e2 >= dy) { err += dy; x0 += sx; }
-    if (e2 <= dx) { err += dx; y0 += sy; }
-  }
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
 }
 
 function drawFurniture(ctx, f, originX, originY, dpr = 1, off = false, layer = 'all', player = null) {
