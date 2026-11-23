@@ -3685,3 +3685,10 @@ test('p1 data: J6/F5 lobby lamps at (2,8) and (34,8) do not poke out behind armc
   const coords = lobbyLamps.map((l) => `${l.x},${l.y}`).sort();
   assert.deepEqual(coords, ['2,8', '34,8']);
 });
+
+test('p1 data: lobby rugs at (5,10) and (37,10) are centred under sofa groups', () => {
+  const lobbyRugs = SEED_FURNITURE.lobby.filter((p) => p.itemId === 'rug');
+  assert.equal(lobbyRugs.length, 2);
+  const coords = lobbyRugs.map((r) => `${r.x},${r.y}`).sort();
+  assert.deepEqual(coords, ['37,10', '5,10']);
+});
