@@ -3512,3 +3512,18 @@ test('p0 renderer seam: createRenderer wraps LegacyCanvasRenderer and PixiRender
   assert.ok(dbg.frameNames.includes('furn:stool:0:all'));
   legacy.destroy();
 });
+
+test('p0 build: pixi.js 8.23.0 is pinned in package.json, vendor/ and atlas/ are git-ignored, and deploy workflow vendors pixi.min.mjs', () => {
+  const pkgPath = path.resolve(__dirname, '..', 'package.json');
+  const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+  assert.equal(pkg.dependencies?.['pixi.js'], '8.23.0');
+  assert.ok(pkg.scripts?.['vendor:pixi']?.includes('pixi.min.mjs'));
+  assert.ok(pkg.scripts?.dev?.includes('vendor:pixi'));
+
+  const gitignore = fs.readFileSync(path.resolve(__dirname, '..', '.gitignore'), 'utf8');
+  assert.ok(gitignore.includes('vendor/'));
+  assert.ok(gitignore.includes('atlas/'));
+
+  const workflow = fs.readFileSync(path.resolve(__dirname, '..', '.github/workflows/deploy.yml'), 'utf8');
+  assert.ok(workflow.includes('_site/vendor/pixi.min.mjs'));
+});

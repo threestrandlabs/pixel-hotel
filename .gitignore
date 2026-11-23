@@ -1,5 +1,8 @@
 node_modules
 node_modules/
+vendor/
+atlas/
+_site/
 test-results/
 tests/screenshots/*.png
 playwright-report/
