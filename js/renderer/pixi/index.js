@@ -60,6 +60,11 @@ export class PixiRenderer extends LegacyCanvasRenderer {
     this.overlayGraphics = null;
     this.screenOverlay = null;
     this.elevatorGraphics = null;
+    this.worldOverlay = null;
+    this.domNameTags = [];
+    this.domBubbles = [];
+    this.lastNameTargets = [];
+    this.lastBubbleTargets = [];
   }
 
   init(canvasHost, opts = {}) {
@@ -77,6 +82,7 @@ export class PixiRenderer extends LegacyCanvasRenderer {
       this.vehicleCanvas = doc.getElementById('vehicleCanvas');
       this.buildingsCanvas = doc.getElementById('buildingsCanvas');
       this.beaconCanvas = doc.getElementById('beaconCanvas');
+      this.worldOverlay = doc.getElementById('worldOverlay');
     }
 
     if (
@@ -661,6 +667,7 @@ export class PixiRenderer extends LegacyCanvasRenderer {
     );
 
     this.app.render();
+    this.updateDomOverlays(this.lastNameTargets, this.lastBubbleTargets, frameState.width || this.cssW);
   }
 
   updateCutaway(room, origin, width, height, phase, dpr) {
@@ -838,6 +845,9 @@ export class PixiRenderer extends LegacyCanvasRenderer {
       this.entityFxGraphics.clear();
     }
 
+    this.lastNameTargets = [];
+    this.lastBubbleTargets = [];
+
     const seenIds = new Set();
 
     for (const e of entities) {
@@ -962,6 +972,8 @@ export class PixiRenderer extends LegacyCanvasRenderer {
       const sPt = rawWorldToScreen(bbox.x, bbox.y, camera, width, height);
       const hw = Math.round(20 * zoom);
       const hh = Math.round((bbox.h || 52) * zoom);
+      const footScreen = rawWorldToScreen(bbox.x, bbox.footY, camera, width, height);
+      const headScreen = rawWorldToScreen(bbox.x, bbox.y, camera, width, height);
       entityScreenBounds.set(e.id, {
         id: e.id,
         x0: sPt.sx - hw,
@@ -969,9 +981,16 @@ export class PixiRenderer extends LegacyCanvasRenderer {
         x1: sPt.sx + hw,
         y1: sPt.sy + hh,
         entity: e,
-        footScreen: rawWorldToScreen(bbox.x, bbox.footY, camera, width, height),
-        headScreen: rawWorldToScreen(bbox.x, bbox.y, camera, width, height),
+        footScreen,
+        headScreen,
       });
+
+      if (e.nameTag) {
+        this.lastNameTargets.push({ x: footScreen.sx, y: footScreen.sy, name: e.nameTag });
+      }
+      if (e.bubbleText) {
+        this.lastBubbleTargets.push({ x: headScreen.sx, y: headScreen.sy, text: e.bubbleText });
+      }
     }
 
     for (const [id, record] of this.entitySprites) {
@@ -979,6 +998,57 @@ export class PixiRenderer extends LegacyCanvasRenderer {
         record.sprite.visible = false;
         if (record.reflectionSprite) record.reflectionSprite.visible = false;
       }
+    }
+  }
+
+  updateDomOverlays(nameTargets = [], bubbleTargets = [], canvasWidth = 960) {
+    if (!this.worldOverlay) return;
+
+    for (let i = 0; i < nameTargets.length; i++) {
+      const target = nameTargets[i];
+      let el = this.domNameTags[i];
+      if (!el) {
+        el = document.createElement('div');
+        el.className = 'world-name-tag';
+        this.worldOverlay.appendChild(el);
+        this.domNameTags.push(el);
+      }
+      if (el.textContent !== target.name) el.textContent = target.name;
+      el.style.transform = `translate3d(${Math.round(target.x)}px, ${Math.round(target.y)}px, 0) translate(-50%, -50%)`;
+      el.style.display = 'block';
+    }
+    for (let i = nameTargets.length; i < this.domNameTags.length; i++) {
+      this.domNameTags[i].style.display = 'none';
+    }
+
+    const placedBubbles = [];
+    for (const b of bubbleTargets) {
+      let by = b.y;
+      for (const prev of placedBubbles) {
+        if (Math.abs(prev.x - b.x) < 155 && Math.abs(prev.y - by) < 48) {
+          by = prev.y - 50;
+        }
+      }
+      placedBubbles.push({ x: b.x, y: by, text: b.text });
+    }
+
+    for (let i = 0; i < placedBubbles.length; i++) {
+      const b = placedBubbles[i];
+      let el = this.domBubbles[i];
+      if (!el) {
+        el = document.createElement('div');
+        el.className = 'world-speech-bubble';
+        this.worldOverlay.appendChild(el);
+        this.domBubbles.push(el);
+      }
+      if (el.textContent !== b.text) el.textContent = b.text;
+      const boxX = Math.max(8, Math.min(canvasWidth - 210, Math.round(b.x - 100)));
+      const boxY = Math.max(8, Math.round(b.y - 50));
+      el.style.transform = `translate3d(${boxX}px, ${boxY}px, 0)`;
+      el.style.display = 'block';
+    }
+    for (let i = placedBubbles.length; i < this.domBubbles.length; i++) {
+      this.domBubbles[i].style.display = 'none';
     }
   }
 
@@ -1049,6 +1119,12 @@ export class PixiRenderer extends LegacyCanvasRenderer {
     }
     this.entitySprites.clear();
     this.charTextureCache.clear();
+    if (this.worldOverlay) {
+      for (const el of this.domNameTags) el.remove?.();
+      for (const el of this.domBubbles) el.remove?.();
+    }
+    this.domNameTags = [];
+    this.domBubbles = [];
     this.lastBuiltFurnitureKey = '';
     this.isReady = false;
   }

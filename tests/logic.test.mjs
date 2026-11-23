@@ -1416,6 +1416,27 @@ test('v0.7.0 zoom: pointer-to-tile mapping round-trips correctly at multiple zoo
   }
 });
 
+test('overlay: round-trip screenToTile(worldToScreen(t)) === t holds for each floor and zoom', () => {
+  const width = 960, height = 600;
+  for (const [roomId, room] of Object.entries(ROOMS)) {
+    const { originX, originY } = computeOrigin(room, width, height);
+    for (const zoom of [MIN_ZOOM, 1.0, DEFAULT_ZOOM, MAX_ZOOM]) {
+      const camera = centerCameraOnTile(room.spawn.x, room.spawn.y, room, width, height, zoom);
+      const testTiles = [
+        { x: room.spawn.x, y: room.spawn.y },
+        { x: Math.floor(room.width / 2), y: Math.floor(room.height / 2) },
+      ];
+      for (const t of testTiles) {
+        const world = tileToScreen(t.x, t.y, originX, originY);
+        const screen = worldToScreen(world.sx, world.sy, camera, width, height);
+        const mapped = screenToTile(screen.sx, screen.sy, originX, originY, camera, width, height);
+        assert.equal(mapped.x, t.x, `${roomId} zoom ${zoom}: tile x matches`);
+        assert.equal(mapped.y, t.y, `${roomId} zoom ${zoom}: tile y matches`);
+      }
+    }
+  }
+});
+
 test('picking: screenToTile round-trips for outdoor decks (rooftop, garden) and indoor rooms (lobby) with realistic camera and interior points', () => {
   const width = 960, height = 600;
   const roomsToTest = [
