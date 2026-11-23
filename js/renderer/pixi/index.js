@@ -5,10 +5,11 @@
 import {
   computeOrigin, tileToScreen as rawTileToScreen, worldToScreen as rawWorldToScreen,
   screenToTile as rawScreenToTile, hitTestNpc as rawHitTestNpc, getItemIconDataUrl as rawGetItemIconDataUrl,
-  DEFAULT_ZOOM, MIN_ZOOM, MAX_ZOOM, clampZoom, getSeatConfig,
+  DEFAULT_ZOOM, MIN_ZOOM, MAX_ZOOM, clampZoom, getSeatConfig, entityScreenBounds,
 } from '../../render.js';
 import { getDetail } from '../../pixelart.js';
 import { TILE, getCatalogueItem } from '../../data.js';
+import { LOOKS, getCharacterCanvas } from '../../voxel.js';
 import { LegacyCanvasRenderer } from '../legacy.js';
 
 export class PixiRenderer extends LegacyCanvasRenderer {
@@ -47,6 +48,10 @@ export class PixiRenderer extends LegacyCanvasRenderer {
     this.lastBuiltRoomKey = '';
     this.lastBuiltFurnitureKey = '';
     this.furnitureSprites = [];
+    this.entitySprites = new Map();
+    this.entityShadowGraphics = null;
+    this.entityFxGraphics = null;
+    this.charTextureCache = new Map();
   }
 
   init(canvasHost, opts = {}) {
@@ -131,12 +136,19 @@ export class PixiRenderer extends LegacyCanvasRenderer {
       this.floorLayer.addChild(this.floorTilesContainer);
       this.floorLayer.addChild(this.floorDecalsContainer);
 
+      this.entityShadowGraphics = new Graphics();
+      this.floorDecalsContainer.addChild(this.entityShadowGraphics);
+
       this.wallsLayer = new Container();
       this.wallsLayer.roundPixels = true;
 
       this.worldSorted = new Container();
       this.worldSorted.sortableChildren = true;
       this.worldSorted.roundPixels = true;
+
+      this.entityFxGraphics = new Graphics();
+      this.worldSorted.addChild(this.entityFxGraphics);
+
       this.fxLayer = new Container();
       this.towerOver = new Container();
       this.overlayLayer = new Container();
@@ -310,7 +322,7 @@ export class PixiRenderer extends LegacyCanvasRenderer {
     }
   }
 
-  buildFurniture(room, placedFurniture = [], lightsOn = true) {
+  buildFurniture(room, placedFurniture = [], lightsOn = true, occupiedSeats = new Map()) {
     if (!room || !this.worldSorted || !this.PIXI) return;
     const { Sprite, Graphics } = this.PIXI;
     const origin = computeOrigin(room, this.cssW, this.cssH);
@@ -359,6 +371,46 @@ export class PixiRenderer extends LegacyCanvasRenderer {
       const frontY = f.y + (th - 1);
       const isOverhead = Boolean(item?.overhead);
       const offTag = !lightsOn && item?.lightSource ? ':off' : '';
+
+      const occ = occupiedSeats.get(f);
+      const isSplitSeat = occ && occ.config.layerOrder.length === 3 && occ.config.layerOrder[2] === 'front';
+
+      if (isSplitSeat) {
+        const texBack = (
+          this.getTexture(`furn:${spriteKey}:${rot}:back${offTag}`) ||
+          this.getTexture(`furn:${f.itemId}:${rot}:back${offTag}`) ||
+          this.getTexture(`furn:${spriteKey}:${rot}:back`) ||
+          this.getTexture(`furn:${f.itemId}:${rot}:back`)
+        );
+        const texFront = (
+          this.getTexture(`furn:${spriteKey}:${rot}:front${offTag}`) ||
+          this.getTexture(`furn:${f.itemId}:${rot}:front${offTag}`) ||
+          this.getTexture(`furn:${spriteKey}:${rot}:front`) ||
+          this.getTexture(`furn:${f.itemId}:${rot}:front`)
+        );
+        if (texBack && texFront) {
+          const sprBack = new Sprite(texBack);
+          sprBack.position.set(sx, sy);
+          sprBack.zIndex = Math.round((frontX + frontY - 0.05) * 1024);
+          sprBack._furnitureData = f;
+          sprBack._isCanopy = f.itemId === 'pool_umbrella' || f.itemId === 'canopy_bed';
+          sprBack._anchorX = anchorX;
+          sprBack._anchorY = anchorY;
+          this.worldSorted.addChild(sprBack);
+          this.furnitureSprites.push(sprBack);
+
+          const sprFront = new Sprite(texFront);
+          sprFront.position.set(sx, sy);
+          sprFront.zIndex = Math.round((frontX + frontY + 0.15) * 1024);
+          sprFront._furnitureData = f;
+          sprFront._isCanopy = f.itemId === 'pool_umbrella' || f.itemId === 'canopy_bed';
+          sprFront._anchorX = anchorX;
+          sprFront._anchorY = anchorY;
+          this.worldSorted.addChild(sprFront);
+          this.furnitureSprites.push(sprFront);
+          continue;
+        }
+      }
 
       const texAll = (
         this.getTexture(`furn:${spriteKey}:${rot}:all${offTag}`) ||
@@ -494,10 +546,33 @@ export class PixiRenderer extends LegacyCanvasRenderer {
       this.buildWalls(room);
     }
 
-    const furnKey = `${room?.id || ''}:${placed.length}:${lightsOn ? 'L' : 'D'}:${this.loadedDetail}`;
+    const occupiedSeats = new Map();
+    if (frameState.entities) {
+      for (const e of frameState.entities) {
+        if (e.sitting) {
+          let seat = null;
+          if (typeof e.sitting === 'string') {
+            seat = placed.find((f) => f.instanceId === e.sitting);
+          }
+          if (!seat) {
+            const ex = Math.round(e.x);
+            const ey = Math.round(e.y);
+            seat = placed.find((f) => Math.abs(f.x - ex) <= 1 && Math.abs(f.y - ey) <= 1 && getCatalogueItem(f.itemId)?.seat);
+          }
+          if (seat) {
+            const seatCfg = getSeatConfig(seat.itemId, seat.rot);
+            e.seatYOffset = seatCfg.yOffset;
+            occupiedSeats.set(seat, { entity: e, config: seatCfg });
+          }
+        }
+      }
+    }
+
+    const occKey = Array.from(occupiedSeats.keys()).map((f) => f.instanceId || `${f.x},${f.y}`).sort().join(';');
+    const furnKey = `${room?.id || ''}:${placed.length}:${lightsOn ? 'L' : 'D'}:${this.loadedDetail}:${occKey}`;
     if (this.lastBuiltFurnitureKey !== furnKey) {
       this.lastBuiltFurnitureKey = furnKey;
-      this.buildFurniture(room, placed, lightsOn);
+      this.buildFurniture(room, placed, lightsOn, occupiedSeats);
     }
 
     const localPlayer = frameState.entities?.find((e) => e.isPlayer || e.id === 'player');
@@ -520,7 +595,162 @@ export class PixiRenderer extends LegacyCanvasRenderer {
     this.world.position.set(Math.round(cx + panX - cx * zoom), Math.round(cy + panY - cy * zoom));
     this.world.scale.set(zoom);
 
+    if (room) {
+      const origin = computeOrigin(room, frameState.width || this.cssW, frameState.height || this.cssH);
+      this.updateEntities(
+        frameState.entities || [],
+        room,
+        origin,
+        cam,
+        frameState.width || this.cssW,
+        frameState.height || this.cssH,
+        this.dpr,
+        frameState.now || 0,
+      );
+    }
+
     this.app.render();
+  }
+
+  updateEntities(entities, room, origin, camera, width, height, dpr, now) {
+    entityScreenBounds.clear();
+    if (!this.worldSorted || !this.PIXI) return;
+    const { Sprite, Texture } = this.PIXI;
+    const zoom = camera?.zoom ?? 1;
+
+    if (this.entityShadowGraphics) {
+      this.entityShadowGraphics.clear();
+    }
+    if (this.entityFxGraphics) {
+      this.entityFxGraphics.clear();
+    }
+
+    const seenIds = new Set();
+
+    for (const e of entities) {
+      seenIds.add(e.id);
+      const isSwimsuit = e.outfit === 'swimsuit' || e.isWearingSwimsuit || (e.action === 'swim');
+      let baseLook = LOOKS[e.spriteKey] || { ...LOOKS.player, shirt: e.color || LOOKS.player.shirt };
+      if (e.look) {
+        baseLook = { ...baseLook, ...e.look };
+        if (e.look.hairColor) baseLook.hair = e.look.hairColor;
+      }
+      const look = isSwimsuit
+        ? { ...baseLook, outfit: 'swimsuit', bareArms: true, shirt: '#00b4d8', pants: '#0077b6' }
+        : baseLook;
+      const stride = e.walking ? (e.frame % 2 ? 1 : -1) : 0;
+      const pose = {
+        stride,
+        sit: !!e.sitting,
+        lie: !!e.lying || e.action === 'lie' || e.action === 'spa_massage',
+        blink: !!e.blink,
+        breathe: e.breathe || 0,
+        action: e.action || null,
+        actionFrame: e.actionFrame || 0,
+        emote: e.emote || null,
+        emoteFrame: e.emoteFrame || 0,
+        expression: e.expression || null,
+      };
+      const lookKey = e.look ? (e.look._cachedKey || (e.look._cachedKey = JSON.stringify(e.look))) : '';
+      const key = `${e.spriteKey}:${e.color}:${isSwimsuit ? 'swim' : 'norm'}:${lookKey}:${e.emote || ''}:${Math.floor((e.emoteFrame || 0) * 2) % 12}:${e.expression || ''}`;
+      const charBake = getCharacterCanvas(key, look, e.dir || 'down', pose, 1);
+      const { canvas, ox, oy, cssH } = charBake;
+
+      let tex = this.charTextureCache.get(canvas);
+      if (!tex) {
+        tex = Texture.from(canvas);
+        if (tex.source) tex.source.scaleMode = 'nearest';
+        this.charTextureCache.set(canvas, tex);
+      }
+
+      let record = this.entitySprites.get(e.id);
+      if (!record) {
+        const spr = new Sprite(tex);
+        this.worldSorted.addChild(spr);
+        record = { sprite: spr, reflectionSprite: null };
+        this.entitySprites.set(e.id, record);
+      } else {
+        record.sprite.texture = tex;
+        record.sprite.visible = true;
+      }
+
+      const { sx, sy } = rawTileToScreen(e.x, e.y, origin.originX, origin.originY);
+      const charY = sy + (e.seatYOffset || 0);
+      const dx = sx - ox;
+      const dy = charY - oy;
+      record.sprite.position.set(dx, dy);
+      record.sprite.zIndex = Math.round((e.depth ?? (e.x + e.y + 0.5)) * 1024);
+
+      // Footprint contact shadow
+      if (!e.sitting && !pose.lie && e.action !== 'swim' && this.entityShadowGraphics) {
+        this.entityShadowGraphics.ellipse(sx + 1.5, sy + 1, 13.5, 6.5);
+        this.entityShadowGraphics.fill({ color: 0x2a1636, alpha: 0.18 });
+      }
+
+      // Gym mirror reflection
+      if (room?.id === 'gym' && e.y <= 3.4 && e.x >= 2 && e.x <= 12) {
+        if (!record.reflectionSprite) {
+          record.reflectionSprite = new Sprite(tex);
+          this.worldSorted.addChild(record.reflectionSprite);
+        }
+        const ref = record.reflectionSprite;
+        ref.texture = tex;
+        ref.visible = true;
+        ref.alpha = 0.25;
+        ref.position.set(sx, sy - 26);
+        ref.scale.set(-0.85, 0.85);
+        ref.anchor.set(canvas.width ? ox / canvas.width : 0.5, canvas.height ? oy / canvas.height : 0.5);
+        ref.zIndex = Math.round((e.x + 0.1) * 1024 - 10);
+      } else if (record.reflectionSprite) {
+        record.reflectionSprite.visible = false;
+      }
+
+      // Treadmill action lines / sweat droplets / culinary aroma wisps
+      if (e.action === 'treadmill' && this.entityFxGraphics) {
+        const shift = (e.actionFrame || 0) * 3;
+        for (let i = -1; i <= 1; i++) {
+          const bx = sx + i * 7 - 4 + (shift % 6);
+          const by = sy + 2 + i * 3;
+          this.entityFxGraphics.moveTo(bx - 5, by - 2.5);
+          this.entityFxGraphics.lineTo(bx + 5, by + 2.5);
+          this.entityFxGraphics.stroke({ color: 0x58e2ff, alpha: 0.72, width: 2 });
+        }
+        const dropShift = ((e.actionFrame || 0) % 2) * 3;
+        this.entityFxGraphics.circle(sx + 16, dy + 14 + dropShift, 2.2);
+        this.entityFxGraphics.circle(sx - 16, dy + 17 - dropShift, 1.8);
+        this.entityFxGraphics.fill({ color: 0x7ce8ff });
+      } else if (e.action === 'eat' && this.entityFxGraphics) {
+        const wisp = ((e.actionFrame || 0) % 2) * 2.5;
+        for (const wx of [sx - 11, sx + 11]) {
+          this.entityFxGraphics.moveTo(wx, dy + 22 - wisp);
+          this.entityFxGraphics.quadraticCurveTo(wx + 3, dy + 17 - wisp, wx, dy + 12 - wisp);
+          this.entityFxGraphics.stroke({ color: 0xffecb4, alpha: 0.82, width: 1.6 });
+        }
+      }
+
+      // Update entityScreenBounds for hitTestNpc
+      const bbox = { x: sx, y: dy, footY: charY + 11, w: 0, h: cssH || canvas.height };
+      const sPt = rawWorldToScreen(bbox.x, bbox.y, camera, width, height);
+      const hw = Math.round(20 * zoom);
+      const hh = Math.round((bbox.h || 52) * zoom);
+      entityScreenBounds.set(e.id, {
+        id: e.id,
+        x0: sPt.sx - hw,
+        y0: sPt.sy,
+        x1: sPt.sx + hw,
+        y1: sPt.sy + hh,
+        entity: e,
+        footScreen: rawWorldToScreen(bbox.x, bbox.footY, camera, width, height),
+        headScreen: rawWorldToScreen(bbox.x, bbox.y, camera, width, height),
+      });
+    }
+
+    for (const [id, record] of this.entitySprites) {
+      if (!seenIds.has(id)) {
+        record.sprite.visible = false;
+        if (record.reflectionSprite) record.reflectionSprite.visible = false;
+      }
+    }
   }
 
   snapshot(type = 'image/png') {
@@ -584,6 +814,12 @@ export class PixiRenderer extends LegacyCanvasRenderer {
     this.textures.clear();
     this.sheets.length = 0;
     this.furnitureSprites = [];
+    for (const record of this.entitySprites.values()) {
+      record.sprite?.destroy?.();
+      record.reflectionSprite?.destroy?.();
+    }
+    this.entitySprites.clear();
+    this.charTextureCache.clear();
     this.lastBuiltFurnitureKey = '';
     this.isReady = false;
   }
