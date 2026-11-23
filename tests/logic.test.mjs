@@ -3652,12 +3652,13 @@ test('p1 data: J3/F2 every wall-mounted item (wall_sconce, gym_mirror, neon_sign
   assert.equal(res.ok, true, `expected all wall-mounted items to touch wall, found offenders: ${res.offenders?.join(', ')}`);
   assert.equal(res.offenders.length, 0);
 
-  // Directly verify restaurant wall sconces are at x=1 with rot=1
+  // Directly verify restaurant wall sconces are at x=1 with rot=1 and do not cover windows
   const restaurantSconces = SEED_FURNITURE.restaurant.filter((p) => p.itemId === 'wall_sconce');
   assert.equal(restaurantSconces.length, 4);
   for (const s of restaurantSconces) {
     assert.equal(s.x, 1, `sconce at y=${s.y} should be on west wall x=1`);
     assert.equal(s.rot, 1, `sconce at y=${s.y} should have rot=1 mounting on west wall`);
+    assert.notEqual(ROOMS.restaurant.grid[s.y][0], TILE.WINDOW, `sconce at y=${s.y} must not cover a window`);
   }
 });
 

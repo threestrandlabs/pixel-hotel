@@ -79,6 +79,13 @@ export function checkWallMountedItemsTouchWall() {
       const touchesWestWall = p.x === 1 && rot === 1;
       if (!touchesNorthWall && !touchesWestWall) {
         offenders.push(`${roomId}:${p.itemId}@(${p.x},${p.y},rot=${rot})`);
+      } else if (p.itemId === 'wall_sconce') {
+        // Sconces must mount on bare solid wall, not cover a window frame
+        const wallX = rot === 1 ? 0 : p.x;
+        const wallY = rot === 0 ? 0 : p.y;
+        if (room.grid[wallY]?.[wallX] === TILE.WINDOW) {
+          offenders.push(`${roomId}:${p.itemId}@(${p.x},${p.y}) covers window at (${wallX},${wallY})`);
+        }
       }
     }
   }
