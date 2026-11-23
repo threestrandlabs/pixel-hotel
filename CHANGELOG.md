@@ -7,9 +7,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
-## [0.13.0] - 2026-11-22
+## [0.13.1] - 2026-11-23
 
-Art rework: new pixel style for characters, rooms, furniture, and city, plus a High/Low quality toggle.
+Leftover art fixes: monitor glare, fern, Low backdrop windows, street trees, and a crisp city backdrop.
 
 
 ### Changed
@@ -26,6 +26,13 @@ Art rework: new pixel style for characters, rooms, furniture, and city, plus a H
   - Potted fern: rebuilt as 10 continuous arching fronds over a tapered terracotta pot (lighter rim, dark soil); every green pixel connects.
   - Street trees: trunk plus rounded lumpy canopy (flat ramp, mid-tone outline) instead of a green prism.
   - Known limits: Low backdrop is still 4px blocks (non-integer zoom gives uneven block widths); street-level trees are not reachable by the room camera, so tree crops come from a Node render of the same code.
+
+## [0.13.0] - 2026-11-22
+
+Art rework: new pixel style for characters, rooms, furniture, and city, plus a High/Low quality toggle.
+
+
+### Changed
 
 - **Art rework review pass: furniture builders, city windows, street shots and 8x crops (`js/sprites.js`, `js/render.js`, `js/main.js`, `css/style.css`, `scripts/furniture-crops.mjs`, `tests/_png.mjs`, `tests/logic.test.mjs`)**:
   - Finished the Phase 3 furniture builder rework onto the Pass 14b `isoSprite`/`frameBox`/`tri` helper system (sofa, armchair, dining chair, stool, lamp, plant, suite bed, computer desk, bar counter, dining table, cafe table); restored `grain()`/wood-grain texturing as an automatic accent-only effect on box tops and lit faces (`mat: 'wood'` in `isoSprite`'s `paintBox`, driven by `woodStreak`), replacing the old all-over 3-stripe band version.
