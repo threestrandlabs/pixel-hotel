@@ -338,20 +338,43 @@ export function collectDetailFrames(detail = 1) {
     // 3. Floor tiles across FLOOR_MATERIALS and per-room palettes
     const floorMatList = Array.isArray(FLOOR_MATERIALS) ? FLOOR_MATERIALS : Object.keys(FLOOR_MATERIALS);
     for (const mat of [...floorMatList].sort()) {
-      for (let ox = 0; ox < 2; ox++) {
-        for (let oy = 0; oy < 2; oy++) {
-          const spr = buildFloorTile('#e8dcc8', '#dfd2bc', ox, oy, mat);
-          register(`floor:mat:${mat}:${ox}:${oy}`, spriteToRgbaBitmap(spr));
-        }
+      for (let variant = 0; variant < 2; variant++) {
+        const spr = buildFloorTile('#e8dcc8', variant, mat);
+        const bmp = spriteToRgbaBitmap(spr);
+        register(`floor:mat:${mat}:${variant}`, bmp);
+        register(`floor:mat:${mat}:${variant}:0`, bmp);
+        register(`floor:mat:${mat}:${variant}:1`, bmp);
       }
     }
     for (const room of Object.values(ROOMS)) {
-      for (let ox = 0; ox < 2; ox++) {
-        for (let oy = 0; oy < 2; oy++) {
-          const spr = buildFloorTile(room.floorColor, room.floorAlt, ox, oy, room.floorMaterial || 'marble');
-          register(`floor:room:${room.id}:${ox}:${oy}`, spriteToRgbaBitmap(spr));
+      const zt = room.zoneTiles;
+      for (let variant = 0; variant < 2; variant++) {
+        const sprBase = buildFloorTile(room.floorColor, variant, room.floorMaterial || 'marble');
+        const bmpBase = spriteToRgbaBitmap(sprBase);
+        register(`floor:room:${room.id}:base:${variant}`, bmpBase);
+        register(`floor:room:${room.id}:${variant}`, bmpBase);
+        register(`floor:room:${room.id}:${variant}:0`, bmpBase);
+        register(`floor:room:${room.id}:${variant}:1`, bmpBase);
+
+        if (zt) {
+          const zColor = zt.color || room.floorColor;
+          const zMat = zt.material || room.floorMaterial || 'marble';
+          const sprZone = buildFloorTile(zColor, variant, zMat);
+          register(`floor:room:${room.id}:zone:${variant}`, spriteToRgbaBitmap(sprZone));
+        }
+
+        if (room.zones) {
+          for (let zi = 0; zi < room.zones.length; zi++) {
+            const z = room.zones[zi];
+            const zColor = z.color || room.floorColor;
+            const zMat = z.material || room.floorMaterial || 'marble';
+            const sprSub = buildFloorTile(zColor, variant, zMat);
+            register(`floor:room:${room.id}:subzone:${zi}:${variant}`, spriteToRgbaBitmap(sprSub));
+          }
         }
       }
+      register(`tile:door:room:${room.id}`, spriteToRgbaBitmap(buildDoorTile(room.floorColor)));
+      register(`tile:elevator:room:${room.id}`, spriteToRgbaBitmap(buildElevatorTile(room.floorColor)));
     }
     register('tile:door', spriteToRgbaBitmap(buildDoorTile()));
     register('tile:elevator', spriteToRgbaBitmap(buildElevatorTile()));
@@ -361,7 +384,7 @@ export function collectDetailFrames(detail = 1) {
       const wallDef = spriteToRgbaBitmap(buildWallSegment('#d8d0c4', dir));
       register(`wall:default:${dir}`, wallDef);
       register(`skirting:default:${dir}`, makeSkirtingBitmap(wallDef, detail));
-      register(`window:default:${dir}`, spriteToRgbaBitmap(buildWindowSegment('#d8d0c4', dir, '#78b0d8')));
+      register(`window:default:${dir}`, spriteToRgbaBitmap(buildWindowSegment('#d8d0c4', { top: '#8fd0ff', bottom: '#fff6c9' }, dir)));
       register(`door:default:${dir}`, spriteToRgbaBitmap(buildDoorSegment('#d8d0c4', dir)));
       register(`elevator_door:default:${dir}`, spriteToRgbaBitmap(buildElevatorDoorSegment('#d8d0c4', dir)));
       register(`stairwell_door:default:${dir}`, spriteToRgbaBitmap(buildStairwellDoorSegment('#d8d0c4', dir)));
@@ -373,7 +396,10 @@ export function collectDetailFrames(detail = 1) {
         const roomWall = spriteToRgbaBitmap(buildWallSegment(wCol, dir));
         register(`wall:room:${room.id}:${dir}`, roomWall);
         register(`skirting:room:${room.id}:${dir}`, makeSkirtingBitmap(roomWall, detail));
-        register(`window:room:${room.id}:${dir}`, spriteToRgbaBitmap(buildWindowSegment(wCol, dir, '#78b0d8')));
+        register(`window:room:${room.id}:${dir}`, spriteToRgbaBitmap(buildWindowSegment(wCol, { top: '#8fd0ff', bottom: '#fff6c9' }, dir)));
+        register(`door:room:${room.id}:${dir}`, spriteToRgbaBitmap(buildDoorSegment(wCol, dir)));
+        register(`elevator_door:room:${room.id}:${dir}`, spriteToRgbaBitmap(buildElevatorDoorSegment(wCol, dir)));
+        register(`stairwell_door:room:${room.id}:${dir}`, spriteToRgbaBitmap(buildStairwellDoorSegment(wCol, dir)));
       }
     }
 

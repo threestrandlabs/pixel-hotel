@@ -9,6 +9,7 @@
     "vendor:pixi": "mkdir -p vendor && cp node_modules/pixi.js/dist/pixi.min.mjs vendor/pixi.min.mjs",
     "dev": "npm run vendor:pixi && python3 -m http.server 8080",
     "test": "node --test tests/logic.test.mjs tests/multiplayer.unit.test.mjs tests/arcade.unit.test.mjs tests/pool.unit.test.mjs tests/gumballs.unit.test.mjs tests/trader.unit.test.mjs tests/avatar.unit.test.mjs tests/minigames.unit.test.mjs tests/adaptive-quality.unit.test.mjs tests/weather.unit.test.mjs tests/pixelart.unit.test.mjs",
+    "test:parity": "node tests/camera-parity.mjs",
     "test:smoke": "node tests/smoke.spec.mjs"
   },
   "dependencies": {

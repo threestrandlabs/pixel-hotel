@@ -1546,7 +1546,7 @@ function frame(now) {
   renderer.renderFrame({
     room,
     placedFurniture: placedFurnitureWithFootprint(roomRuntime),
-    entities: buildEntities(now),
+    entities: ui.hideEntitiesForTest ? [] : buildEntities(now),
     hoverTile: ui.placing ? null : ui.hoverTile,
     ghost,
     walkTarget: ui.placing ? null : ui.walkTarget,
@@ -3133,6 +3133,7 @@ window.__pixelHotel = Object.assign(window.__pixelHotel || {}, {
   getCanvas: () => canvas,
   getCamera: () => ({ ...ui.camera }),
   setZoom: (z) => { setZoomAtPoint(z, ui.cssW / 2, ui.cssH / 2); },
+  setEntitiesVisible: (v) => { ui.hideEntitiesForTest = !v; },
   resetZoom: () => resetZoom(),
   screenToTile: (x, y) => pickTileAt(x, y),
   tileToScreen: (x, y) => {

@@ -208,9 +208,10 @@ export class PixiRenderer extends LegacyCanvasRenderer {
       this.isReady = true;
 
       if (this.currentRoom) {
-        this.buildFloorChunks(this.currentRoom);
-        this.buildWalls(this.currentRoom);
-        this.buildFurniture(this.currentRoom, this.currentPlaced || [], true);
+        const origin = computeOrigin(this.currentRoom, this.cssW, this.cssH);
+        this.buildFloorChunks(this.currentRoom, origin);
+        this.buildWalls(this.currentRoom, origin);
+        this.buildFurniture(this.currentRoom, this.currentPlaced || [], true, new Map(), origin);
       }
     } catch (err) {
       console.warn('Pixi WebGL init failed; falling back to LegacyCanvasRenderer:', err);
@@ -257,11 +258,11 @@ export class PixiRenderer extends LegacyCanvasRenderer {
     return this.textures.get(key) || null;
   }
 
-  buildFloorChunks(room) {
+  buildFloorChunks(room, origin = null) {
     if (!room || !this.floorTilesContainer || !this.PIXI) return;
     const { Sprite } = this.PIXI;
-    const origin = computeOrigin(room, this.cssW, this.cssH);
-    const key = `${room.id}:${origin.originX},${origin.originY}:${this.loadedDetail}`;
+    const orig = origin || computeOrigin(room, this.cssW, this.cssH);
+    const key = `${room.id}:${orig.originX},${orig.originY}:${this.loadedDetail}`;
     if (this.lastBuiltRoomKey === key) return;
     this.lastBuiltRoomKey = key;
 
@@ -284,46 +285,69 @@ export class PixiRenderer extends LegacyCanvasRenderer {
         const cell = room.grid[y][x];
         if (cell === TILE.WALL || cell === TILE.WINDOW || cell === TILE.DOOR || cell === TILE.VOID) continue;
 
-        const { sx, sy } = rawTileToScreen(x, y, origin.originX, origin.originY);
+        const { sx, sy } = rawTileToScreen(x, y, orig.originX, orig.originY);
         const doorDef = doorMap.get(`${x},${y}`);
 
         let tex = null;
         if (doorDef?.elevator) {
-          tex = this.getTexture('tile:elevator');
+          tex = this.getTexture(`tile:elevator:room:${room.id}`) || this.getTexture('tile:elevator');
         } else if (doorDef) {
-          tex = this.getTexture('tile:door');
+          tex = this.getTexture(`tile:door:room:${room.id}`) || this.getTexture('tile:door');
         } else {
-          let mat = room.floorMaterial || 'default';
-          if (zt && x >= zt.x0 && x <= zt.x1 && y >= zt.y0 && y <= zt.y1 && zt.material) {
-            mat = zt.material;
-          }
+          const variant = (x + y) % 2;
+          const inZone = zt && x >= zt.x0 && x <= zt.x1 && y >= zt.y0 && y <= zt.y1;
+          let subzoneIndex = -1;
           if (room.zones) {
-            const match = room.zones.find((z) => x >= z.x0 && x <= z.x1 && y >= z.y0 && y <= z.y1);
-            if (match?.material) mat = match.material;
+            subzoneIndex = room.zones.findIndex((z) => x >= z.x0 && x <= z.x1 && y >= z.y0 && y <= z.y1);
           }
-          const ox = (x + y) % 2;
-          const oy = (x * y) % 2;
-          tex = (
-            this.getTexture(`floor:room:${room.id}:${ox}:${oy}`) ||
-            this.getTexture(`floor:mat:${mat}:${ox}:${oy}`) ||
-            this.getTexture('floor:mat:marble:0:0')
-          );
+          if (subzoneIndex >= 0) {
+            tex = this.getTexture(`floor:room:${room.id}:subzone:${subzoneIndex}:${variant}`);
+          } else if (inZone) {
+            tex = this.getTexture(`floor:room:${room.id}:zone:${variant}`);
+          }
+          if (!tex) {
+            tex = (
+              this.getTexture(`floor:room:${room.id}:base:${variant}`) ||
+              this.getTexture(`floor:room:${room.id}:${variant}`) ||
+              this.getTexture(`floor:room:${room.id}:${variant}:0`) ||
+              this.getTexture(`floor:mat:${room.floorMaterial || 'marble'}:${variant}`) ||
+              this.getTexture('floor:mat:marble:0')
+            );
+          }
         }
 
         if (tex) {
           const spr = new Sprite(tex);
+          spr.scale.set(0.5);
           spr.position.set(sx, sy);
           this.floorTilesContainer.addChild(spr);
         }
       }
     }
+
+    if (zt?.riser && this.PIXI.Graphics) {
+      const g = new this.PIXI.Graphics();
+      for (let y = 0; y < room.height; y++) {
+        for (let x = 0; x < room.width; x++) {
+          const inZone = x >= zt.x0 && x <= zt.x1 && y >= zt.y0 && y <= zt.y1;
+          if (inZone && (x === zt.x0 || y === zt.y0)) {
+            const { sx, sy } = rawTileToScreen(x, y, orig.originX, orig.originY);
+            g.moveTo(sx - 32, sy);
+            g.lineTo(sx, sy - 16);
+            g.lineTo(sx + 32, sy);
+          }
+        }
+      }
+      g.stroke({ width: 1.2, color: 0xfff8e0, alpha: 0.35 });
+      this.floorTilesContainer.addChild(g);
+    }
   }
 
-  buildWalls(room) {
+  buildWalls(room, origin = null) {
     if (!room || !this.wallsLayer || !this.PIXI) return;
     const { Sprite } = this.PIXI;
-    const origin = computeOrigin(room, this.cssW, this.cssH);
-    const key = `${room.id}:${origin.originX},${origin.originY}:${this.loadedDetail}`;
+    const orig = origin || computeOrigin(room, this.cssW, this.cssH);
+    const key = `${room.id}:${orig.originX},${orig.originY}:${this.loadedDetail}`;
     if (this.lastBuiltWallsKey === key) return;
     this.lastBuiltWallsKey = key;
     this.wallsLayer.removeChildren();
@@ -334,7 +358,7 @@ export class PixiRenderer extends LegacyCanvasRenderer {
         if (cell !== TILE.WALL && cell !== TILE.WINDOW && cell !== TILE.DOOR) continue;
         if (x === 0 && y === 0) continue;
         const kind = y === 0 ? 'north' : 'west';
-        const { sx, sy } = rawTileToScreen(kind === 'north' ? x : 1, kind === 'north' ? 1 : y, origin.originX, origin.originY);
+        const { sx, sy } = rawTileToScreen(kind === 'north' ? x : 1, kind === 'north' ? 1 : y, orig.originX, orig.originY);
 
         let frameKey;
         const isRooftopHousing = room.isRooftop && y === 0 && x >= 4 && x <= 14;
@@ -343,7 +367,14 @@ export class PixiRenderer extends LegacyCanvasRenderer {
         } else if (cell === TILE.WINDOW) {
           frameKey = `window:room:${room.id}:${kind}`;
         } else if (cell === TILE.DOOR) {
-          frameKey = `door:default:${kind}`;
+          const doorDef = room.doors?.find((d) => d.x === x && d.y === y);
+          if (doorDef?.elevator) {
+            frameKey = `elevator_door:room:${room.id}:${kind}`;
+          } else if (doorDef?.to === 'rooftop' || room.isRooftop) {
+            frameKey = `stairwell_door:room:${room.id}:${kind}`;
+          } else {
+            frameKey = `door:room:${room.id}:${kind}`;
+          }
         } else {
           frameKey = `wall:room:${room.id}:${kind}`;
         }
@@ -351,23 +382,32 @@ export class PixiRenderer extends LegacyCanvasRenderer {
         let tex = this.getTexture(frameKey);
         if (!tex) {
           if (cell === TILE.WINDOW) tex = this.getTexture(`window:default:${kind}`);
-          else if (cell === TILE.DOOR) tex = this.getTexture(`door:default:${kind}`);
-          else tex = this.getTexture(`wall:default:${kind}`);
+          else if (cell === TILE.DOOR) {
+            const doorDef = room.doors?.find((d) => d.x === x && d.y === y);
+            if (doorDef?.elevator) tex = this.getTexture(`elevator_door:default:${kind}`);
+            else if (doorDef?.to === 'rooftop' || room.isRooftop) tex = this.getTexture(`stairwell_door:default:${kind}`);
+            else tex = this.getTexture(`door:default:${kind}`);
+          } else {
+            tex = this.getTexture(`wall:default:${kind}`);
+          }
         }
 
         if (tex) {
           const spr = new Sprite(tex);
-          spr.position.set(sx, sy);
+          spr.anchor.set(0, 0);
+          spr.scale.set(0.5);
+          spr.position.set(sx - 32, sy - 72);
           this.wallsLayer.addChild(spr);
         }
       }
     }
   }
 
-  buildFurniture(room, placedFurniture = [], lightsOn = true, occupiedSeats = new Map()) {
+  buildFurniture(room, placedFurniture = [], lightsOn = true, occupiedSeats = new Map(), origin = null) {
     if (!room || !this.worldSorted || !this.PIXI) return;
     const { Sprite, Graphics } = this.PIXI;
-    const origin = computeOrigin(room, this.cssW, this.cssH);
+    const orig = origin || computeOrigin(room, this.cssW, this.cssH);
+    const furnScale = 1 / (this.loadedDetail || 1);
 
     for (const spr of this.furnitureSprites) {
       spr.destroy?.();
@@ -390,13 +430,14 @@ export class PixiRenderer extends LegacyCanvasRenderer {
       const th = f.footprint?.h || 1;
       const anchorX = f.x + tw / 2 - 0.5;
       const anchorY = f.y + th / 2 - 0.5;
-      const { sx, sy } = rawTileToScreen(anchorX, anchorY, origin.originX, origin.originY);
+      const { sx, sy } = rawTileToScreen(anchorX, anchorY, orig.originX, orig.originY);
 
       if (item?.flat || f.itemId === 'pool_water') {
         const frameKey = `furn:${spriteKey}:${rot}:all`;
         const tex = this.getTexture(frameKey) || this.getTexture(`furn:${f.itemId}:${rot}:all`);
         if (tex && this.floorDecalsContainer) {
           const spr = new Sprite(tex);
+          spr.scale.set(furnScale);
           spr.position.set(sx, sy);
           this.floorDecalsContainer.addChild(spr);
         }
@@ -432,6 +473,7 @@ export class PixiRenderer extends LegacyCanvasRenderer {
         );
         if (texBack && texFront) {
           const sprBack = new Sprite(texBack);
+          sprBack.scale.set(furnScale);
           sprBack.position.set(sx, sy);
           sprBack.zIndex = Math.round((frontX + frontY - 0.05) * 1024);
           sprBack._furnitureData = f;
@@ -442,6 +484,7 @@ export class PixiRenderer extends LegacyCanvasRenderer {
           this.furnitureSprites.push(sprBack);
 
           const sprFront = new Sprite(texFront);
+          sprFront.scale.set(furnScale);
           sprFront.position.set(sx, sy);
           sprFront.zIndex = Math.round((frontX + frontY + 0.15) * 1024);
           sprFront._furnitureData = f;
@@ -463,6 +506,7 @@ export class PixiRenderer extends LegacyCanvasRenderer {
 
       if (texAll) {
         const spr = new Sprite(texAll);
+        spr.scale.set(furnScale);
         spr.position.set(sx, sy);
         spr.zIndex = isOverhead ? 999999 : (frontX + frontY) * 1024;
         spr._furnitureData = f;
@@ -480,11 +524,13 @@ export class PixiRenderer extends LegacyCanvasRenderer {
       for (let x = 0; x < room.width; x++) {
         if (room.grid[southY][x] === TILE.VOID) continue;
         if (room.doors.some((d) => d.x === x && d.y === southY)) continue;
-        const { sx, sy } = rawTileToScreen(x, southY, origin.originX, origin.originY);
+        const { sx, sy } = rawTileToScreen(x, southY, orig.originX, orig.originY);
         const tex = this.getTexture('edge_rail:default:south');
         if (tex) {
           const spr = new Sprite(tex);
-          spr.position.set(sx, sy);
+          spr.anchor.set(0, 0);
+          spr.scale.set(0.5);
+          spr.position.set(sx - 32, sy - 24);
           spr.zIndex = (x + southY) * 1024 - 100;
           this.worldSorted.addChild(spr);
           this.furnitureSprites.push(spr);
@@ -493,11 +539,13 @@ export class PixiRenderer extends LegacyCanvasRenderer {
       for (let y = 0; y < room.height; y++) {
         if (room.grid[y][eastX] === TILE.VOID) continue;
         if (room.doors.some((d) => d.x === eastX && d.y === y)) continue;
-        const { sx, sy } = rawTileToScreen(eastX, y, origin.originX, origin.originY);
+        const { sx, sy } = rawTileToScreen(eastX, y, orig.originX, orig.originY);
         const tex = this.getTexture('edge_rail:default:west');
         if (tex) {
           const spr = new Sprite(tex);
-          spr.position.set(sx, sy);
+          spr.anchor.set(0, 0);
+          spr.scale.set(0.5);
+          spr.position.set(sx - 32, sy - 24);
           spr.zIndex = (eastX + y) * 1024 - 100;
           this.worldSorted.addChild(spr);
           this.furnitureSprites.push(spr);
@@ -510,9 +558,16 @@ export class PixiRenderer extends LegacyCanvasRenderer {
     if (this.fallbackRenderer) {
       return this.fallbackRenderer.resize(cssW, cssH, dpr);
     }
+    const oldW = this.cssW;
+    const oldH = this.cssH;
     const res = super.resize(cssW, cssH, dpr);
     if (this.app && this.app.renderer) {
       this.app.renderer.resize(this.cssW, this.cssH, this.dpr);
+    }
+    if (oldW !== this.cssW || oldH !== this.cssH) {
+      this.lastBuiltRoomKey = '';
+      this.lastBuiltWallsKey = '';
+      this.lastBuiltFurnitureKey = '';
     }
     return res;
   }
@@ -526,7 +581,12 @@ export class PixiRenderer extends LegacyCanvasRenderer {
       this.loadAtlas(targetDetail).then(() => {
         if (this.currentRoom) {
           this.lastBuiltRoomKey = '';
-          this.buildFloorChunks(this.currentRoom);
+          this.lastBuiltWallsKey = '';
+          this.lastBuiltFurnitureKey = '';
+          const origin = computeOrigin(this.currentRoom, this.cssW, this.cssH);
+          this.buildFloorChunks(this.currentRoom, origin);
+          this.buildWalls(this.currentRoom, origin);
+          this.buildFurniture(this.currentRoom, this.currentPlaced || [], true, new Map(), origin);
         }
       });
     }
@@ -537,14 +597,18 @@ export class PixiRenderer extends LegacyCanvasRenderer {
     this.currentRoom = roomDef;
     this.currentPlaced = placed;
     this.currentLook = look;
+    this.lastBuiltRoomKey = '';
+    this.lastBuiltWallsKey = '';
+    this.lastBuiltFurnitureKey = '';
     if (this.fallbackRenderer) {
       this.fallbackRenderer.enterRoom(roomDef, placed, look, dpr);
       return;
     }
     if (this.isReady && roomDef) {
-      this.buildFloorChunks(roomDef);
-      this.buildWalls(roomDef);
-      this.buildFurniture(roomDef, placed, true);
+      const origin = computeOrigin(roomDef, this.cssW, this.cssH);
+      this.buildFloorChunks(roomDef, origin);
+      this.buildWalls(roomDef, origin);
+      this.buildFurniture(roomDef, placed, true, new Map(), origin);
     }
   }
 
@@ -582,10 +646,11 @@ export class PixiRenderer extends LegacyCanvasRenderer {
     const room = frameState.room || this.currentRoom;
     const placed = frameState.placedFurniture || this.currentPlaced || [];
     const lightsOn = frameState.lightsOn !== false;
+    const origin = room ? computeOrigin(room, frameState.width || this.cssW, frameState.height || this.cssH) : null;
 
-    if (room) {
-      this.buildFloorChunks(room);
-      this.buildWalls(room);
+    if (room && origin) {
+      this.buildFloorChunks(room, origin);
+      this.buildWalls(room, origin);
     }
 
     const occupiedSeats = new Map();
@@ -611,10 +676,10 @@ export class PixiRenderer extends LegacyCanvasRenderer {
     }
 
     const occKey = Array.from(occupiedSeats.keys()).map((f) => f.instanceId || `${f.x},${f.y}`).sort().join(';');
-    const furnKey = `${room?.id || ''}:${placed.length}:${lightsOn ? 'L' : 'D'}:${this.loadedDetail}:${occKey}`;
+    const furnKey = `${room?.id || ''}:${origin?.originX || 0},${origin?.originY || 0}:${placed.length}:${lightsOn ? 'L' : 'D'}:${this.loadedDetail}:${occKey}`;
     if (this.lastBuiltFurnitureKey !== furnKey) {
       this.lastBuiltFurnitureKey = furnKey;
-      this.buildFurniture(room, placed, lightsOn, occupiedSeats);
+      this.buildFurniture(room, placed, lightsOn, occupiedSeats, origin);
     }
 
     const localPlayer = frameState.entities?.find((e) => e.isPlayer || e.id === 'player');
@@ -634,11 +699,10 @@ export class PixiRenderer extends LegacyCanvasRenderer {
     const cx = (frameState.width || this.cssW) / 2;
     const cy = (frameState.height || this.cssH) / 2;
 
-    this.world.position.set(Math.round(cx + panX - cx * zoom), Math.round(cy + panY - cy * zoom));
+    this.world.position.set(cx + panX - cx * zoom, cy + panY - cy * zoom);
     this.world.scale.set(zoom);
 
-    if (room) {
-      const origin = computeOrigin(room, frameState.width || this.cssW, frameState.height || this.cssH);
+    if (room && origin) {
       this.updateCutaway(
         room,
         origin,
@@ -687,6 +751,9 @@ export class PixiRenderer extends LegacyCanvasRenderer {
       const under = getTowerCutawayUnder(room, origin.originX, origin.originY, width, height, phase, 1);
       if (under?.canvas && this.towerUnderSprite) {
         this.towerUnderSprite.texture = Texture.from(under.canvas);
+        if (this.towerUnderSprite.texture?.source) {
+          this.towerUnderSprite.texture.source.update();
+        }
         this.towerUnderSprite.position.set(under.minX, under.minY);
         this.towerUnderSprite.visible = true;
       } else if (this.towerUnderSprite) {
@@ -696,6 +763,9 @@ export class PixiRenderer extends LegacyCanvasRenderer {
       const over = getTowerCutawayOver(room, origin.originX, origin.originY, width, height, 1);
       if (over?.canvas && this.towerOverSprite) {
         this.towerOverSprite.texture = Texture.from(over.canvas);
+        if (this.towerOverSprite.texture?.source) {
+          this.towerOverSprite.texture.source.update();
+        }
         this.towerOverSprite.position.set(over.minX, over.minY);
         this.towerOverSprite.visible = true;
       } else if (this.towerOverSprite) {
@@ -741,6 +811,9 @@ export class PixiRenderer extends LegacyCanvasRenderer {
           const lm = getRoomLightMap(room, placed, origin.originX, origin.originY, lightsOn, 1);
           if (lm && lm.canvas) {
             this.lightMapSprite.texture = Texture.from(lm.canvas);
+            if (this.lightMapSprite.texture?.source) {
+              this.lightMapSprite.texture.source.update();
+            }
             this.lightMapSprite.position.set(lm.minX, lm.minY);
             const s = 1 / (lm.scale || 0.25);
             this.lightMapSprite.scale.set(s, s);

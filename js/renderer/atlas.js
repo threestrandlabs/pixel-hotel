@@ -127,19 +127,57 @@ export async function bakeFallbackAtlasTimeSliced({
   }
   const floorMatList = Array.isArray(FLOOR_MATERIALS) ? FLOOR_MATERIALS : Object.keys(FLOOR_MATERIALS);
   for (const mat of [...floorMatList].sort()) {
-    tasks.push({ name: `floor:mat:${mat}:0:0`, run: () => buildFloorTile('#e8dcc8', '#dfd2bc', 0, 0, mat) });
+    for (let variant = 0; variant < 2; variant++) {
+      tasks.push({ name: `floor:mat:${mat}:${variant}`, run: () => buildFloorTile('#e8dcc8', variant, mat) });
+      tasks.push({ name: `floor:mat:${mat}:${variant}:0`, run: () => buildFloorTile('#e8dcc8', variant, mat) });
+      tasks.push({ name: `floor:mat:${mat}:${variant}:1`, run: () => buildFloorTile('#e8dcc8', variant, mat) });
+    }
   }
+  for (const room of Object.values(ROOMS)) {
+    const zt = room.zoneTiles;
+    for (let variant = 0; variant < 2; variant++) {
+      tasks.push({ name: `floor:room:${room.id}:base:${variant}`, run: () => buildFloorTile(room.floorColor, variant, room.floorMaterial || 'marble') });
+      tasks.push({ name: `floor:room:${room.id}:${variant}`, run: () => buildFloorTile(room.floorColor, variant, room.floorMaterial || 'marble') });
+      tasks.push({ name: `floor:room:${room.id}:${variant}:0`, run: () => buildFloorTile(room.floorColor, variant, room.floorMaterial || 'marble') });
+      tasks.push({ name: `floor:room:${room.id}:${variant}:1`, run: () => buildFloorTile(room.floorColor, variant, room.floorMaterial || 'marble') });
+
+      if (zt) {
+        const zColor = zt.color || room.floorColor;
+        const zMat = zt.material || room.floorMaterial || 'marble';
+        tasks.push({ name: `floor:room:${room.id}:zone:${variant}`, run: () => buildFloorTile(zColor, variant, zMat) });
+      }
+
+      if (room.zones) {
+        for (let zi = 0; zi < room.zones.length; zi++) {
+          const z = room.zones[zi];
+          const zColor = z.color || room.floorColor;
+          const zMat = z.material || room.floorMaterial || 'marble';
+          tasks.push({ name: `floor:room:${room.id}:subzone:${zi}:${variant}`, run: () => buildFloorTile(zColor, variant, zMat) });
+        }
+      }
+    }
+    tasks.push({ name: `tile:door:room:${room.id}`, run: () => buildDoorTile(room.floorColor) });
+    tasks.push({ name: `tile:elevator:room:${room.id}`, run: () => buildElevatorTile(room.floorColor) });
+  }
+  tasks.push({ name: 'tile:door', run: () => buildDoorTile() });
+  tasks.push({ name: 'tile:elevator', run: () => buildElevatorTile() });
   for (const dir of ['north', 'west']) {
     tasks.push({ name: `wall:default:${dir}`, run: () => buildWallSegment('#d8d0c4', dir) });
-    tasks.push({ name: `window:default:${dir}`, run: () => buildWindowSegment('#d8d0c4', dir, '#78b0d8') });
+    tasks.push({ name: `window:default:${dir}`, run: () => buildWindowSegment('#d8d0c4', { top: '#8fd0ff', bottom: '#fff6c9' }, dir) });
     tasks.push({ name: `door:default:${dir}`, run: () => buildDoorSegment('#d8d0c4', dir) });
     tasks.push({ name: `elevator_door:default:${dir}`, run: () => buildElevatorDoorSegment('#d8d0c4', dir) });
     tasks.push({ name: `stairwell_door:default:${dir}`, run: () => buildStairwellDoorSegment('#d8d0c4', dir) });
     tasks.push({ name: `balustrade:default:${dir}`, run: () => buildGlassBalustradeSegment('#d8d0c4', dir) });
     tasks.push({ name: `edge_rail:default:${dir}`, run: () => buildEdgeRailSegment('#d8d0c4', dir) });
+    for (const room of Object.values(ROOMS)) {
+      const wCol = room.wallColor || '#d8d0c4';
+      tasks.push({ name: `wall:room:${room.id}:${dir}`, run: () => buildWallSegment(wCol, dir) });
+      tasks.push({ name: `window:room:${room.id}:${dir}`, run: () => buildWindowSegment(wCol, { top: '#8fd0ff', bottom: '#fff6c9' }, dir) });
+      tasks.push({ name: `door:room:${room.id}:${dir}`, run: () => buildDoorSegment(wCol, dir) });
+      tasks.push({ name: `elevator_door:room:${room.id}:${dir}`, run: () => buildElevatorDoorSegment(wCol, dir) });
+      tasks.push({ name: `stairwell_door:room:${room.id}:${dir}`, run: () => buildStairwellDoorSegment(wCol, dir) });
+    }
   }
-  tasks.push({ name: 'tile:door', run: () => buildDoorTile() });
-  tasks.push({ name: 'tile:elevator', run: () => buildElevatorTile() });
 
   const frames = {};
   let curX = 2;
