@@ -462,15 +462,26 @@ async function main() {
     await page.waitForTimeout(80);
 
     // ---- v0.7.0: vehicles on the isometric city roads ----
-    const roadColors = await page.evaluate(() => {
-      const c = document.getElementById('bgCanvas') || document.getElementById('gameCanvas');
-      const ctx = c.getContext('2d');
-      const data = ctx.getImageData(0, Math.floor(c.height * 0.72), c.width, Math.floor(c.height * 0.22)).data;
+    const roadScene = await page.evaluate(() => {
+      const dbg = typeof window.__pixelHotel.debugScene === 'function' ? window.__pixelHotel.debugScene() : null;
       const colors = new Set();
-      for (let i = 0; i < data.length; i += 4 * 31) colors.add(`${data[i]},${data[i + 1]},${data[i + 2]}`);
-      return colors.size;
+      for (const id of ['bgCanvas', 'buildingsCanvas', 'vehicleCanvas', 'gameCanvas']) {
+        const c = document.getElementById(id);
+        if (!c || !c.width || !c.height) continue;
+        const ctx = c.getContext('2d');
+        if (!ctx) continue;
+        const hBand = Math.max(1, Math.floor(c.height * 0.22));
+        const data = ctx.getImageData(0, Math.floor(c.height * 0.72), c.width, hBand).data;
+        for (let i = 0; i < data.length; i += 4 * 31) {
+          if (data[i + 3] > 0) colors.add(`${data[i]},${data[i + 1]},${data[i + 2]}`);
+        }
+      }
+      return { roadColors: colors.size, vehiclesCount: dbg ? dbg.vehiclesCount : 0 };
     });
-    check('street/road band below the hotel renders many distinct colours (vehicles, lanes, crossings)', roadColors > 15);
+    check(
+      'street/road band below the hotel renders many distinct colours (vehicles, lanes, crossings)',
+      roadScene.roadColors > 15 && (!roadScene.vehiclesCount || roadScene.vehiclesCount > 0),
+    );
 
     // ---- v0.7.0: every catalogue item renders a non-empty icon ----
     const iconCheck = await page.evaluate(async () => {

@@ -69,6 +69,7 @@ export function createDefaultState() {
       backgroundDetail: 'auto',
       spriteDetail: 'auto',
       weatherEffects: true,
+      renderer: 'legacy',
     },
   };
 }
@@ -715,6 +716,11 @@ export function loadState(storage) {
     mergedSettings.spriteDetail = String(rawSettings.spriteDetail).toLowerCase();
   } else {
     mergedSettings.spriteDetail = 'auto';
+  }
+  if (['legacy', 'pixi'].includes(String(rawSettings.renderer).toLowerCase())) {
+    mergedSettings.renderer = String(rawSettings.renderer).toLowerCase();
+  } else {
+    mergedSettings.renderer = 'legacy';
   }
   mergedSettings.muted = !!(mergedSettings.musicMuted && mergedSettings.sfxMuted);
   return {

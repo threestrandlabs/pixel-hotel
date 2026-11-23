@@ -3452,3 +3452,63 @@ test('leftovers: street tree uses mid-tone green outline and softened canopy bot
   assert.ok(canopy.some((r) => r.c === rmp.right), 'mid-tone green outline present');
   assert.ok(!canopy.some((r) => r.c === rmp.line), 'dark outline tone replaced by mid-tone green');
 });
+
+// ======================= Phase 0: Renderer seam (js/renderer/index.js) =======================
+
+import {
+  resolveRendererChoice, createRenderer, LegacyCanvasRenderer, PixiRenderer,
+} from '../js/renderer/index.js';
+
+test('p0 renderer seam: resolveRendererChoice defaults to legacy and respects ?renderer= and settings.renderer', () => {
+  assert.equal(resolveRendererChoice('', null), 'legacy');
+  assert.equal(resolveRendererChoice('', { renderer: 'legacy' }), 'legacy');
+  assert.equal(resolveRendererChoice('', { renderer: 'pixi' }), 'pixi');
+  assert.equal(resolveRendererChoice('?renderer=pixi', { renderer: 'legacy' }), 'pixi');
+  assert.equal(resolveRendererChoice('?renderer=legacy', { renderer: 'pixi' }), 'legacy');
+  assert.equal(resolveRendererChoice('?renderer=unknown', { renderer: 'unknown' }), 'legacy');
+});
+
+test('p0 renderer seam: createRenderer wraps LegacyCanvasRenderer and PixiRenderer stub falls back to legacy', () => {
+  const legacy = createRenderer({ search: '', settings: { renderer: 'legacy' } });
+  assert.ok(legacy instanceof LegacyCanvasRenderer);
+  assert.equal(legacy.backend, 'legacy');
+  assert.equal(legacy.requestedRenderer, 'legacy');
+
+  const pixiStub = createRenderer({ search: '?renderer=pixi' });
+  assert.ok(pixiStub instanceof PixiRenderer);
+  assert.equal(pixiStub.backend, 'legacy');
+  assert.equal(pixiStub.requestedRenderer, 'pixi');
+  assert.ok(pixiStub.fallbackReason);
+
+  const fakeCanvas = {
+    width: 960,
+    height: 600,
+    getContext: () => makeFakeCanvasCtx({ record: false }),
+    toDataURL: () => 'data:image/png;base64,fake',
+  };
+  legacy.init(fakeCanvas, { cssW: 960, cssH: 600, dpr: 2, document: { getElementById: () => null } });
+  const r = legacy.resize(1440, 900, 2);
+  assert.equal(r.cssW, 1440);
+  assert.equal(r.cssH, 900);
+  assert.equal(r.dpr, 2);
+  assert.equal(fakeCanvas.width, 2880);
+  assert.equal(fakeCanvas.height, 1800);
+
+  // Round-trip worldToScreen / screenToTile through renderer instance
+  const cam = { zoom: 1.5, panX: 20, panY: -10 };
+  legacy.currentRoom = ROOMS.lobby;
+  legacy.lastFrameState = { room: ROOMS.lobby, camera: cam, placedFurniture: [{ itemId: 'stool', x: 5, y: 5, rot: 0 }], entities: [{ id: 'player', spriteKey: 'player', dir: 'down' }] };
+  const s = legacy.tileToScreen(6, 4);
+  const t = legacy.screenToTile(s.sx, s.sy);
+  assert.deepEqual(t, { x: 6, y: 4 });
+  assert.equal(legacy.snapshot(), 'data:image/png;base64,fake');
+
+  const dbg = legacy.debugScene();
+  assert.equal(dbg.backend, 'legacy');
+  assert.equal(dbg.room, 'lobby');
+  assert.equal(dbg.counts.furniture, 1);
+  assert.equal(dbg.counts.entities, 1);
+  assert.ok(dbg.layers.includes('worldSorted'));
+  assert.ok(dbg.frameNames.includes('furn:stool:0:all'));
+  legacy.destroy();
+});
