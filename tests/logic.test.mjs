@@ -3549,3 +3549,85 @@ test('p0 gates & baseline: load-gate, floor-shots, complaints-checklist scripts 
   for (let i = 1; i <= 11; i++) assert.ok(ids.has(`F${i}`), `checklist has F${i}`);
   for (let i = 1; i <= 8; i++) assert.ok(ids.has(`N${i}`), `checklist has N${i}`);
 });
+
+test('p1 atlas: collectDetailFrames & manifest cover every catalogue item x 4 rots x layers + off + icons + floor/wall/window/door/skirting with valid pivots and zero near-black #2a1d2e outline pixels', async () => {
+  const { collectDetailFrames, packBitmapsIntoPages } = await import('../scripts/build-atlas.mjs');
+  const c1 = collectDetailFrames(1);
+  const pages1 = packBitmapsIntoPages(c1.uniqueBitmaps, 2048, 2);
+  assert.ok(pages1.length >= 1 && pages1.length <= 4, `DETAIL=1 fits in ${pages1.length} pages <= 2048x2048`);
+  for (const p of pages1) {
+    assert.ok(p.width <= 2048 && p.height <= 2048, `page ${p.index} is ${p.width}x${p.height} <= 2048x2048`);
+  }
+
+  const frameMap = new Map(c1.frames.map((f) => [f.name, f.bmp]));
+  for (const item of CATALOGUE) {
+    assert.ok(frameMap.has(`icon:${item.id}`), `icon:${item.id} exists`);
+    for (let rot = 0; rot < 4; rot++) {
+      for (const layer of ['all', 'back', 'front']) {
+        const key = `furn:${item.id}:${rot}:${layer}`;
+        const bmp = frameMap.get(key);
+        assert.ok(bmp, `${key} exists in atlas`);
+        assert.ok(bmp.w > 0 && bmp.h > 0 && Number.isFinite(bmp.ax) && Number.isFinite(bmp.ay), `${key} has valid dimensions & pivot`);
+      }
+      assert.ok(frameMap.has(`furn:${item.id}:${rot}:all:off`), `furn:${item.id}:${rot}:all:off exists`);
+    }
+  }
+  for (const dir of ['north', 'west']) {
+    for (const prefix of ['wall', 'window', 'door', 'elevator_door', 'stairwell_door', 'balustrade', 'edge_rail', 'skirting']) {
+      assert.ok(frameMap.has(`${prefix}:default:${dir}`), `${prefix}:default:${dir} exists`);
+    }
+  }
+
+  // Outline-colour check: zero near-black #2a1d2e = rgb(42, 29, 46) pixels across all unique bitmaps
+  let nearBlackCount = 0;
+  for (const bmp of c1.uniqueBitmaps) {
+    const d = bmp.rgba;
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i + 3] > 0 && d[i] === 42 && d[i + 1] === 29 && d[i + 2] === 46) {
+        nearBlackCount++;
+      }
+    }
+  }
+  assert.equal(nearBlackCount, 0, 'zero near-black #2a1d2e pixels in any baked atlas bitmap');
+});
+
+test('p1 atlas runtime: time-sliced fallback packer caches by version+DETAIL and CharacterDynamicAtlas enforces bounded LRU', async () => {
+  const { getAtlasCacheKey, bakeFallbackAtlasTimeSliced, createCharacterAtlas } = await import('../js/renderer/atlas.js');
+  assert.equal(getAtlasCacheKey('0.13.1', 1), 'v0.13.1:detail1');
+  assert.equal(getAtlasCacheKey('v0.13.1', 2), 'v0.13.1:detail2');
+
+  const store = new Map();
+  let fakeNow = 0;
+  let yields = 0;
+  const res1 = await bakeFallbackAtlasTimeSliced({
+    version: '0.13.1',
+    detail: 1,
+    budgetMs: 6,
+    store,
+    nowFn: () => {
+      fakeNow += 2;
+      return fakeNow;
+    },
+    yieldFn: async () => {
+      yields++;
+    },
+  });
+  assert.equal(res1.fromCache, false);
+  assert.ok(res1.sliceCount > 1 && yields > 0, 'time-sliced fallback yields across frames');
+  assert.ok(res1.frameCount >= CATALOGUE.length * 12, 'fallback packer bakes all catalogue rotations and layers');
+
+  const res2 = await bakeFallbackAtlasTimeSliced({ version: '0.13.1', detail: 1, store });
+  assert.equal(res2.fromCache, true);
+  assert.equal(res2.frameCount, res1.frameCount);
+
+  const charAtlas = createCharacterAtlas({ maxEntries: 3, pageSize: 512 });
+  const look = { hairStyle: 'short', hair: '#3b2416', skin: '#f0c49a', shirt: '#4da3ff', pants: '#2c3e63', outfit: 'tee' };
+  const e1 = charAtlas.getOrBake(charAtlas.buildKey('p1', 'down', 'idle', 1), look, 'down', {}, 1);
+  assert.ok(e1.w > 0 && e1.h > 0);
+  charAtlas.getOrBake(charAtlas.buildKey('p1', 'up', 'idle', 1), look, 'up', {}, 1);
+  charAtlas.getOrBake(charAtlas.buildKey('p1', 'left', 'idle', 1), look, 'left', {}, 1);
+  charAtlas.getOrBake(charAtlas.buildKey('p1', 'right', 'idle', 1), look, 'right', {}, 1);
+  const stats = charAtlas.stats();
+  assert.equal(stats.size, 3);
+  assert.equal(stats.evictions, 1);
+});

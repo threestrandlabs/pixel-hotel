@@ -37,9 +37,10 @@ jobs:
         run: npm ci
       - name: Assemble static site
         run: |
-          mkdir -p _site/vendor
+          mkdir -p _site/vendor _site/atlas
           cp -r index.html css js audio _site/
           cp node_modules/pixi.js/dist/pixi.min.mjs _site/vendor/pixi.min.mjs
+          node scripts/build-atlas.mjs _site/atlas
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v4
         with:
