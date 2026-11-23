@@ -8,12 +8,24 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import fs from 'node:fs';
 import http from 'node:http';
+import net from 'node:net';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
-const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 8735;
-const BASE_URL = `http://localhost:${PORT}`;
+let PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 8788;
+let BASE_URL = `http://127.0.0.1:${PORT}`;
 const SCREENSHOT_DIR = path.join(__dirname, 'screenshots');
+
+function getFreePort() {
+  return new Promise((resolve, reject) => {
+    const srv = net.createServer();
+    srv.listen(0, '127.0.0.1', () => {
+      const port = srv.address().port;
+      srv.close(() => resolve(port));
+    });
+    srv.on('error', reject);
+  });
+}
 
 // Installed in-page via page.addInitScript() for the mocked multiplayer UI
 // flow tests below. Builds a fake Supabase client (auth/rpc/from/channel)
@@ -312,6 +324,11 @@ function waitForServer(url, timeoutMs = 10000) {
 
 async function main() {
   fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
+
+  if (!process.env.PORT) {
+    PORT = await getFreePort();
+    BASE_URL = `http://127.0.0.1:${PORT}`;
+  }
 
   console.log(`Starting static server on port ${PORT}...`);
   const server = spawn('python3', ['-m', 'http.server', String(PORT)], { cwd: ROOT, stdio: 'ignore' });

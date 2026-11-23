@@ -10,7 +10,7 @@ self.onmessage = async (e) => {
   const totalW = Math.max(1, Math.round((width + 2 * ox) * bgScale));
   const totalH = Math.max(1, Math.round((height + 2 * oy) * bgScale));
 
-  const layers = ['ground', 'buildings', 'sky'];
+  const layers = ['sky', 'ground', 'buildings'];
 
   for (const layer of layers) {
     let allBeacons = [];

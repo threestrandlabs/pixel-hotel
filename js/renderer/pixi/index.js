@@ -48,6 +48,10 @@ export class PixiRenderer extends LegacyCanvasRenderer {
     this.loadedDetail = null;
     this.lastBuiltRoomKey = '';
     this.lastBuiltFurnitureKey = '';
+    this.lastBuiltWallsKey = '';
+    this.lastCutawayKey = '';
+    this.lastTintKey = '';
+    this.lastLightKey = '';
     this.furnitureSprites = [];
     this.entitySprites = new Map();
     this.entityShadowGraphics = null;
@@ -319,6 +323,9 @@ export class PixiRenderer extends LegacyCanvasRenderer {
     if (!room || !this.wallsLayer || !this.PIXI) return;
     const { Sprite } = this.PIXI;
     const origin = computeOrigin(room, this.cssW, this.cssH);
+    const key = `${room.id}:${origin.originX},${origin.originY}:${this.loadedDetail}`;
+    if (this.lastBuiltWallsKey === key) return;
+    this.lastBuiltWallsKey = key;
     this.wallsLayer.removeChildren();
 
     for (let y = 0; y < room.height; y++) {
@@ -673,22 +680,27 @@ export class PixiRenderer extends LegacyCanvasRenderer {
   updateCutaway(room, origin, width, height, phase, dpr) {
     if (!room || !this.PIXI) return;
     const { Texture } = this.PIXI;
-    const under = getTowerCutawayUnder(room, origin.originX, origin.originY, width, height, phase, 1);
-    if (under?.canvas && this.towerUnderSprite) {
-      this.towerUnderSprite.texture = Texture.from(under.canvas);
-      this.towerUnderSprite.position.set(under.minX, under.minY);
-      this.towerUnderSprite.visible = true;
-    } else if (this.towerUnderSprite) {
-      this.towerUnderSprite.visible = false;
-    }
+    const phaseBucket = Math.round((phase ?? 0.5) * 20);
+    const key = `${room.id}:${origin.originX},${origin.originY}:${width}x${height}:${phaseBucket}`;
+    if (this.lastCutawayKey !== key) {
+      this.lastCutawayKey = key;
+      const under = getTowerCutawayUnder(room, origin.originX, origin.originY, width, height, phase, 1);
+      if (under?.canvas && this.towerUnderSprite) {
+        this.towerUnderSprite.texture = Texture.from(under.canvas);
+        this.towerUnderSprite.position.set(under.minX, under.minY);
+        this.towerUnderSprite.visible = true;
+      } else if (this.towerUnderSprite) {
+        this.towerUnderSprite.visible = false;
+      }
 
-    const over = getTowerCutawayOver(room, origin.originX, origin.originY, width, height, 1);
-    if (over?.canvas && this.towerOverSprite) {
-      this.towerOverSprite.texture = Texture.from(over.canvas);
-      this.towerOverSprite.position.set(over.minX, over.minY);
-      this.towerOverSprite.visible = true;
-    } else if (this.towerOverSprite) {
-      this.towerOverSprite.visible = false;
+      const over = getTowerCutawayOver(room, origin.originX, origin.originY, width, height, 1);
+      if (over?.canvas && this.towerOverSprite) {
+        this.towerOverSprite.texture = Texture.from(over.canvas);
+        this.towerOverSprite.position.set(over.minX, over.minY);
+        this.towerOverSprite.visible = true;
+      } else if (this.towerOverSprite) {
+        this.towerOverSprite.visible = false;
+      }
     }
   }
 
@@ -702,16 +714,20 @@ export class PixiRenderer extends LegacyCanvasRenderer {
       ? (roomAmbient ? lerpColor('#5b6bb0', roomAmbient.tint || '#261420', 0.5) : '#5b6bb0')
       : (roomAmbient?.tint || '#261420');
 
-    this.tintGraphics.clear();
     if (effectiveTintAlpha > 0.02) {
-      const viewMinX = origin.originX - 1600;
-      const viewMaxX = origin.originX + 1600;
-      const viewMinY = origin.originY - 1200;
-      const viewMaxY = origin.originY + 1600;
-      const col = parseInt(effectiveTintColor.replace('#', ''), 16);
-      this.tintGraphics.rect(viewMinX, viewMinY, viewMaxX - viewMinX, viewMaxY - viewMinY);
-      this.tintGraphics.fill({ color: col, alpha: effectiveTintAlpha });
-      this.tintGraphics.blendMode = 'multiply';
+      const tintKey = `${room?.id}:${effectiveTintColor}:${Math.round(effectiveTintAlpha * 100)}:${origin.originX},${origin.originY}`;
+      if (this.lastTintKey !== tintKey) {
+        this.lastTintKey = tintKey;
+        this.tintGraphics.clear();
+        const viewMinX = origin.originX - 1600;
+        const viewMaxX = origin.originX + 1600;
+        const viewMinY = origin.originY - 1200;
+        const viewMaxY = origin.originY + 1600;
+        const col = parseInt(effectiveTintColor.replace('#', ''), 16);
+        this.tintGraphics.rect(viewMinX, viewMinY, viewMaxX - viewMinX, viewMaxY - viewMinY);
+        this.tintGraphics.fill({ color: col, alpha: effectiveTintAlpha });
+        this.tintGraphics.blendMode = 'multiply';
+      }
       this.tintGraphics.visible = true;
 
       const lightStrength = Math.max(
@@ -719,13 +735,19 @@ export class PixiRenderer extends LegacyCanvasRenderer {
         roomAmbient?.warmGlow ? (roomAmbient.darkness || 0.35) * 2.2 : 0,
       );
       if (lightStrength > 0.01 && room) {
-        const lm = getRoomLightMap(room, placed, origin.originX, origin.originY, lightsOn, 1);
-        if (lm && lm.canvas) {
-          this.lightMapSprite.texture = Texture.from(lm.canvas);
-          this.lightMapSprite.position.set(lm.minX, lm.minY);
-          const s = 1 / (lm.scale || 0.25);
-          this.lightMapSprite.scale.set(s, s);
-          this.lightMapSprite.blendMode = 'screen';
+        const lightKey = `${room.id}:${placed.length}:${lightsOn ? 'L' : 'D'}:${origin.originX},${origin.originY}`;
+        if (this.lastLightKey !== lightKey) {
+          this.lastLightKey = lightKey;
+          const lm = getRoomLightMap(room, placed, origin.originX, origin.originY, lightsOn, 1);
+          if (lm && lm.canvas) {
+            this.lightMapSprite.texture = Texture.from(lm.canvas);
+            this.lightMapSprite.position.set(lm.minX, lm.minY);
+            const s = 1 / (lm.scale || 0.25);
+            this.lightMapSprite.scale.set(s, s);
+            this.lightMapSprite.blendMode = 'screen';
+          }
+        }
+        if (this.lightMapSprite.texture) {
           this.lightMapSprite.alpha = lightStrength;
           this.lightMapSprite.visible = true;
         } else {
@@ -735,6 +757,7 @@ export class PixiRenderer extends LegacyCanvasRenderer {
         this.lightMapSprite.visible = false;
       }
     } else {
+      this.lastTintKey = '';
       this.tintGraphics.visible = false;
       this.lightMapSprite.visible = false;
     }
@@ -1126,6 +1149,10 @@ export class PixiRenderer extends LegacyCanvasRenderer {
     this.domNameTags = [];
     this.domBubbles = [];
     this.lastBuiltFurnitureKey = '';
+    this.lastBuiltWallsKey = '';
+    this.lastCutawayKey = '';
+    this.lastTintKey = '';
+    this.lastLightKey = '';
     this.isReady = false;
   }
 }
