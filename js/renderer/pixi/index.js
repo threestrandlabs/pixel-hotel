@@ -6,6 +6,7 @@ import {
   computeOrigin, tileToScreen as rawTileToScreen, worldToScreen as rawWorldToScreen,
   screenToTile as rawScreenToTile, hitTestNpc as rawHitTestNpc, getItemIconDataUrl as rawGetItemIconDataUrl,
   DEFAULT_ZOOM, MIN_ZOOM, MAX_ZOOM, clampZoom, getSeatConfig, entityScreenBounds,
+  getTowerCutawayUnder, getTowerCutawayOver, getRoomLightMap, dayNightColors, lerpColor,
 } from '../../render.js';
 import { getDetail } from '../../pixelart.js';
 import { TILE, getCatalogueItem } from '../../data.js';
@@ -52,6 +53,13 @@ export class PixiRenderer extends LegacyCanvasRenderer {
     this.entityShadowGraphics = null;
     this.entityFxGraphics = null;
     this.charTextureCache = new Map();
+    this.towerUnderSprite = null;
+    this.towerOverSprite = null;
+    this.tintGraphics = null;
+    this.lightMapSprite = null;
+    this.overlayGraphics = null;
+    this.screenOverlay = null;
+    this.elevatorGraphics = null;
   }
 
   init(canvasHost, opts = {}) {
@@ -160,6 +168,27 @@ export class PixiRenderer extends LegacyCanvasRenderer {
       this.world.addChild(this.fxLayer);
       this.world.addChild(this.towerOver);
       this.world.addChild(this.overlayLayer);
+
+      this.towerUnderSprite = new Sprite();
+      this.towerUnder.addChild(this.towerUnderSprite);
+
+      this.towerOverSprite = new Sprite();
+      this.towerOver.addChild(this.towerOverSprite);
+
+      this.tintGraphics = new Graphics();
+      this.fxLayer.addChild(this.tintGraphics);
+
+      this.lightMapSprite = new Sprite();
+      this.fxLayer.addChild(this.lightMapSprite);
+
+      this.overlayGraphics = new Graphics();
+      this.overlayLayer.addChild(this.overlayGraphics);
+
+      this.screenOverlay = new Container();
+      this.stage.addChild(this.screenOverlay);
+
+      this.elevatorGraphics = new Graphics();
+      this.screenOverlay.addChild(this.elevatorGraphics);
 
       // Ingest pre-baked atlas pages
       await this.loadAtlas(getDetail());
@@ -597,6 +626,22 @@ export class PixiRenderer extends LegacyCanvasRenderer {
 
     if (room) {
       const origin = computeOrigin(room, frameState.width || this.cssW, frameState.height || this.cssH);
+      this.updateCutaway(
+        room,
+        origin,
+        frameState.width || this.cssW,
+        frameState.height || this.cssH,
+        frameState.phase ?? 0.5,
+        this.dpr,
+      );
+      this.updateFx(
+        room,
+        placed,
+        origin,
+        lightsOn,
+        frameState.phase ?? 0.5,
+      );
+      this.updateOverlays(frameState, origin);
       this.updateEntities(
         frameState.entities || [],
         room,
@@ -608,8 +653,176 @@ export class PixiRenderer extends LegacyCanvasRenderer {
         frameState.now || 0,
       );
     }
+    this.updateElevator(
+      frameState.elevatorAnim,
+      frameState.width || this.cssW,
+      frameState.height || this.cssH,
+      frameState.now || 0,
+    );
 
     this.app.render();
+  }
+
+  updateCutaway(room, origin, width, height, phase, dpr) {
+    if (!room || !this.PIXI) return;
+    const { Texture } = this.PIXI;
+    const under = getTowerCutawayUnder(room, origin.originX, origin.originY, width, height, phase, 1);
+    if (under?.canvas && this.towerUnderSprite) {
+      this.towerUnderSprite.texture = Texture.from(under.canvas);
+      this.towerUnderSprite.position.set(under.minX, under.minY);
+      this.towerUnderSprite.visible = true;
+    } else if (this.towerUnderSprite) {
+      this.towerUnderSprite.visible = false;
+    }
+
+    const over = getTowerCutawayOver(room, origin.originX, origin.originY, width, height, 1);
+    if (over?.canvas && this.towerOverSprite) {
+      this.towerOverSprite.texture = Texture.from(over.canvas);
+      this.towerOverSprite.position.set(over.minX, over.minY);
+      this.towerOverSprite.visible = true;
+    } else if (this.towerOverSprite) {
+      this.towerOverSprite.visible = false;
+    }
+  }
+
+  updateFx(room, placed, origin, lightsOn, phase) {
+    if (!this.PIXI || !this.tintGraphics || !this.lightMapSprite) return;
+    const { Texture } = this.PIXI;
+    const { tintAlpha } = dayNightColors(phase);
+    const roomAmbient = room?.ambientLighting;
+    const effectiveTintAlpha = Math.max(tintAlpha, roomAmbient ? (roomAmbient.darkness || 0.3) : 0);
+    const effectiveTintColor = (tintAlpha > 0.02)
+      ? (roomAmbient ? lerpColor('#5b6bb0', roomAmbient.tint || '#261420', 0.5) : '#5b6bb0')
+      : (roomAmbient?.tint || '#261420');
+
+    this.tintGraphics.clear();
+    if (effectiveTintAlpha > 0.02) {
+      const viewMinX = origin.originX - 1600;
+      const viewMaxX = origin.originX + 1600;
+      const viewMinY = origin.originY - 1200;
+      const viewMaxY = origin.originY + 1600;
+      const col = parseInt(effectiveTintColor.replace('#', ''), 16);
+      this.tintGraphics.rect(viewMinX, viewMinY, viewMaxX - viewMinX, viewMaxY - viewMinY);
+      this.tintGraphics.fill({ color: col, alpha: effectiveTintAlpha });
+      this.tintGraphics.blendMode = 'multiply';
+      this.tintGraphics.visible = true;
+
+      const lightStrength = Math.max(
+        Math.min(1, tintAlpha / 0.32),
+        roomAmbient?.warmGlow ? (roomAmbient.darkness || 0.35) * 2.2 : 0,
+      );
+      if (lightStrength > 0.01 && room) {
+        const lm = getRoomLightMap(room, placed, origin.originX, origin.originY, lightsOn, 1);
+        if (lm && lm.canvas) {
+          this.lightMapSprite.texture = Texture.from(lm.canvas);
+          this.lightMapSprite.position.set(lm.minX, lm.minY);
+          const s = 1 / (lm.scale || 0.25);
+          this.lightMapSprite.scale.set(s, s);
+          this.lightMapSprite.blendMode = 'screen';
+          this.lightMapSprite.alpha = lightStrength;
+          this.lightMapSprite.visible = true;
+        } else {
+          this.lightMapSprite.visible = false;
+        }
+      } else {
+        this.lightMapSprite.visible = false;
+      }
+    } else {
+      this.tintGraphics.visible = false;
+      this.lightMapSprite.visible = false;
+    }
+  }
+
+  drawDiamond(g, sx, sy, scale = 1) {
+    const hw = 32 * scale;
+    const hh = 16 * scale;
+    g.moveTo(sx, sy - hh);
+    g.lineTo(sx + hw, sy);
+    g.lineTo(sx, sy + hh);
+    g.lineTo(sx - hw, sy);
+    g.closePath();
+  }
+
+  updateOverlays(frameState, origin) {
+    if (!this.overlayGraphics) return;
+    this.overlayGraphics.clear();
+
+    if (frameState.hoverTile) {
+      const { sx, sy } = rawTileToScreen(frameState.hoverTile.x, frameState.hoverTile.y, origin.originX, origin.originY);
+      this.drawDiamond(this.overlayGraphics, sx, sy, 1);
+      this.overlayGraphics.fill({ color: 0xfff6c9, alpha: 0.35 });
+    }
+
+    if (frameState.ghost && frameState.ghost.cells) {
+      for (const c of frameState.ghost.cells) {
+        const { sx, sy } = rawTileToScreen(c.x, c.y, origin.originX, origin.originY);
+        this.drawDiamond(this.overlayGraphics, sx, sy, 1);
+        this.overlayGraphics.fill({ color: frameState.ghost.valid ? 0x7cfc9a : 0xff6b6b, alpha: 0.45 });
+      }
+    }
+
+    if (frameState.walkTarget) {
+      const wt = frameState.walkTarget;
+      const { sx, sy } = rawTileToScreen(wt.x, wt.y, origin.originX, origin.originY);
+      const age = Math.max(0, (frameState.now || 0) - wt.bornAt);
+      if (wt.blocked) {
+        if (age <= 420) {
+          const alpha = 0.55 * (1 - age / 420);
+          this.drawDiamond(this.overlayGraphics, sx, sy, 1);
+          this.overlayGraphics.fill({ color: 0xff5050, alpha });
+          this.drawDiamond(this.overlayGraphics, sx, sy, 1);
+          this.overlayGraphics.stroke({ color: 0x7a1414, alpha, width: 2 });
+        }
+      } else {
+        const pulse = 0.5 + 0.5 * Math.sin(age / 260);
+        this.drawDiamond(this.overlayGraphics, sx, sy, 1);
+        this.overlayGraphics.fill({ color: 0xffe9a8, alpha: 0.16 + pulse * 0.14 });
+
+        this.drawDiamond(this.overlayGraphics, sx, sy, 0.96);
+        this.overlayGraphics.stroke({ color: 0x14100a, alpha: 0.8 * 0.75, width: 3 });
+
+        this.drawDiamond(this.overlayGraphics, sx, sy, 0.96);
+        this.overlayGraphics.stroke({ color: 0xfff6d8, alpha: 0.9, width: 1.4 });
+
+        if (age < 360) {
+          const rt = age / 360;
+          this.drawDiamond(this.overlayGraphics, sx, sy, 0.3 + rt * 0.9);
+          this.overlayGraphics.stroke({ color: 0xfff6d8, alpha: 0.5 * (1 - rt), width: 2 });
+        }
+      }
+    }
+  }
+
+  updateElevator(anim, width, height, now) {
+    if (!this.elevatorGraphics) return;
+    this.elevatorGraphics.clear();
+    if (!anim) {
+      this.elevatorGraphics.visible = false;
+      return;
+    }
+    const t = Math.max(0, Math.min(1, (now - anim.start) / anim.duration));
+    const closeAmt = Math.sin(t * Math.PI);
+    if (closeAmt <= 0.01) {
+      this.elevatorGraphics.visible = false;
+      return;
+    }
+    this.elevatorGraphics.visible = true;
+    const panelW = Math.round((width * 0.52) * closeAmt);
+    this.elevatorGraphics.rect(0, 0, panelW, height);
+    this.elevatorGraphics.rect(width - panelW, 0, panelW, height);
+    this.elevatorGraphics.fill({ color: 0x121020, alpha: 0.88 });
+
+    this.elevatorGraphics.rect(panelW - 4, 0, 4, height);
+    this.elevatorGraphics.rect(width - panelW, 0, 4, height);
+    this.elevatorGraphics.fill({ color: 0xd8a848 });
+
+    const boxW = 220;
+    const boxH = 68;
+    const bx = Math.round((width - boxW) / 2);
+    const by = Math.round(height * 0.16);
+    this.elevatorGraphics.roundRect(bx, by, boxW, boxH, 10);
+    this.elevatorGraphics.fill({ color: 0x18122c, alpha: 0.96 });
+    this.elevatorGraphics.stroke({ color: 0xffd27a, width: 2.5 });
   }
 
   updateEntities(entities, room, origin, camera, width, height, dpr, now) {
@@ -725,6 +938,22 @@ export class PixiRenderer extends LegacyCanvasRenderer {
           this.entityFxGraphics.moveTo(wx, dy + 22 - wisp);
           this.entityFxGraphics.quadraticCurveTo(wx + 3, dy + 17 - wisp, wx, dy + 12 - wisp);
           this.entityFxGraphics.stroke({ color: 0xffecb4, alpha: 0.82, width: 1.6 });
+        }
+      } else if (e.action === 'swim' && this.entityFxGraphics) {
+        this.entityFxGraphics.ellipse(sx, sy - 2, 20, 9.5);
+        this.entityFxGraphics.fill({ color: 0x2abcD4, alpha: 0.58 });
+
+        const ringPhase = (e.actionFrame || 0) % 4;
+        this.entityFxGraphics.ellipse(sx, sy - 2, 14 + ringPhase * 2.5, 6.5 + ringPhase * 1.1);
+        this.entityFxGraphics.stroke({ color: 0xdcfcff, alpha: 0.88, width: 1.6 });
+
+        this.entityFxGraphics.ellipse(sx, sy - 2, 21 + ((ringPhase + 2) % 4) * 2, 9.5 + ((ringPhase + 2) % 4) * 0.9);
+        this.entityFxGraphics.stroke({ color: 0x8ceefc, alpha: 0.55, width: 1.2 });
+
+        const splashSide = (ringPhase % 2 === 0) ? -1 : 1;
+        for (const [sxOff, syOff, r] of [[splashSide * 15, -10, 2.2], [splashSide * 19, -6, 1.6], [-splashSide * 13, -7, 1.5]]) {
+          this.entityFxGraphics.circle(sx + sxOff, sy + syOff, r);
+          this.entityFxGraphics.fill({ color: 0xe8fcff });
         }
       }
 

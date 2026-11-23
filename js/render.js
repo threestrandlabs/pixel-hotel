@@ -284,7 +284,7 @@ export function roomPixelHeight(room) {
   return TOP_PADDING + WALL_H + TILE_H + (room.width + room.height) * (TILE_H / 2) + 40;
 }
 
-function dayNightColors(phase) {
+export function dayNightColors(phase) {
   // phase 0.5 = noon, 0 / 1 = midnight.
   const k = (0.5 - Math.abs(0.5 - phase)) * 2; // 0 midnight .. 1 noon
   const day = Math.min(1, Math.max(0, k * 1.65));
@@ -300,7 +300,7 @@ function dayNightColors(phase) {
   return { skyTop, skyMid, skyBottom, day, dusk, tintAlpha };
 }
 
-function lerpColor(a, b, t) {
+export function lerpColor(a, b, t) {
   t = Math.max(0, Math.min(1, t));
   const pa = hexToRgb(a), pb = hexToRgb(b);
   const r = Math.round(pa.r + (pb.r - pa.r) * t);
@@ -1435,7 +1435,7 @@ export function renderSkylineToCanvas(g, width, height, phase, floor, room = nul
 
 // ---------- Hotel Tower Cut-Away Architecture (Cached Static Layer) ----------
 
-export function drawTowerCutawayUnderCached(ctx, room, originX, originY, width, height, phase, dpr = 1) {
+export function getTowerCutawayUnder(room, originX, originY, width, height, phase, dpr = 1) {
   dpr = cutawayBakeScale(dpr);
   const phaseBucket = Math.round(phase * 48) % 48;
   const floorNo = (room.floor === 'R' || room.floor === 42 || room.floor === '42') ? 42 : (Number(room.floor) || 1);
@@ -1455,9 +1455,14 @@ export function drawTowerCutawayUnderCached(ctx, room, originX, originY, width, 
     g.setTransform(dpr, 0, 0, dpr, -minX * dpr, -minY * dpr);
     g.clearRect(minX, minY, w, h);
     drawTowerCutawayUnder(g, room, originX, originY, height, phaseBucket / 48);
-    cutawayCache = { key, canvas: off, minX, minY };
+    cutawayCache = { key, canvas: off, minX, minY, w, h };
   }
-  blitDeviceAligned(ctx, cutawayCache.canvas, cutawayCache.minX, cutawayCache.minY, dpr);
+  return cutawayCache;
+}
+
+export function drawTowerCutawayUnderCached(ctx, room, originX, originY, width, height, phase, dpr = 1) {
+  const c = getTowerCutawayUnder(room, originX, originY, width, height, phase, dpr);
+  blitDeviceAligned(ctx, c.canvas, c.minX, c.minY, cutawayBakeScale(dpr));
 }
 
 function drawTowerCutawayUnder(ctx, room, originX, originY, height, phase) {
@@ -1657,7 +1662,7 @@ function drawTowerCutawayUnder(ctx, room, originX, originY, height, phase) {
 // animation state), so — like drawTowerCutawayUnderCached — it is safe to
 // bake once per room/zoom/origin and blit thereafter instead of re-walking
 // every polygon every frame.
-export function drawTowerCutawayOverCached(ctx, room, originX, originY, width, height, dpr = 1) {
+export function getTowerCutawayOver(room, originX, originY, width, height, dpr = 1) {
   dpr = cutawayBakeScale(dpr);
   const minX = Math.floor(originX - (room.height - 1) * (TILE_W / 2) - TILE_W / 2 - 32);
   const maxX = Math.ceil(originX + (room.width - 1) * (TILE_W / 2) + TILE_W / 2 + 32);
@@ -1674,9 +1679,14 @@ export function drawTowerCutawayOverCached(ctx, room, originX, originY, width, h
     g.setTransform(dpr, 0, 0, dpr, -minX * dpr, -minY * dpr);
     g.clearRect(minX, minY, w, h);
     drawTowerCutawayOver(g, room, originX, originY);
-    cutawayOverCache = { key, canvas: off, minX, minY };
+    cutawayOverCache = { key, canvas: off, minX, minY, w, h };
   }
-  blitDeviceAligned(ctx, cutawayOverCache.canvas, cutawayOverCache.minX, cutawayOverCache.minY, dpr);
+  return cutawayOverCache;
+}
+
+export function drawTowerCutawayOverCached(ctx, room, originX, originY, width, height, dpr = 1) {
+  const c = getTowerCutawayOver(room, originX, originY, width, height, dpr);
+  blitDeviceAligned(ctx, c.canvas, c.minX, c.minY, cutawayBakeScale(dpr));
 }
 
 function drawTowerCutawayOver(ctx, room, originX, originY) {
@@ -2358,7 +2368,7 @@ export function drawPoolWaterLayer(ctx, poolItems, originX, originY, ds, now) {
   ctx.restore();
 }
 
-function getRoomLightMap(room, placedFurniture, originX, originY, lightsOn, ds) {
+export function getRoomLightMap(room, placedFurniture, originX, originY, lightsOn, ds) {
   const lightDs = 0.25;
   const placedKey = placedFurniture._lightKey || (placedFurniture._lightKey = placedFurniture.map((f) => `${f.itemId}@${f.x},${f.y}`).join(';'));
   const key = `${room.id}:${originX},${originY}:${lightsOn}:${lightDs}:${placedKey}`;
