@@ -3673,3 +3673,14 @@ test('p1 data: J7/F3 pool spa_partition line at x=24 has rot=1 running along y a
     assert.equal(p.rot, 1, `spa_partition at (24,${p.y}) should have rot=1`);
   }
 });
+
+test('p1 data: J6/F5 lobby lamps at (3,9) and (35,9) do not poke out behind armchairs and maintain door reachability & zero overlaps', async () => {
+  const { checkLobbyLampsNotBehindArmchairs } = await import('./complaints-checklist.mjs');
+  const res = checkLobbyLampsNotBehindArmchairs();
+  assert.equal(res.ok, true, `expected lobby lamps clear of armchairs, offenders: ${res.offenders.join(', ')}`);
+  assert.equal(res.offenders.length, 0);
+
+  const lobbyLamps = SEED_FURNITURE.lobby.filter((p) => p.itemId === 'lamp');
+  const coords = lobbyLamps.map((l) => `${l.x},${l.y}`).sort();
+  assert.deepEqual(coords, ['3,9', '35,9']);
+});
