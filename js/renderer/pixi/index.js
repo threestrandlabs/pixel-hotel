@@ -5,10 +5,10 @@
 import {
   computeOrigin, tileToScreen as rawTileToScreen, worldToScreen as rawWorldToScreen,
   screenToTile as rawScreenToTile, hitTestNpc as rawHitTestNpc, getItemIconDataUrl as rawGetItemIconDataUrl,
-  DEFAULT_ZOOM, MIN_ZOOM, MAX_ZOOM, clampZoom,
+  DEFAULT_ZOOM, MIN_ZOOM, MAX_ZOOM, clampZoom, getSeatConfig,
 } from '../../render.js';
 import { getDetail } from '../../pixelart.js';
-import { TILE } from '../../data.js';
+import { TILE, getCatalogueItem } from '../../data.js';
 import { LegacyCanvasRenderer } from '../legacy.js';
 
 export class PixiRenderer extends LegacyCanvasRenderer {
@@ -33,6 +33,9 @@ export class PixiRenderer extends LegacyCanvasRenderer {
     this.cityLayerContainer = null;
     this.towerUnder = null;
     this.floorLayer = null;
+    this.floorTilesContainer = null;
+    this.floorDecalsContainer = null;
+    this.wallsLayer = null;
     this.worldSorted = null;
     this.fxLayer = null;
     this.towerOver = null;
@@ -42,6 +45,8 @@ export class PixiRenderer extends LegacyCanvasRenderer {
     this.sheets = [];
     this.loadedDetail = null;
     this.lastBuiltRoomKey = '';
+    this.lastBuiltFurnitureKey = '';
+    this.furnitureSprites = [];
   }
 
   init(canvasHost, opts = {}) {
@@ -121,6 +126,14 @@ export class PixiRenderer extends LegacyCanvasRenderer {
       this.towerUnder = new Container();
       this.floorLayer = new Container();
       this.floorLayer.roundPixels = true;
+      this.floorTilesContainer = new Container();
+      this.floorDecalsContainer = new Container();
+      this.floorLayer.addChild(this.floorTilesContainer);
+      this.floorLayer.addChild(this.floorDecalsContainer);
+
+      this.wallsLayer = new Container();
+      this.wallsLayer.roundPixels = true;
+
       this.worldSorted = new Container();
       this.worldSorted.sortableChildren = true;
       this.worldSorted.roundPixels = true;
@@ -130,6 +143,7 @@ export class PixiRenderer extends LegacyCanvasRenderer {
 
       this.world.addChild(this.towerUnder);
       this.world.addChild(this.floorLayer);
+      this.world.addChild(this.wallsLayer);
       this.world.addChild(this.worldSorted);
       this.world.addChild(this.fxLayer);
       this.world.addChild(this.towerOver);
@@ -144,6 +158,8 @@ export class PixiRenderer extends LegacyCanvasRenderer {
 
       if (this.currentRoom) {
         this.buildFloorChunks(this.currentRoom);
+        this.buildWalls(this.currentRoom);
+        this.buildFurniture(this.currentRoom, this.currentPlaced || [], true);
       }
     } catch (err) {
       console.warn('Pixi WebGL init failed; falling back to LegacyCanvasRenderer:', err);
@@ -191,14 +207,14 @@ export class PixiRenderer extends LegacyCanvasRenderer {
   }
 
   buildFloorChunks(room) {
-    if (!room || !this.floorLayer || !this.PIXI) return;
+    if (!room || !this.floorTilesContainer || !this.PIXI) return;
     const { Sprite } = this.PIXI;
     const origin = computeOrigin(room, this.cssW, this.cssH);
     const key = `${room.id}:${origin.originX},${origin.originY}:${this.loadedDetail}`;
     if (this.lastBuiltRoomKey === key) return;
     this.lastBuiltRoomKey = key;
 
-    this.floorLayer.removeChildren();
+    this.floorTilesContainer.removeChildren();
 
     let doorMap = room._doorMap;
     if (!doorMap) {
@@ -246,7 +262,151 @@ export class PixiRenderer extends LegacyCanvasRenderer {
         if (tex) {
           const spr = new Sprite(tex);
           spr.position.set(sx, sy);
-          this.floorLayer.addChild(spr);
+          this.floorTilesContainer.addChild(spr);
+        }
+      }
+    }
+  }
+
+  buildWalls(room) {
+    if (!room || !this.wallsLayer || !this.PIXI) return;
+    const { Sprite } = this.PIXI;
+    const origin = computeOrigin(room, this.cssW, this.cssH);
+    this.wallsLayer.removeChildren();
+
+    for (let y = 0; y < room.height; y++) {
+      for (let x = 0; x < room.width; x++) {
+        const cell = room.grid[y][x];
+        if (cell !== TILE.WALL && cell !== TILE.WINDOW && cell !== TILE.DOOR) continue;
+        if (x === 0 && y === 0) continue;
+        const kind = y === 0 ? 'north' : 'west';
+        const { sx, sy } = rawTileToScreen(kind === 'north' ? x : 1, kind === 'north' ? 1 : y, origin.originX, origin.originY);
+
+        let frameKey;
+        const isRooftopHousing = room.isRooftop && y === 0 && x >= 4 && x <= 14;
+        if (room.isRooftop && !isRooftopHousing) {
+          frameKey = `balustrade:default:${kind}`;
+        } else if (cell === TILE.WINDOW) {
+          frameKey = `window:room:${room.id}:${kind}`;
+        } else if (cell === TILE.DOOR) {
+          frameKey = `door:default:${kind}`;
+        } else {
+          frameKey = `wall:room:${room.id}:${kind}`;
+        }
+
+        let tex = this.getTexture(frameKey);
+        if (!tex) {
+          if (cell === TILE.WINDOW) tex = this.getTexture(`window:default:${kind}`);
+          else if (cell === TILE.DOOR) tex = this.getTexture(`door:default:${kind}`);
+          else tex = this.getTexture(`wall:default:${kind}`);
+        }
+
+        if (tex) {
+          const spr = new Sprite(tex);
+          spr.position.set(sx, sy);
+          this.wallsLayer.addChild(spr);
+        }
+      }
+    }
+  }
+
+  buildFurniture(room, placedFurniture = [], lightsOn = true) {
+    if (!room || !this.worldSorted || !this.PIXI) return;
+    const { Sprite, Graphics } = this.PIXI;
+    const origin = computeOrigin(room, this.cssW, this.cssH);
+
+    for (const spr of this.furnitureSprites) {
+      spr.destroy?.();
+    }
+    this.furnitureSprites = [];
+    if (this.floorDecalsContainer) {
+      this.floorDecalsContainer.removeChildren();
+    }
+
+    const shadowG = new Graphics();
+    if (this.floorDecalsContainer) {
+      this.floorDecalsContainer.addChild(shadowG);
+    }
+
+    for (const f of placedFurniture) {
+      const item = getCatalogueItem(f.itemId);
+      const rot = ((f.rot || 0) % 4 + 4) % 4;
+      const spriteKey = item?.spriteKey || item?.sprite || f.itemId;
+      const tw = f.footprint?.w || 1;
+      const th = f.footprint?.h || 1;
+      const anchorX = f.x + tw / 2 - 0.5;
+      const anchorY = f.y + th / 2 - 0.5;
+      const { sx, sy } = rawTileToScreen(anchorX, anchorY, origin.originX, origin.originY);
+
+      if (item?.flat || f.itemId === 'pool_water') {
+        const frameKey = `furn:${spriteKey}:${rot}:all`;
+        const tex = this.getTexture(frameKey) || this.getTexture(`furn:${f.itemId}:${rot}:all`);
+        if (tex && this.floorDecalsContainer) {
+          const spr = new Sprite(tex);
+          spr.position.set(sx, sy);
+          this.floorDecalsContainer.addChild(spr);
+        }
+        continue;
+      }
+
+      // Footprint contact shadow
+      const rx = (tw + th) * 11;
+      const ry = (tw + th) * 5.5;
+      shadowG.ellipse(sx + 2, sy + 1, rx, ry);
+      shadowG.fill({ color: 0x180c24, alpha: 0.22 });
+
+      const frontX = f.x + (tw - 1);
+      const frontY = f.y + (th - 1);
+      const isOverhead = Boolean(item?.overhead);
+      const offTag = !lightsOn && item?.lightSource ? ':off' : '';
+
+      const texAll = (
+        this.getTexture(`furn:${spriteKey}:${rot}:all${offTag}`) ||
+        this.getTexture(`furn:${f.itemId}:${rot}:all${offTag}`) ||
+        this.getTexture(`furn:${spriteKey}:${rot}:all`) ||
+        this.getTexture(`furn:${f.itemId}:${rot}:all`)
+      );
+
+      if (texAll) {
+        const spr = new Sprite(texAll);
+        spr.position.set(sx, sy);
+        spr.zIndex = isOverhead ? 999999 : (frontX + frontY) * 1024;
+        spr._furnitureData = f;
+        spr._isCanopy = f.itemId === 'pool_umbrella' || f.itemId === 'canopy_bed';
+        spr._anchorX = anchorX;
+        spr._anchorY = anchorY;
+        this.worldSorted.addChild(spr);
+        this.furnitureSprites.push(spr);
+      }
+    }
+
+    if (room.openEdges) {
+      const southY = room.height - 1;
+      const eastX = room.width - 1;
+      for (let x = 0; x < room.width; x++) {
+        if (room.grid[southY][x] === TILE.VOID) continue;
+        if (room.doors.some((d) => d.x === x && d.y === southY)) continue;
+        const { sx, sy } = rawTileToScreen(x, southY, origin.originX, origin.originY);
+        const tex = this.getTexture('edge_rail:default:south');
+        if (tex) {
+          const spr = new Sprite(tex);
+          spr.position.set(sx, sy);
+          spr.zIndex = (x + southY) * 1024 - 100;
+          this.worldSorted.addChild(spr);
+          this.furnitureSprites.push(spr);
+        }
+      }
+      for (let y = 0; y < room.height; y++) {
+        if (room.grid[y][eastX] === TILE.VOID) continue;
+        if (room.doors.some((d) => d.x === eastX && d.y === y)) continue;
+        const { sx, sy } = rawTileToScreen(eastX, y, origin.originX, origin.originY);
+        const tex = this.getTexture('edge_rail:default:west');
+        if (tex) {
+          const spr = new Sprite(tex);
+          spr.position.set(sx, sy);
+          spr.zIndex = (eastX + y) * 1024 - 100;
+          this.worldSorted.addChild(spr);
+          this.furnitureSprites.push(spr);
         }
       }
     }
@@ -289,6 +449,8 @@ export class PixiRenderer extends LegacyCanvasRenderer {
     }
     if (this.isReady && roomDef) {
       this.buildFloorChunks(roomDef);
+      this.buildWalls(roomDef);
+      this.buildFurniture(roomDef, placed, true);
     }
   }
 
@@ -323,8 +485,29 @@ export class PixiRenderer extends LegacyCanvasRenderer {
       return;
     }
 
-    if (frameState.room) {
-      this.buildFloorChunks(frameState.room);
+    const room = frameState.room || this.currentRoom;
+    const placed = frameState.placedFurniture || this.currentPlaced || [];
+    const lightsOn = frameState.lightsOn !== false;
+
+    if (room) {
+      this.buildFloorChunks(room);
+      this.buildWalls(room);
+    }
+
+    const furnKey = `${room?.id || ''}:${placed.length}:${lightsOn ? 'L' : 'D'}:${this.loadedDetail}`;
+    if (this.lastBuiltFurnitureKey !== furnKey) {
+      this.lastBuiltFurnitureKey = furnKey;
+      this.buildFurniture(room, placed, lightsOn);
+    }
+
+    const localPlayer = frameState.entities?.find((e) => e.isPlayer || e.id === 'player');
+    if (localPlayer && this.furnitureSprites) {
+      for (const spr of this.furnitureSprites) {
+        if (spr._isCanopy) {
+          const d = Math.hypot(spr._anchorX - localPlayer.x, spr._anchorY - localPlayer.y);
+          spr.alpha = d < 1.5 ? 0.35 : 1.0;
+        }
+      }
     }
 
     const cam = frameState.camera || { zoom: DEFAULT_ZOOM, panX: 0, panY: 0 };
@@ -400,6 +583,8 @@ export class PixiRenderer extends LegacyCanvasRenderer {
     }
     this.textures.clear();
     this.sheets.length = 0;
+    this.furnitureSprites = [];
+    this.lastBuiltFurnitureKey = '';
     this.isReady = false;
   }
 }
