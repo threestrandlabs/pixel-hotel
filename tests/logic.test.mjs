@@ -3660,3 +3660,16 @@ test('p1 data: J3/F2 every wall-mounted item (wall_sconce, gym_mirror, neon_sign
     assert.equal(s.rot, 1, `sconce at y=${s.y} should have rot=1 mounting on west wall`);
   }
 });
+
+test('p1 data: J7/F3 pool spa_partition line at x=24 has rot=1 running along y axis', async () => {
+  const { checkSpaPartitionLineRotation } = await import('./complaints-checklist.mjs');
+  const res = checkSpaPartitionLineRotation();
+  assert.equal(res.ok, true, `expected all line partitions at x=24 to have rot=1, offenders: ${res.offenders.join(', ')}`);
+  assert.equal(res.count, 24, 'expected exactly 24 spa partitions along x=24');
+  assert.equal(res.offenders.length, 0);
+
+  const poolPartitions = SEED_FURNITURE.pool.filter((p) => p.itemId === 'spa_partition' && p.x === 24);
+  for (const p of poolPartitions) {
+    assert.equal(p.rot, 1, `spa_partition at (24,${p.y}) should have rot=1`);
+  }
+});
