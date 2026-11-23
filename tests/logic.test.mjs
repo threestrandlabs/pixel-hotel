@@ -3527,3 +3527,25 @@ test('p0 build: pixi.js 8.23.0 is pinned in package.json, vendor/ and atlas/ are
   const workflow = fs.readFileSync(path.resolve(__dirname, '..', '.github/workflows/deploy.yml'), 'utf8');
   assert.ok(workflow.includes('_site/vendor/pixi.min.mjs'));
 });
+
+test('p0 gates & baseline: load-gate, floor-shots, complaints-checklist scripts and perf-baseline.json exist and cover all floors and complaint IDs', async () => {
+  const baselinePath = path.resolve(__dirname, 'perf-baseline.json');
+  assert.ok(fs.existsSync(baselinePath), 'tests/perf-baseline.json exists');
+  const baseline = JSON.parse(fs.readFileSync(baselinePath, 'utf8'));
+  assert.ok(baseline.baselines?.['v0.12.7']?.profiles?.desktop_high?.floors?.lobby);
+  assert.ok(baseline.baselines?.['v0.12.7']?.profiles?.mobile_low?.floors?.lobby);
+  assert.ok(baseline.baselines?.['v0.13.1']?.profiles?.desktop_high?.floors?.lobby);
+  assert.ok(baseline.baselines?.['v0.13.1']?.profiles?.mobile_low?.floors?.lobby);
+
+  assert.ok(fs.existsSync(path.resolve(__dirname, 'load-gate.mjs')));
+  assert.ok(fs.existsSync(path.resolve(__dirname, 'floor-shots.mjs')));
+  assert.ok(fs.existsSync(path.resolve(__dirname, 'complaints-checklist.mjs')));
+
+  const { generateChecklistRows } = await import('./complaints-checklist.mjs');
+  const { rows } = generateChecklistRows();
+  const ids = new Set(rows.map((r) => r.id));
+  for (let i = 1; i <= 12; i++) assert.ok(ids.has(`J${i}`), `checklist has J${i}`);
+  for (let i = 1; i <= 14; i++) assert.ok(ids.has(`B${i}`), `checklist has B${i}`);
+  for (let i = 1; i <= 11; i++) assert.ok(ids.has(`F${i}`), `checklist has F${i}`);
+  for (let i = 1; i <= 8; i++) assert.ok(ids.has(`N${i}`), `checklist has N${i}`);
+});

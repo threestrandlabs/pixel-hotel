@@ -3,6 +3,7 @@ node_modules/
 vendor/
 atlas/
 _site/
+shots/*/gate/
 test-results/
 tests/screenshots/*.png
 playwright-report/
