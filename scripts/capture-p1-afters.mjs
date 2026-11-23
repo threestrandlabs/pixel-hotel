@@ -10,11 +10,11 @@ const ROOT = path.resolve(__dirname, '..');
 const OUT_DIR = '/workspace/ph-rework-shots/pixi/p1';
 
 const COMPLAINT_CROPS = [
-  { id: 'lobby_crevice', room: 'lobby', gx: 14.5, gy: 10.5, cropW: 160, cropH: 120 },
-  { id: 'lobby_lamps', room: 'lobby', gx: 3.0, gy: 9.5, cropW: 160, cropH: 160 },
-  { id: 'cafe_rugs', room: 'cafe', gx: 6.5, gy: 8.2, cropW: 220, cropH: 160 },
-  { id: 'restaurant_sconces', room: 'restaurant', gx: 1.5, gy: 14.0, cropW: 160, cropH: 140 },
-  { id: 'spa_partitions', room: 'pool', gx: 24.0, gy: 11.0, cropW: 180, cropH: 150 },
+  { id: 'cafe_rugs', room: 'cafe', gx: 6.5, gy: 8.5, dY: 0, cropW: 240, cropH: 180 },
+  { id: 'restaurant_sconces', room: 'restaurant', gx: 1.2, gy: 9.85, dY: -43, cropW: 160, cropH: 160 },
+  { id: 'lobby_lamps', room: 'lobby', gx: 2.1, gy: 8.9, dY: -14, cropW: 320, cropH: 240 },
+  { id: 'lobby_sofa_rug', room: 'lobby', gx: 5.2, gy: 10.5, dY: 0, cropW: 260, cropH: 200 },
+  { id: 'lobby_crevice', room: 'lobby', gx: 14.5, gy: 10.5, dY: 0, cropW: 240, cropH: 180 },
 ];
 
 const MIME = {
@@ -210,32 +210,46 @@ async function main() {
     await page.waitForTimeout(300);
 
     for (const c of COMPLAINT_CROPS) {
-      console.log(`Capturing ${c.id} in ${c.room}...`);
-      const pt = await page.evaluate(({ room, gx, gy }) => {
+      console.log(`Navigating to ${c.room} for ${c.id}...`);
+      await page.evaluate(({ room }) => {
         window.__pixelHotel.takeElevator(room);
         window.__pixelHotel.resetZoom();
+      }, c);
+
+      // Wait 1500ms for elevator animation (420ms) and room transition overlay to fully clear
+      await page.waitForTimeout(1500);
+
+      const pt = await page.evaluate(({ gx, gy, dY }) => {
         const canvas = window.__pixelHotel.getCanvas();
         const rect = canvas.getBoundingClientRect();
         const s0 = window.__pixelHotel.tileToScreen(gx, gy);
+        const targetY = (s0.sy ?? s0.y) + (dY || 0);
         const dx = Math.round(rect.width / 2 - (s0.sx ?? s0.x));
-        const dy = Math.round(rect.height / 2 - (s0.sy ?? s0.y));
+        const dy = Math.round(rect.height / 2 - targetY);
+
         canvas.dispatchEvent(new MouseEvent('mousedown', { button: 0, clientX: rect.left + 100, clientY: rect.top + 100, bubbles: true }));
         canvas.dispatchEvent(new MouseEvent('mousemove', { button: 0, clientX: rect.left + 100 + dx, clientY: rect.top + 100 + dy, bubbles: true }));
         window.dispatchEvent(new MouseEvent('mouseup', { button: 0, bubbles: true }));
+
         const s1 = window.__pixelHotel.tileToScreen(gx, gy);
         const dpr = Math.min(2, window.devicePixelRatio || 1);
-        return { x: (s1.sx ?? s1.x) * dpr, y: (s1.sy ?? s1.y) * dpr };
+        return {
+          x: (s1.sx ?? s1.x) * dpr,
+          y: ((s1.sy ?? s1.y) + (dY || 0)) * dpr,
+        };
       }, c);
 
-      await page.waitForTimeout(600);
+      // Wait 400ms for canvas render after pan
+      await page.waitForTimeout(400);
+
       const dataUrl = await page.evaluate(() => window.__pixelHotel.getCanvas().toDataURL('image/png'));
       const buf = Buffer.from(dataUrl.split(',')[1], 'base64');
 
-      const fullPath = path.join(OUT_DIR, `${c.id}_after.png`);
+      const fullPath = path.join(OUT_DIR, `${c.id}_after2.png`);
       fs.writeFileSync(fullPath, buf);
 
       const cropBuf = cropAndUpscale8x(buf, pt.x, pt.y, c.cropW, c.cropH);
-      const cropPath = path.join(OUT_DIR, `${c.id}_after_8x.png`);
+      const cropPath = path.join(OUT_DIR, `${c.id}_after2_8x.png`);
       fs.writeFileSync(cropPath, cropBuf);
 
       console.log(`Saved ${fullPath} and ${cropPath}`);
@@ -244,7 +258,7 @@ async function main() {
     await browser.close().catch(() => {});
     server.close();
   }
-  console.log('All after shots and 8x crops captured successfully.');
+  console.log('All after2 shots and 8x crops captured successfully.');
 }
 
 await main();
