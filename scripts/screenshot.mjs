@@ -9,6 +9,11 @@ const outDir = args.shift();
 let zoom = 2;
 const zi = args.indexOf('--zoom');
 if (zi >= 0) { zoom = Number(args[zi + 1]); args.splice(zi, 2); }
+// --phase 0.5 = noon, 0 = midnight, 0.27 = dawn
+let phase = null;
+const pi = args.indexOf('--phase');
+if (pi >= 0) { phase = Number(args[pi + 1]); args.splice(pi, 2); }
+const suffix = phase === null ? '' : `-p${phase}`;
 const rooms = args.length ? args : ['lobby'];
 fs.mkdirSync(outDir, { recursive: true });
 
@@ -35,8 +40,9 @@ for (const room of rooms) {
   await page.waitForTimeout(2200);
   await hideDialogs();
   await page.evaluate((z) => { window.__pixelHotel.resetZoom(); window.__pixelHotel.setZoom(z); }, zoom);
+  if (phase !== null) await page.evaluate((p) => window.__pixelHotel.setDayPhase(p), phase);
   await page.waitForTimeout(700);
-  await page.screenshot({ path: `${outDir}/${room}.png` });
+  await page.screenshot({ path: `${outDir}/${room}${suffix}.png` });
 }
 const info = await page.evaluate(() => ({
   backend: window.app.renderer.name,

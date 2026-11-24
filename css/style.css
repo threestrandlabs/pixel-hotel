@@ -158,6 +158,12 @@ html, body {
   display: block;
   image-rendering: pixelated;
 }
+/* Legacy canvas backdrop layers, superseded by the Pixi city/sky. */
+#skyLayer,
+#bgLayer {
+  display: none !important;
+}
+
 #pixiCanvas {
   position: absolute;
   inset: 0;

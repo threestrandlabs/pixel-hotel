@@ -9,7 +9,9 @@ import { Application, Assets, Container, Graphics, Sprite, Text, TextStyle, Text
 import { TILE, getCatalogueItem } from '../data.js';
 import {
   TILE_W, TILE_H, WALL_H, tileToScreen, worldToScreen, computeOrigin,
+  dayNight, multiplyTint, combineTints,
 } from '../iso.js';
+import { buildCity, createSky } from './city.js';
 import { sortDrawables, furnitureBox, entityBox } from '../depthSort.js';
 import { LOOKS } from '../voxel.js';
 
@@ -23,6 +25,10 @@ const labelNodes = new Map(); // entity id -> { tag, bubble }
 let floorKey = '';
 let tex = {}; // atlas textures by frame name
 let poolRec = null; // { key, node, cells: [{water, sprite}] }
+let city = null; // { key, node, update }
+let sky = null;
+const glowNodes = new Map(); // instanceId -> glow sprite
+const NIGHT_TINT = 0x5b6bb0;
 
 const CHAR_LAYERS = ['skin', 'bottom', 'shoes', 'top', 'hair', 'face'];
 const WATER_FRAMES = 8;
@@ -79,16 +85,23 @@ export async function initRenderer(host, beforeEl) {
   tex = sheet.textures;
   Object.assign(window, { app });
 
+  sky = createSky();
   layers.world = new Container();
+  layers.city = new Container();
   layers.floor = new Container({ isRenderGroup: true });
   layers.floorDecor = new Container();
   layers.overlay = new Graphics();
   layers.walls = new Container();
   layers.sorted = new Container();
   layers.overhead = new Container();
-  layers.world.addChild(layers.floor, layers.floorDecor, layers.overlay, layers.walls, layers.sorted, layers.overhead);
+  layers.frontRails = new Container();
+  layers.glow = new Container();
+  layers.world.addChild(
+    layers.city, layers.floor, layers.floorDecor, layers.overlay, layers.walls,
+    layers.sorted, layers.frontRails, layers.overhead, layers.glow,
+  );
   layers.labels = new Container();
-  app.stage.addChild(layers.world, layers.labels);
+  app.stage.addChild(sky.node, layers.world, layers.labels);
   return app;
 }
 
@@ -197,15 +210,31 @@ function buildFloor(room, originX, originY, lightsOn) {
     sp.tint = dimTint;
     layers.walls.addChild(sp);
   };
+  layers.frontRails.removeChildren().forEach((c) => c.destroy());
+  // Open-air floors get glass railings on every edge instead of walls.
+  const open = Boolean(room.openEdges);
   for (let x = 1; x < room.width; x++) {
     const t = room.grid[0][x];
     if (t === TILE.VOID || room.grid[1]?.[x] === TILE.VOID) continue;
-    addWall(`wall/north_${kindOf(t)}`, x - 0.5, 0.5);
+    addWall(open && t !== TILE.DOOR ? 'wall/rail_north' : `wall/north_${kindOf(t)}`, x - 0.5, 0.5);
   }
   for (let y = 1; y < room.height; y++) {
     const t = room.grid[y][0];
     if (t === TILE.VOID || room.grid[y][1] === TILE.VOID) continue;
-    addWall(`wall/west_${kindOf(t)}`, 0.5, y - 0.5);
+    addWall(open && t !== TILE.DOOR ? 'wall/rail_west' : `wall/west_${kindOf(t)}`, 0.5, y - 0.5);
+  }
+  if (open) {
+    const front = (name, x, y) => {
+      const sp = new Sprite(tex[name]);
+      sp.anchor.copyFrom(sp.texture.defaultAnchor);
+      const { sx, sy } = tileToScreen(x, y, originX, originY);
+      sp.position.set(sx, sy);
+      layers.frontRails.addChild(sp);
+    };
+    const S = room.height - 1;
+    const E = room.width - 1;
+    for (let x = 1; x < room.width; x++) if (room.grid[S][x] !== TILE.VOID) front('wall/rail_north', x - 0.5, S + 0.5);
+    for (let y = 1; y < room.height; y++) if (room.grid[y][E] !== TILE.VOID) front('wall/rail_west', E + 0.5, y - 0.5);
   }
 }
 
@@ -406,6 +435,28 @@ export function renderRoom(opts) {
     for (const rec of furnitureNodes.values()) { rec.node.destroy(); rec.floorNode?.destroy(); }
     furnitureNodes.clear();
   }
+
+  // --- sky, city and lighting ---
+  const phase = opts.phase ?? 0.5;
+  sky.update(width, height, phase, now, panX);
+  const cityKey = `${room.id}|${originX},${originY}`;
+  if (!city || city.key !== cityKey) {
+    if (city) city.node.destroy({ children: true });
+    city = { key: cityKey, ...buildCity(room, originX, originY, tex) };
+    layers.city.addChild(city.node);
+  }
+  city.update(now, phase);
+  const { night } = dayNight(phase);
+  const amb = room.ambientLighting;
+  const cityTint = multiplyTint(NIGHT_TINT, 0.5 * night);
+  const roomTint = combineTints(
+    multiplyTint(NIGHT_TINT, 0.42 * night),
+    amb ? multiplyTint(hexNum(amb.tint), amb.darkness || 0.3) : 0xffffff,
+  );
+  layers.city.tint = cityTint;
+  for (const l of [layers.floor, layers.floorDecor, layers.walls, layers.sorted, layers.frontRails, layers.overhead]) l.tint = roomTint;
+  const glowStrength = Math.min(1, Math.max(night * 1.1, amb?.warmGlow ? (amb.darkness || 0.3) * 2.2 : 0));
+  updateGlows(placedFurniture, originX, originY, lightsOn, glowStrength);
 
   // --- overlays (hover, ghost, walk target) ---
   const ov = layers.overlay;
@@ -608,4 +659,36 @@ export function getItemIconDataUrl(itemId, size = 52, dpr = 1) {
   const url = canvas.toDataURL();
   iconCache.set(key, url);
   return url;
+}
+
+// ---------- light glows ----------
+
+function updateGlows(placedFurniture, originX, originY, lightsOn, strength) {
+  const seen = new Set();
+  if (strength > 0.02 && tex['fx/glow']) {
+    for (const f of placedFurniture) {
+      const item = getCatalogueItem(f.itemId);
+      const em = item?.emissive;
+      if (!em) continue;
+      if (item.lightSource && !lightsOn) continue;
+      const id = f.instanceId || `${f.itemId}@${f.x},${f.y}`;
+      seen.add(id);
+      let sp = glowNodes.get(id);
+      if (!sp) {
+        sp = new Sprite(tex['fx/glow']);
+        sp.anchor.set(0.5);
+        sp.blendMode = 'add';
+        layers.glow.addChild(sp);
+        glowNodes.set(id, sp);
+      }
+      const { sx, sy } = tileToScreen(f.x + f.footprint.w / 2 - 0.5, f.y + f.footprint.h / 2 - 0.5, originX, originY);
+      sp.position.set(Math.round(sx), Math.round(sy));
+      sp.scale.set((em.radius || 60) / 48);
+      sp.tint = hexNum(em.color, 0xffe29a);
+      sp.alpha = Math.min(1, (em.intensity || 0.4) * strength * 1.6);
+    }
+  }
+  for (const [id, sp] of glowNodes) {
+    if (!seen.has(id)) { sp.destroy(); glowNodes.delete(id); }
+  }
 }

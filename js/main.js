@@ -1857,7 +1857,7 @@ function frame(now) {
   const qualityMode = resolveBackgroundDetail(state.settings.backgroundDetail, lowQualityTriggered, isMobile);
   applySpriteDetail(isMobile, lowQualityTriggered);
 
-  updateBackground(now, room, ui.cssW, ui.cssH, ui.phase, ui.camera, qualityMode);
+  // The city backdrop and sky are drawn by the Pixi renderer (js/render/city.js).
 
   renderRoom({
     room,
@@ -3324,9 +3324,6 @@ window.__pixelHotel = Object.assign(window.__pixelHotel || {}, {
     ui.phase = ((p % 1) + 1) % 1;
     audio.setRoomMood(state.player.room, ui.phase);
     refreshAudioUi();
-    const ox = Math.max(380, Math.round(ui.cssW * 0.45));
-    const oy = Math.max(260, Math.round(ui.cssH * 0.45));
-    performBackgroundBake(currentRoomDef(), ui.cssW, ui.cssH, ui.phase, ox, oy);
   }, // 0.5 noon, 0 midnight
   getSaveVersion: () => SAVE_VERSION,
   getVersion: () => '0.13.1',
