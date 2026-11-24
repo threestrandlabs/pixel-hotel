@@ -14,6 +14,7 @@ import {
 import { buildCity, createSky } from './city.js';
 import { sortDrawables, furnitureBox, entityBox } from '../depthSort.js';
 import { LOOKS } from '../looks.js';
+import { faceFor, IRIS_SHAPES } from '../faces.js';
 
 TextureStyle.defaultOptions.scaleMode = 'nearest';
 
@@ -30,7 +31,6 @@ let sky = null;
 const glowNodes = new Map(); // instanceId -> glow sprite
 const NIGHT_TINT = 0x5b6bb0;
 
-const CHAR_LAYERS = ['skin', 'bottom', 'shoes', 'top', 'hair', 'face'];
 const HAIR_STYLE_IDS = new Set(['classic', 'bob', 'long', 'ponytail', 'spiky', 'curls', 'bald']);
 
 // Atlas frame name for one character layer; hair picks the look's style.
@@ -307,16 +307,47 @@ function tintFor(hexColor, fallback) {
   return (ch((c >> 16) & 255) << 16) | (ch((c >> 8) & 255) << 8) | ch(c & 255);
 }
 
+// Every sprite that makes up one character, back to front:
+// [frame name, tint]. Shared by the room renderer and the previews.
+function characterLayers(look, facing, pose, faceState = {}) {
+  const layers = [];
+  const body = {
+    skin: tintFor(look.skin, 0xf0c49a),
+    bottom: tintFor(look.pants, 0x2c3e63),
+    shoes: tintFor(look.shoe, 0xf4f4f4),
+    top: tintFor(look.shirt, 0x4da3ff),
+    hair: tintFor(look.hair, 0x5a3826),
+  };
+  for (const name of ['skin', 'bottom', 'shoes', 'top', 'hair']) layers.push([charFrame(facing, pose, name, look), body[name]]);
+  if (facing === 'down' || facing === 'right') {
+    const kind = pose === 'sit0' ? 'sit' : 'stand';
+    const f = faceFor(look, faceState);
+    const at = (part) => `face/${facing}/${kind}/${part}`;
+    const iris = tintFor(look.eye, 0x2b2230);
+    if (f.blush) layers.push([at('blush'), 0xffffff]);
+    layers.push([at(`eyeL_${f.eyeL}`), 0xffffff]);
+    if (IRIS_SHAPES.has(f.eyeL)) layers.push([at(`irisL_${f.eyeL}`), iris]);
+    layers.push([at(`eyeR_${f.eyeR}`), 0xffffff]);
+    if (IRIS_SHAPES.has(f.eyeR)) layers.push([at(`irisR_${f.eyeR}`), iris]);
+    if (f.lashes) layers.push([at('lashes'), 0xffffff]);
+    layers.push([at(`brows_${f.brows}`), tintFor(look.brow || look.hair, 0x4a2f20)]);
+    layers.push([at(`mouth_${f.mouth}`), 0xffffff]);
+  }
+  return layers;
+}
+
+function characterPose(e, now) {
+  if (e.walking) return `walk${Math.floor(now / 140) % 4}`;
+  if (e.sitting) return 'sit0';
+  return 'idle0';
+}
+
 function makeEntityNode() {
   const node = new Container();
   const shadow = new Graphics().ellipse(0, 0, 9, 4).fill({ color: 0x1e1428, alpha: 0.25 });
   node.addChild(shadow);
-  node.parts = {};
-  for (const name of CHAR_LAYERS) {
-    const sp = new Sprite();
-    node.parts[name] = sp;
-    node.addChild(sp);
-  }
+  node.body = new Container();
+  node.addChild(node.body);
   return node;
 }
 
@@ -324,29 +355,22 @@ function updateEntityNode(node, e, now) {
   const look = e.look || LOOKS[e.spriteKey] || LOOKS.player || {};
   // Block characters are rendered natively for all four facings.
   const facing = ['down', 'right', 'up', 'left'].includes(e.dir) ? e.dir : 'down';
-  let pose = 'idle0';
-  if (e.walking) pose = `walk${Math.floor(now / 140) % 4}`;
-  else if (e.sitting) pose = 'sit0';
-  const tints = {
-    skin: tintFor(look.skin, 0xf0c49a),
-    hair: tintFor(look.hair, 0x5a3826),
-    top: tintFor(look.shirt, 0x4da3ff),
-    bottom: tintFor(look.pants, 0x2c3e63),
-    shoes: tintFor(look.shoe, 0xf4f4f4),
-    face: 0xffffff,
-  };
-  for (const name of CHAR_LAYERS) {
-    const sp = node.parts[name];
-    const t = tex[charFrame(facing, pose, name, look)];
+  const pose = characterPose(e, now);
+  const layers = characterLayers(look, facing, pose, { emote: e.emote || null, blink: Boolean(e.blink) });
+  const kids = node.body.children;
+  while (kids.length < layers.length) node.body.addChild(new Sprite());
+  for (let i = 0; i < kids.length; i++) {
+    const sp = kids[i];
+    const t = i < layers.length ? tex[layers[i][0]] : null;
     sp.visible = Boolean(t);
     if (!t) continue;
     if (sp.texture !== t) {
       sp.texture = t;
       sp.anchor.copyFrom(t.defaultAnchor);
     }
-    sp.tint = tints[name];
-    sp.y = e.sitting ? -9 : 0; // up onto the seat cushion
+    sp.tint = layers[i][1];
   }
+  node.body.y = e.sitting ? -9 : 0; // up onto the seat cushion
 }
 
 // ---------- pool water ----------
@@ -715,19 +739,15 @@ export function renderCharacter(look, dir = 'down', pose = {}, makeCanvas = null
   const facing = ['down', 'right', 'up', 'left'].includes(dir) ? dir : 'down';
   const poseName = pose?.sit ? 'sit0' : pose?.stride ? 'walk0' : 'idle0';
   const l = look || LOOKS.player || {};
-  const tints = {
-    skin: tintFor(l.skin, 0xf0c49a), hair: tintFor(l.hair, 0x5a3826), top: tintFor(l.shirt, 0x4da3ff),
-    bottom: tintFor(l.pants, 0x2c3e63), shoes: tintFor(l.shoe, 0xf4f4f4), face: 0xffffff,
-  };
   const parts = [];
   let x0 = Infinity; let y0 = Infinity; let x1 = -Infinity; let y1 = -Infinity;
-  for (const name of CHAR_LAYERS) {
-    const t = tex[charFrame(facing, poseName, name, l)];
+  for (const [frame, tint] of characterLayers(l, facing, poseName)) {
+    const t = tex[frame];
     if (!t?.source?.resource) continue;
     const { width: w, height: h } = t.frame;
     const ax = Math.round(t.defaultAnchor.x * w);
     const ay = Math.round(t.defaultAnchor.y * h);
-    parts.push({ t, name, ax, ay, w, h });
+    parts.push({ t, tint, ax, ay, w, h });
     x0 = Math.min(x0, -ax); y0 = Math.min(y0, -ay); x1 = Math.max(x1, w - ax); y1 = Math.max(y1, h - ay);
   }
   if (!parts.length) return null;
@@ -741,7 +761,7 @@ export function renderCharacter(look, dir = 'down', pose = {}, makeCanvas = null
     tmp.width = p.w; tmp.height = p.h;
     const tctx = tmp.getContext('2d');
     tctx.drawImage(p.t.source.resource, p.t.frame.x, p.t.frame.y, p.w, p.h, 0, 0, p.w, p.h);
-    const tint = tints[p.name];
+    const { tint } = p;
     if (tint !== 0xffffff) {
       const img = tctx.getImageData(0, 0, p.w, p.h);
       const tr = (tint >> 16) & 255; const tg = (tint >> 8) & 255; const tb = tint & 255;

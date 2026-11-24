@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { CATALOGUE, ROOMS, NPCS } from '../js/data.js';
 import { LOOKS } from '../js/looks.js';
+import { faceFor } from '../js/faces.js';
 import {
   computeGroundDy, dayNight, multiplyTint, combineTints, clampZoom, MIN_ZOOM, MAX_ZOOM,
 } from '../js/iso.js';
@@ -33,9 +34,50 @@ test('atlas: characters have every layer pose for all four facings', () => {
       assert.ok(!frames[`char/${dir}/${pose}/hair_bald`], 'bald has no hair layer');
     }
   }
-  // faces only show on the two facings toward the viewer
-  assert.ok(frames['char/down/idle0/face']);
-  assert.ok(frames['char/right/idle0/face']);
+});
+
+test('atlas: face parts exist for both visible facings, standing and sitting', () => {
+  for (const facing of ['down', 'right']) {
+    for (const kind of ['stand', 'sit']) {
+      const at = (p) => frames[`face/${facing}/${kind}/${p}`];
+      for (const shape of ['open', 'half', 'closed', 'happy']) {
+        assert.ok(at(`eyeL_${shape}`) && at(`eyeR_${shape}`), `${facing}/${kind} eyes ${shape}`);
+      }
+      for (const shape of ['open', 'half']) assert.ok(at(`irisL_${shape}`) && at(`irisR_${shape}`), `iris ${shape}`);
+      for (const b of ['normal', 'raised', 'sad']) assert.ok(at(`brows_${b}`), `brows ${b}`);
+      for (const m of ['smile', 'frown', 'open', 'lips', 'laugh', 'smug', 'sleepy']) assert.ok(at(`mouth_${m}`), `mouth ${m}`);
+      assert.ok(at('lashes') && at('blush'));
+    }
+  }
+  // the back of the head has no face
+  assert.ok(!frames['face/up/stand/mouth_smile']);
+});
+
+test('faces: wardrobe mouths, emotes and blinking pick the right parts', () => {
+  assert.equal(faceFor({ mouth: 'lips', lashes: true }).mouth, 'lips');
+  assert.equal(faceFor({ mouth: 'lips', lashes: true }).lashes, true);
+  assert.equal(faceFor({ mouth: 'nonsense' }).mouth, 'smile');
+  assert.equal(faceFor({ mouth: 'frown' }).brows, 'sad');
+  assert.deepEqual(
+    [faceFor({}, { emote: 'laugh' }).eyeL, faceFor({}, { emote: 'laugh' }).mouth],
+    ['happy', 'laugh'],
+  );
+  const wink = faceFor({}, { emote: 'heart' });
+  assert.deepEqual([wink.eyeL, wink.eyeR], ['open', 'closed']);
+  assert.equal(faceFor({}, { emote: 'sleep' }).mouth, 'sleepy');
+  const blink = faceFor({}, { blink: true });
+  assert.deepEqual([blink.eyeL, blink.eyeR], ['closed', 'closed']);
+  // blinking never overrides happy eyes
+  assert.equal(faceFor({}, { emote: 'wave', blink: true }).eyeL, 'happy');
+  // every face part the logic can ask for exists in the atlas
+  const looks = [{}, { mouth: 'frown' }, { mouth: 'open' }, { mouth: 'lips', lashes: true }];
+  const emotes = [null, 'wave', 'dance', 'laugh', 'clap', 'heart', 'sleep', 'cheer', 'thumbsup'];
+  for (const look of looks) for (const emote of emotes) for (const blinkOn of [false, true]) {
+    const f = faceFor(look, { emote, blink: blinkOn });
+    for (const part of [`eyeL_${f.eyeL}`, `eyeR_${f.eyeR}`, `brows_${f.brows}`, `mouth_${f.mouth}`]) {
+      assert.ok(frames[`face/down/stand/${part}`], `missing face part ${part}`);
+    }
+  }
 });
 
 test('atlas: water animates in 8 frames x 4 parities and has rims on every edge', () => {
@@ -61,9 +103,10 @@ test('atlas: frame anchors are sane and frames do not overlap', () => {
   const rects = Object.entries(frames).map(([name, f]) => ({ name, ...f.frame, a: f.anchor }));
   for (const r of rects) {
     assert.ok(r.w > 0 && r.h > 0, `${r.name} is empty`);
-    // small layer sprites (a shoe, a fringe) sit away from the shared pivot,
-    // so anchors may fall outside their own box, but never absurdly far
-    assert.ok(Number.isFinite(r.a.x) && Number.isFinite(r.a.y) && Math.abs(r.a.x) < 6 && Math.abs(r.a.y) < 8, `${r.name} anchor ${JSON.stringify(r.a)}`);
+    // Layer sprites (an eye, a shoe) sit away from the shared pivot, so check
+    // the pivot's offset in pixels: it must stay within the original canvas.
+    const ox = r.a.x * r.w; const oy = r.a.y * r.h;
+    assert.ok(Number.isFinite(ox) && Number.isFinite(oy) && Math.abs(ox) < 160 && Math.abs(oy) < 160, `${r.name} pivot offset ${ox},${oy}`);
   }
   rects.sort((p, q) => p.y - q.y || p.x - q.x);
   for (let i = 0; i < rects.length; i++) {

@@ -222,10 +222,8 @@ function render(facing, pose, step, style = null) {
   const hair = [G.base, ID.hair, 0, 255];
   const eye = [0, ID.face, 0, 255];
   const mouth = [1, ID.face, 0, 255];
-  frontDetail(cv, map, head, [
-    ...hairStyle.fringe.map((f) => [...f, hair]),
-    [1.5, 6, 1, 2, eye], [4.5, 6, 1, 2, eye], [2.5, 9, 2, 1, mouth],
-  ], facing);
+  frontDetail(cv, map, head, hairStyle.fringe.map((f) => [...f, hair]), facing);
+  void eye; void mouth;
   outline(cv);
 
   // Split into layer sprites.
@@ -242,6 +240,99 @@ function render(facing, pose, step, style = null) {
 }
 
 export const CHARACTER_LAYERS = ['skin', 'bottom', 'shoes', 'top', 'hair', 'face'];
+
+// ---------- faces ----------
+// The face is a 14 x 12 pixel grid on the head's front (fx 0..13 across,
+// fz 0..11 down). Features are hand-drawn masks placed on that grid and kept
+// as separate sprites so any combination (eye colour, mouth, expression,
+// blink) can be stacked at runtime.
+//   K lid/ink  W white  H highlight  I iris (tinted)  B brow (tinted)
+//   M mouth    T tongue L lips       R blush
+const FACE_COLOURS = {
+  K: INK, W: '#ffffff', H: '#ffffff', M: '#7a2a3a', T: '#e8708a', L: '#d0485e', R: [240, 120, 140, 150],
+  I: TINT.base, B: TINT.base,
+};
+
+const EYES = {
+  open: { L: ['KKK', 'WHI', 'WII'], R: ['KKK', 'HIW', 'IIW'] },
+  half: { L: ['...', 'KKK', 'WII'], R: ['...', 'KKK', 'IIW'] },
+  closed: { L: ['...', '...', 'KKK'], R: ['...', '...', 'KKK'] },
+  happy: { L: ['...', '.K.', 'K.K'], R: ['...', '.K.', 'K.K'] },
+};
+const EYE_AT = { L: [2, 5], R: [9, 5] };
+
+const BROWS = {
+  normal: { L: ['BBB'], R: ['BBB'], dz: 3 },
+  raised: { L: ['BBB'], R: ['BBB'], dz: 2 },
+  sad: { L: ['..B', 'BB.'], R: ['B..', '.BB'], dz: 2 },
+};
+
+const MOUTHS = {
+  smile: { at: [5, 9], rows: ['M..M', '.MM.'] },
+  frown: { at: [5, 9], rows: ['.MM.', 'M..M'] },
+  open: { at: [5, 9], rows: ['MMMM', 'MTTM', '.MM.'] },
+  lips: { at: [5, 9], rows: ['LLLL', '.LL.'] },
+  laugh: { at: [4, 9], rows: ['MMMMMM', 'MTTTTM', '.MMMM.'] },
+  smug: { at: [5, 9], rows: ['...M', 'MMM.'] },
+  sleepy: { at: [6, 10], rows: ['MM'] },
+};
+
+// Screen pixel for face cell (fx, fz) on the visible front of the head.
+function facePixel(map, head, fx, fz) {
+  const unit = Math.floor(fx / 2);
+  const [u, v] = map(head.a0 + unit + 0.5 - CA, head.b1 - CB);
+  const [x, y] = project(u, v, head.z1 - fz);
+  return [Math.round(x) - 1 + (fx % 2), Math.round(y - 0.5)];
+}
+
+function paintMask(cv, map, head, [fx0, fz0], rows, palette = FACE_COLOURS) {
+  rows.forEach((row, j) => {
+    for (let i = 0; i < row.length; i++) {
+      const ch = row[i];
+      if (ch === '.') continue;
+      const c = palette[ch];
+      const [x, y] = facePixel(map, head, fx0 + i, fz0 + j);
+      cv.set(x, y, c);
+    }
+  });
+}
+
+// Face parts for one facing and body pose ('stand' or 'sit').
+function faceParts(facing, kind) {
+  const map = FACING[facing];
+  const { head } = model(kind, 0);
+  const parts = {};
+  const part = (name, paint) => {
+    const cv = new PixelCanvas(CW, CH);
+    paint(cv);
+    parts[name] = cv;
+  };
+  const only = (keep) => Object.fromEntries(Object.entries(FACE_COLOURS).map(([k, v]) => [k, keep.includes(k) ? v : null]));
+  for (const [shape, eye] of Object.entries(EYES)) {
+    for (const side of ['L', 'R']) {
+      part(`eye${side}_${shape}`, (cv) => paintMask(cv, map, head, EYE_AT[side], eye[side], only('KWH')));
+      if (eye[side].some((r) => r.includes('I'))) {
+        part(`iris${side}_${shape}`, (cv) => paintMask(cv, map, head, EYE_AT[side], eye[side], only('I')));
+      }
+    }
+  }
+  for (const [name, b] of Object.entries(BROWS)) {
+    part(`brows_${name}`, (cv) => {
+      paintMask(cv, map, head, [EYE_AT.L[0], b.dz], b.L);
+      paintMask(cv, map, head, [EYE_AT.R[0], b.dz], b.R);
+    });
+  }
+  for (const [name, m] of Object.entries(MOUTHS)) part(`mouth_${name}`, (cv) => paintMask(cv, map, head, m.at, m.rows));
+  part('lashes', (cv) => {
+    paintMask(cv, map, head, [1, 4], ['K', 'K']);
+    paintMask(cv, map, head, [12, 4], ['K', 'K']);
+  });
+  part('blush', (cv) => {
+    paintMask(cv, map, head, [1, 8], ['RR']);
+    paintMask(cv, map, head, [11, 8], ['RR']);
+  });
+  return parts;
+}
 
 export default function build(add) {
   const poses = {
@@ -260,6 +351,15 @@ export default function build(add) {
       const base = render(facing, kind, step, null);
       for (const name of CHARACTER_LAYERS) {
         if (name !== 'hair' && base[name]) add(`char/${facing}/${pose}/${name}`, base[name], [OX, OY]);
+      }
+      if (pose === 'idle0' || pose === 'sit0') {
+        // faces only exist on the two facings toward the viewer
+        if (facing === 'down' || facing === 'right') {
+          const kindName = kind === 'sit' ? 'sit' : 'stand';
+          for (const [name, cv] of Object.entries(faceParts(facing, kind))) {
+            add(`face/${facing}/${kindName}/${name}`, cv, [OX, OY]);
+          }
+        }
       }
       for (const style of Object.keys(HAIR_STYLES)) {
         const styled = render(facing, kind, step, style);
