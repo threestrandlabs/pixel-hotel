@@ -6,7 +6,7 @@
 import { PixelCanvas } from '../lib/canvas.js';
 import { TINT, INK } from '../palette.js';
 
-const W = 20;
+const W = 22;
 
 //  skin  k line  l shade  m base  n hi
 //  hair  H line  h shade  i base  j hi
@@ -23,76 +23,76 @@ const LAYER = {
   K: ['face', INK], W: ['face', '#ffffff'], M: ['face', '#b4485a'],
 };
 
-const DOWN_UPPER = [
-  '......HHHHHHH.......',
-  '....HHjjjiiiiHH.....',
-  '...HjjiiiiiiiihH....',
-  '..HjiiiiiiiiiihhH...',
-  '..HiiiiiiiiiiihhH...',
-  '..HiiiihhhiiihhhH...',
-  '..HiihmmmmhhmhhhH...',
-  '..HihmnnmmmmmmlhH...',
-  '..HhmnmmmmmmmmlhH...',
-  '..kmmKKmmmmKKmlkH...',
-  '..kmmKWmmmmKWmlk....',
-  '..kmmmmmmmmmmmlk....',
-  '..klmmmmMMmmmllk....',
-  '...kllmmmmmlllk.....',
-  '....kkllllllkk......',
-  '.......klllk........',
-  '....SSSttttttSS.....',
-  '...SuutttttttssS....',
-  '..SuttttttttttssS...',
-  '..StuStttttttSssS...',
-  '..StuStttttttSssS...',
-  '..StuStttttttSssS...',
-  '..StuSttttttsSssS...',
-  '..kmlSssssssssSlmk..',
-  '...kkPqqqqqqqqpPkk..',
-];
+// Blocky avatar: square head, neck, block torso with separate arms, straight
+// block legs. Flat two-tone shading, lit from the upper left.
+const head = (rows) => rows.map((r) => `.....${r}.....`); // 12-wide head
+const body = (rows) => rows.map((r) => `....${r}....`); // 14-wide body
 
-const UP_UPPER = [
-  '.......HHHHHHH......',
-  '.....HHiiiijjjHH....',
-  '....HiiiiiiiiijjH...',
-  '...HhiiiiiiiiiiijH..',
-  '...HhiiiiiiiiiiiiH..',
-  '...HhhiiiiiiiiiiiH..',
-  '...HhhiiiiiiiiiiiH..',
-  '...HhhhiiiiiiiiiiH..',
-  '...HhhhhiiiiiiiihH..',
-  '...HhhhhhiiiiiihhH..',
-  '...kHhhhhhhhhhhhHk..',
-  '...klHHhhhhhhhhHmk..',
-  '....klHHHHHHHHHmk...',
-  '.....kllllmmmmmk....',
-  '......kkllllmkk.....',
-  '........klllk.......',
-  '.....SSsssttttSS....',
-  '....SssssstttuuuS...',
-  '...SsssssssttttuuS..',
-  '...SssSssssttttStuS.',
-  '...SssSssssttttStuS.',
-  '...SssSssssttttStuS.',
-  '...SssSsssstttsStuS.',
-  '..kmlSsssssssssSlmk.',
-  '..kkPqqqqqqqqqqpPkk.',
-];
+const DOWN_HEAD = head([
+  'HHHHHHHHHHHH',
+  'HjjiiiiiiihH',
+  'HjiiiiiiiihH',
+  'HiiiiiiiihhH',
+  'kmmmmmmmihhH',
+  'knmmmmmmmhhH',
+  'kmKmmKmmmlhH',
+  'kmKmmKmmmlhH',
+  'kmmmmmmmmlk.',
+  'kmmMMMmmmlk.',
+  'kmmmmmmmllk.',
+  'kkkkkkkkkkk.',
+  '...kmlk.....',
+]);
 
-// Legs share both facings; split into left (cols < 10) and right (>= 10) legs.
-const LEGS = [
-  '.....Pqqqqqqqqpp....',
-  '.....PqqqPPqqqpP....',
-  '.....PqqqP.PqqpP....',
-  '.....PqqqP.PqqpP....',
-  '.....PqqqP.PqqpP....',
-  '.....OoooO.OoooO....',
-  '....OooooO.OoooO....',
-  '....OOOOOO.OOOOO....',
-];
+const UP_HEAD = head([
+  'HHHHHHHHHHHH',
+  'HhiiiiiijjjH',
+  'HhiiiiiiijjH',
+  'HhhiiiiiiijH',
+  'HhhiiiiiiiiH',
+  'HhhiiiiiiiiH',
+  'HhhhiiiiiiiH',
+  'HhhhiiiiiiiH',
+  'khhhhiiiiiik',
+  'klHhhhhhhhmk',
+  'kllHHHHHHmmk',
+  'kkkkkkkkkkkk',
+  '.....klmk...',
+]);
 
-const SPLIT = 10;
-const UPPER_ROWS = 25;
+const TORSO = body([
+  'SSSSSSSSSSSSSS',
+  'SuuStttttttSsS',
+  'SutStttttttSsS',
+  'SutStttttttSsS',
+  'SutStttttttSsS',
+  'SutStttttttSsS',
+  'SutStttttttSsS',
+  'SutSttttttsSsS',
+  'SutSsssssssSsS',
+  'SSSSSSSSSSSSSS',
+  'kmkPqqqqqqqPmk',
+  'kkkPqqqqqqqPkk',
+]);
+
+const DOWN_UPPER = [...DOWN_HEAD, ...TORSO];
+const UP_UPPER = [...UP_HEAD, ...TORSO];
+
+// Legs share both facings; left leg is cols < SPLIT, right leg cols >= SPLIT.
+const LEGS = body([
+  '...PqqqPqqpP..',
+  '...PqqqPqqpP..',
+  '...PqqqPqqpP..',
+  '...PqqqPqqpP..',
+  '...PqqqPqqpP..',
+  '...PqqqPqqpP..',
+  '...PPPPPPPPP..',
+  '..OoooOOoooO..',
+  '..OOOOOOOOOO..',
+]);
+
+const SPLIT = 11;
+const UPPER_ROWS = DOWN_UPPER.length;
 const H = UPPER_ROWS + LEGS.length + 1; // +1 row of headroom for the walk bob
 
 function check(rows, name) {
@@ -117,7 +117,16 @@ function compose(upper, { lift = null, bob = false } = {}) {
       put(x, top + UPPER_ROWS + j - (raised ? 1 : 0), row[x]);
     }
   });
+  // Arm swing: the arm on the lifted leg's side drops 1px. It is drawn on top
+  // of the unshifted body, so the shoulder never shows a gap.
+  const torsoStart = upper.length - TORSO.length;
   upper.forEach((row, j) => { for (let x = 0; x < W; x++) put(x, top + j, row[x]); });
+  if (lift) {
+    const [a0, a1] = lift === 'L' ? [4, 6] : [15, 17];
+    for (let j = torsoStart + 1; j < upper.length; j++) {
+      for (let x = a0; x <= a1; x++) put(x, top + j + 1, upper[j][x]);
+    }
+  }
   return grid;
 }
 
