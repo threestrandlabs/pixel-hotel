@@ -28,7 +28,9 @@ function layers(raw, facing, pose = 'idle0') {
   if (outfit !== 'dress') L.push([at(`bottom_${swim ? 'shorts' : look.bottom}`), tint(look.pants)]);
   if (!swim) L.push([at(`shoes_${look.shoeStyle}`), tint(look.shoe)]);
   L.push([at(`top_${outfit}`), tint(look.shirt)], [at(`top_${outfit}_trim`), W1]);
-  L.push([at(`hair_${look.hairStyle}`), tint(look.hair)]);
+  const hatted = look.accessory === 'cap' || look.accessory === 'beanie';
+  const hairStyle = hatted && ['spiky', 'curls'].includes(look.hairStyle) ? 'classic' : look.hairStyle;
+  L.push([at(`hair_${hairStyle}`), tint(look.hair)]);
   if (facing === 'down' || facing === 'right') {
     const f = faceFor(look, raw.face || {});
     const fc = (p) => `face/${facing}/stand/${p}`;

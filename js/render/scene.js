@@ -336,7 +336,10 @@ function characterLayers(rawLook, facing, pose, faceState = {}, outfitOverride =
   if (!swim) layers.push([at(`shoes_${look.shoeStyle}`), tintFor(look.shoe, 0xf4f4f4)]);
   layers.push([at(`top_${outfit}`), tintFor(look.shirt, 0x4da3ff)]);
   layers.push([at(`top_${outfit}_trim`), 0xffffff]);
-  layers.push([hairFrame(facing, pose, look), tintFor(look.hair, 0x5a3826)]);
+  // Tall styles tuck under a hat instead of poking through its crown.
+  const hatted = look.accessory === 'cap' || look.accessory === 'beanie';
+  const hairLook = hatted && (look.hairStyle === 'spiky' || look.hairStyle === 'curls') ? { ...look, hairStyle: 'classic' } : look;
+  layers.push([hairFrame(facing, pose, hairLook), tintFor(look.hair, 0x5a3826)]);
   if (facing === 'down' || facing === 'right') {
     const kind = pose === 'sit0' ? 'sit' : 'stand';
     const f = faceFor(look, faceState);

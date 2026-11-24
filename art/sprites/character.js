@@ -50,7 +50,41 @@ function project(u, v, z) {
 // Layer-aware canvas: colour = [grey, layerId, 0, 255]. Trim pixels also
 // remember their real colour.
 class BodyCanvas extends PixelCanvas {
-  constructor(w, h) { super(w, h); this.trim = new Map(); this.curTrim = null; }
+  constructor(w, h) {
+    super(w, h);
+    this.trim = new Map();
+    this.curTrim = null;
+    this.depth = new Float32Array(w * h).fill(-Infinity);
+  }
+
+  // Scanline fill (same rule as PixelCanvas.poly) that only paints a pixel
+  // when this surface is nearer the camera than what is already there.
+  // depthAt(x, y) gives the surface depth at a pixel centre.
+  polyDepth(pts, c, depthAt) {
+    let minY = Infinity;
+    let maxY = -Infinity;
+    for (const [, y] of pts) { minY = Math.min(minY, y); maxY = Math.max(maxY, y); }
+    for (let y = Math.floor(minY); y < Math.ceil(maxY); y++) {
+      const cy = y + 0.5;
+      const xs = [];
+      for (let i = 0; i < pts.length; i++) {
+        const [x0, y0] = pts[i];
+        const [x1, y1] = pts[(i + 1) % pts.length];
+        if ((y0 <= cy && y1 > cy) || (y1 <= cy && y0 > cy)) xs.push(x0 + ((cy - y0) / (y1 - y0)) * (x1 - x0));
+      }
+      xs.sort((a, b) => a - b);
+      for (let k = 0; k + 1 < xs.length; k += 2) {
+        for (let x = Math.ceil(xs[k] - 0.5); x < Math.ceil(xs[k + 1] - 0.5); x++) {
+          if (!this.inside(x, y)) continue;
+          const d = depthAt(x + 0.5, cy);
+          const i = y * this.w + x;
+          if (d <= this.depth[i] + 1e-6) continue;
+          this.depth[i] = d;
+          this.set(x, y, c);
+        }
+      }
+    }
+  }
 
   set(x, y, c) {
     super.set(x, y, c);
@@ -75,19 +109,27 @@ function drawBox(cv, map, box) {
   const left = [P(u0, v1, z1), P(u1, v1, z1), P(u1, v1, z0), P(u0, v1, z0)];
   const right = [P(u1, v1, z1), P(u1, v0, z1), P(u1, v0, z0), P(u1, v1, z0)];
   const top = [P(u0, v0, z1), P(u1, v0, z1), P(u1, v1, z1), P(u0, v1, z1)];
+  // Screen: x = OX + 2(u - v), y = OY + (u + v) - z (u, v in body units).
+  // Every point on one pixel's view ray differs by (1, 1, 2), so u + v + z
+  // grows toward the camera; recover (u, v, z) on each face plane from (x, y).
+  const sx = (x) => (x - OX) / 2; // = u - v
+  const depthLeft = (x, y) => { const v = v1; const u = sx(x) + v; const z = OY + u + v - y; return u + v + z; };
+  const depthRight = (x, y) => { const u = u1; const v = u - sx(x); const z = OY + u + v - y; return u + v + z; };
+  const depthTop = (x, y) => (y - OY + z1) + z1; // u + v = y - OY + z on the top plane
+  const fill = (pts, grey, lay, depthAt) => cv.polyDepth(pts, [grey, ID[lay], 0, 255], depthAt);
   if (layer === 'trim') {
     const base = typeof box.colour === 'string' ? hexRgb(box.colour) : box.colour;
     const shadeOf = (k) => (base[3] < 255 ? base : hexRgb(mix(box.colour, k < 0 ? '#1a1024' : '#ffffff', Math.abs(k))));
-    cv.curTrim = shadeOf(0); cv.paint(left, 0, 'trim');
-    cv.curTrim = shadeOf(-0.25); cv.paint(right, 0, 'trim');
-    cv.curTrim = shadeOf(0.2); cv.paint(top, 0, 'trim');
+    cv.curTrim = shadeOf(0); fill(left, 0, 'trim', depthLeft);
+    cv.curTrim = shadeOf(-0.25); fill(right, 0, 'trim', depthRight);
+    cv.curTrim = shadeOf(0.2); fill(top, 0, 'trim', depthTop);
     return;
   }
   // "dark" boxes use the next step down the ramp (stripes, pockets, folds)
   const tone = box.tone === 'dark' ? [G.base, G.shade, G.deep] : [G.hi, G.base, G.shade];
-  cv.paint(left, tone[1], layer);
-  cv.paint(right, tone[2], layer);
-  cv.paint(top, box.top ?? tone[0], layer);
+  fill(left, tone[1], layer, depthLeft);
+  fill(right, tone[2], layer, depthRight);
+  fill(top, box.top ?? tone[0], layer, depthTop);
 }
 
 // Paint details on the head face that points "forward" (b1 side) when visible.
@@ -98,12 +140,19 @@ function frontDetail(cv, map, box, pixels, facing) {
     for (let i = 0; i < w; i++) {
       for (let j = 0; j < h; j++) {
         const [u, v] = map(box.a0 + da + i + 0.5 - CA, box.b1 - CB);
-        const [x, y] = project(u, v, box.z1 - dz - j);
+        const z = box.z1 - dz - j;
+        const [x, y] = project(u, v, z);
         const px = Math.round(x);
         const py = Math.round(y - 0.5);
+        const d = u + v + z + 0.01; // on the head's front, a hair in front of it
         // one body unit spans 2 screen px horizontally on these faces
-        cv.set(px - 1, py, colour);
-        cv.set(px, py, colour);
+        for (const qx of [px - 1, px]) {
+          if (!cv.inside(qx, py)) continue;
+          const k = py * cv.w + qx;
+          if (cv.depth && d <= cv.depth[k] - 0.5) continue; // something clearly nearer (a brim)
+          if (cv.depth) cv.depth[k] = Math.max(cv.depth[k], d);
+          cv.set(qx, py, colour);
+        }
       }
     }
   }
@@ -147,7 +196,9 @@ function rig(pose, step) {
 }
 
 const B = (layer) => (a0, a1, b0, b1, z0, z1, extra = {}) => ({ a0, a1, b0, b1, z0, z1, layer, ...extra });
-const seg = (layer, a0, a1, s, d = 0, extra = {}) => ({ a0: a0 - d, a1: a1 + d, b0: s.b0 - d, b1: s.b1 + d, z0: s.z0, z1: s.z1, layer, ...extra });
+// d > 0 puffs a garment out on every side (including the top) so it never
+// ties in depth with the skin underneath.
+const seg = (layer, a0, a1, s, d = 0, extra = {}) => ({ a0: a0 - d, a1: a1 + d, b0: s.b0 - d, b1: s.b1 + d, z0: s.z0, z1: s.z1 + d, layer, ...extra });
 
 // Skin-toned base body: legs, bare feet, torso, arms, neck, head.
 function mannequin(r) {
@@ -202,9 +253,9 @@ const SHOES = {
   ]),
 };
 
-function torso(r, z1 = r.zt + 15) { return B('top')(-D, 7 + D, -D, 4 + D, r.zt + 3, z1); }
+function torso(r, z1 = r.zt + 15) { return B('top')(-D, 7 + D, -D, 4 + D, r.zt + 3, z1 + D); }
 function sleeves(r, long) {
-  return r.arms.map((a) => B('top')(a.a0 - D, a.a1 + D, a.b0 - D, a.b1 + D, long ? r.zt + 4 : r.zt + 10, r.zt + 15));
+  return r.arms.map((a) => B('top')(a.a0 - D, a.a1 + D, a.b0 - D, a.b1 + D, long ? r.zt + 4 : r.zt + 10, r.zt + 15 + D));
 }
 // A detail on the front of the torso (b = 4 + D), as a thin box.
 function front(layer, a0, a1, z0, z1, extra = {}) {
