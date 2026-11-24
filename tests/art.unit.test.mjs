@@ -24,9 +24,7 @@ test('atlas: every catalogue item has a front and back sprite', () => {
 test('atlas: characters have every layer pose for all four facings', () => {
   for (const dir of ['down', 'right', 'up', 'left']) {
     for (const pose of ['idle0', 'walk0', 'walk1', 'walk2', 'walk3', 'sit0']) {
-      for (const layer of ['skin', 'top', 'bottom', 'shoes']) {
-        assert.ok(frames[`char/${dir}/${pose}/${layer}`], `char/${dir}/${pose}/${layer}`);
-      }
+      assert.ok(frames[`char/${dir}/${pose}/skin`], `char/${dir}/${pose}/skin`);
       // every wardrobe hair style except bald has its own hair layer
       for (const style of ['classic', 'bob', 'long', 'ponytail', 'spiky', 'curls']) {
         assert.ok(frames[`char/${dir}/${pose}/hair_${style}`], `char/${dir}/${pose}/hair_${style}`);
@@ -44,8 +42,8 @@ test('atlas: face parts exist for both visible facings, standing and sitting', (
         assert.ok(at(`eyeL_${shape}`) && at(`eyeR_${shape}`), `${facing}/${kind} eyes ${shape}`);
       }
       for (const shape of ['open', 'half']) assert.ok(at(`irisL_${shape}`) && at(`irisR_${shape}`), `iris ${shape}`);
-      for (const b of ['normal', 'raised', 'sad']) assert.ok(at(`brows_${b}`), `brows ${b}`);
-      for (const m of ['smile', 'frown', 'open', 'lips', 'laugh', 'smug', 'sleepy']) assert.ok(at(`mouth_${m}`), `mouth ${m}`);
+      for (const b of ['soft_normal', 'soft_raised', 'thick_normal', 'arched_raised', 'thin_normal', 'sad']) assert.ok(at(`brows_${b}`), `brows ${b}`);
+      for (const m of ['smile', 'frown', 'open', 'lips', 'grin', 'cat', 'laugh', 'smug', 'sleepy']) assert.ok(at(`mouth_${m}`), `mouth ${m}`);
       assert.ok(at('lashes') && at('blush'));
     }
   }
@@ -77,6 +75,7 @@ test('faces: wardrobe mouths, emotes and blinking pick the right parts', () => {
     for (const part of [`eyeL_${f.eyeL}`, `eyeR_${f.eyeR}`, `brows_${f.brows}`, `mouth_${f.mouth}`]) {
       assert.ok(frames[`face/down/stand/${part}`], `missing face part ${part}`);
     }
+    assert.ok(f.brows === 'sad' || f.brows.startsWith('soft_'), 'default brow style is soft');
   }
 });
 
@@ -114,6 +113,38 @@ test('atlas: frame anchors are sane and frames do not overlap', () => {
       const a = rects[i]; const b = rects[j];
       const overlap = a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
       assert.ok(!overlap, `${a.name} overlaps ${b.name}`);
+    }
+  }
+});
+
+test('wardrobe: every catalogue option has art in every facing and pose', async () => {
+  const A = await import('../js/avatar.js');
+  const missing = [];
+  for (const dir of ['down', 'right', 'up', 'left']) {
+    for (const pose of ['idle0', 'walk0', 'walk2', 'sit0']) {
+      const need = (n) => { if (!frames[`char/${dir}/${pose}/${n}`]) missing.push(`${dir}/${pose}/${n}`); };
+      for (const t of A.TOP_STYLES) need(`top_${t.outfit}`);
+      need('top_swimsuit');
+      for (const b of A.BOTTOM_STYLES) need(`bottom_${b.id}`);
+      for (const sh of A.SHOE_STYLES) need(`shoes_${sh.id}`);
+      for (const e of A.EAR_STYLES) if (e.id !== 'hidden') need(`ears_${e.id}`);
+      for (const a of A.ACCESSORY_STYLES) if (!['none', 'glasses', 'sunglasses'].includes(a.id)) need(`acc_${a.id}`);
+    }
+  }
+  assert.deepEqual(missing, []);
+  // fixed-colour trims: gold buttons, tie, glasses lenses
+  assert.ok(frames['char/down/idle0/top_bellhop_trim']);
+  assert.ok(frames['char/down/idle0/top_suit_trim']);
+  // glasses are drawn on the face grid
+  for (const p of ['glasses_frame', 'glasses_clear', 'glasses_dark']) assert.ok(frames[`face/down/stand/${p}`], p);
+});
+
+test('wardrobe: every face option maps to existing face parts', async () => {
+  const A = await import('../js/avatar.js');
+  for (const shape of A.EYE_SHAPES) for (const brow of A.BROW_STYLES) for (const m of A.MOUTH_PRESETS) {
+    const f = faceFor({ eyeShape: shape.id, browStyle: brow.id, mouth: m.mouth, freckles: true });
+    for (const part of [`eyeL_${f.eyeL}`, `eyeR_${f.eyeR}`, `brows_${f.brows}`, `mouth_${f.mouth}`, 'freckles']) {
+      assert.ok(frames[`face/down/stand/${part}`], `missing face part ${part} for ${shape.id}/${brow.id}/${m.id}`);
     }
   }
 });

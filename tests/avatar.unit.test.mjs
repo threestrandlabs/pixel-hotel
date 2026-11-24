@@ -46,7 +46,33 @@ test('avatar: validateAvatarLook accepts valid looks with known option ids and v
   };
 
   const validated = validateAvatarLook(custom);
-  assert.deepEqual(validated, custom);
+  // older looks gain the v0.14 fields with safe defaults
+  assert.deepEqual(validated, {
+    ...custom,
+    eyeShape: 'round', browStyle: 'soft', ears: 'normal', freckles: false, blush: true,
+    bottom: 'pants', shoeStyle: 'sneakers',
+  });
+});
+
+test('avatar: v0.14 catalogue fields validate, and the old skirt flag maps to a bottom style', () => {
+  const look = validateAvatarLook({
+    eyeShape: 'sparkly', browStyle: 'arched', ears: 'elf', freckles: true, blush: false,
+    outfit: 'suit', bottom: 'shorts', shoeStyle: 'boots', accessory: 'beanie', mouth: 'cat',
+  });
+  assert.equal(look.eyeShape, 'sparkly');
+  assert.equal(look.browStyle, 'arched');
+  assert.equal(look.ears, 'elf');
+  assert.equal(look.freckles, true);
+  assert.equal(look.blush, false);
+  assert.equal(look.outfit, 'suit');
+  assert.equal(look.bottom, 'shorts');
+  assert.equal(look.skirt, false);
+  assert.equal(look.shoeStyle, 'boots');
+  assert.equal(look.accessory, 'beanie');
+  assert.equal(look.mouth, 'cat');
+  assert.equal(validateAvatarLook({ skirt: true }).bottom, 'skirt');
+  const bad = validateAvatarLook({ eyeShape: 'laser', ears: 'antenna', bottom: 'kilt', shoeStyle: 'heels' });
+  assert.deepEqual([bad.eyeShape, bad.ears, bad.bottom, bad.shoeStyle], ['round', 'normal', 'pants', 'sneakers']);
 });
 
 test('avatar: validateAvatarLook rejects unknown option ids and defaults to safe values', () => {

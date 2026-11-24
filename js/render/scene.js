@@ -15,6 +15,7 @@ import { buildCity, createSky } from './city.js';
 import { sortDrawables, furnitureBox, entityBox } from '../depthSort.js';
 import { LOOKS } from '../looks.js';
 import { faceFor, IRIS_SHAPES } from '../faces.js';
+import { validateAvatarLook, DEFAULT_PLAYER_LOOK } from '../avatar.js';
 
 TextureStyle.defaultOptions.scaleMode = 'nearest';
 
@@ -33,9 +34,21 @@ const NIGHT_TINT = 0x5b6bb0;
 
 const HAIR_STYLE_IDS = new Set(['classic', 'bob', 'long', 'ponytail', 'spiky', 'curls', 'bald']);
 
-// Atlas frame name for one character layer; hair picks the look's style.
-function charFrame(facing, pose, layer, look) {
-  if (layer !== 'hair') return `char/${facing}/${pose}/${layer}`;
+// Looks come from saves, NPC presets and multiplayer peers; normalise once per
+// look object so every optional field has a known value.
+const lookCache = new WeakMap();
+function normalLook(look) {
+  if (!look || typeof look !== 'object') return DEFAULT_PLAYER_LOOK;
+  let n = lookCache.get(look);
+  if (!n) {
+    n = validateAvatarLook(look) || DEFAULT_PLAYER_LOOK;
+    // NPC presets may carry a hand-picked brow colour; keep it
+    lookCache.set(look, n);
+  }
+  return n;
+}
+
+function hairFrame(facing, pose, look) {
   let style = look?.hairStyle === 'short' ? 'classic' : look?.hairStyle;
   if (!HAIR_STYLE_IDS.has(style)) style = 'classic';
   return `char/${facing}/${pose}/hair_${style}`; // bald has no frame -> hidden
@@ -309,29 +322,43 @@ function tintFor(hexColor, fallback) {
 
 // Every sprite that makes up one character, back to front:
 // [frame name, tint]. Shared by the room renderer and the previews.
-function characterLayers(look, facing, pose, faceState = {}) {
+function characterLayers(rawLook, facing, pose, faceState = {}, outfitOverride = null) {
+  const look = normalLook(rawLook);
+  const at = (name) => `char/${facing}/${pose}/${name}`;
   const layers = [];
-  const body = {
-    skin: tintFor(look.skin, 0xf0c49a),
-    bottom: tintFor(look.pants, 0x2c3e63),
-    shoes: tintFor(look.shoe, 0xf4f4f4),
-    top: tintFor(look.shirt, 0x4da3ff),
-    hair: tintFor(look.hair, 0x5a3826),
-  };
-  for (const name of ['skin', 'bottom', 'shoes', 'top', 'hair']) layers.push([charFrame(facing, pose, name, look), body[name]]);
+  const swim = outfitOverride === 'swimsuit';
+  const outfit = swim ? 'swimsuit' : look.outfit;
+  const bottom = swim ? 'shorts' : look.bottom;
+  const skin = tintFor(look.skin, 0xf0c49a);
+  layers.push([at('skin'), skin]);
+  if (look.ears !== 'hidden') layers.push([at(`ears_${look.ears}`), skin]);
+  if (outfit !== 'dress') layers.push([at(`bottom_${bottom}`), tintFor(look.pants, 0x2c3e63)]);
+  if (!swim) layers.push([at(`shoes_${look.shoeStyle}`), tintFor(look.shoe, 0xf4f4f4)]);
+  layers.push([at(`top_${outfit}`), tintFor(look.shirt, 0x4da3ff)]);
+  layers.push([at(`top_${outfit}_trim`), 0xffffff]);
+  layers.push([hairFrame(facing, pose, look), tintFor(look.hair, 0x5a3826)]);
   if (facing === 'down' || facing === 'right') {
     const kind = pose === 'sit0' ? 'sit' : 'stand';
     const f = faceFor(look, faceState);
-    const at = (part) => `face/${facing}/${kind}/${part}`;
+    const face = (part) => `face/${facing}/${kind}/${part}`;
     const iris = tintFor(look.eye, 0x2b2230);
-    if (f.blush) layers.push([at('blush'), 0xffffff]);
-    layers.push([at(`eyeL_${f.eyeL}`), 0xffffff]);
-    if (IRIS_SHAPES.has(f.eyeL)) layers.push([at(`irisL_${f.eyeL}`), iris]);
-    layers.push([at(`eyeR_${f.eyeR}`), 0xffffff]);
-    if (IRIS_SHAPES.has(f.eyeR)) layers.push([at(`irisR_${f.eyeR}`), iris]);
-    if (f.lashes) layers.push([at('lashes'), 0xffffff]);
-    layers.push([at(`brows_${f.brows}`), tintFor(look.brow || look.hair, 0x4a2f20)]);
-    layers.push([at(`mouth_${f.mouth}`), 0xffffff]);
+    if (f.blush) layers.push([face('blush'), 0xffffff]);
+    if (f.freckles) layers.push([face('freckles'), 0xffffff]);
+    layers.push([face(`eyeL_${f.eyeL}`), 0xffffff]);
+    if (IRIS_SHAPES.has(f.eyeL)) layers.push([face(`irisL_${f.eyeL}`), iris]);
+    layers.push([face(`eyeR_${f.eyeR}`), 0xffffff]);
+    if (IRIS_SHAPES.has(f.eyeR)) layers.push([face(`irisR_${f.eyeR}`), iris]);
+    if (f.lashes) layers.push([face('lashes'), 0xffffff]);
+    layers.push([face(`brows_${f.brows}`), tintFor(rawLook?.brow || look.brow || look.hair, 0x4a2f20)]);
+    layers.push([face(`mouth_${f.mouth}`), 0xffffff]);
+    if (look.accessory === 'glasses' || look.accessory === 'sunglasses') {
+      layers.push([face(look.accessory === 'glasses' ? 'glasses_clear' : 'glasses_dark'), 0xffffff]);
+      layers.push([face('glasses_frame'), tintFor(look.accessoryColor, 0x2a2030)]);
+    }
+  }
+  if (look.accessory !== 'none' && look.accessory !== 'glasses' && look.accessory !== 'sunglasses') {
+    layers.push([at(`acc_${look.accessory}`), tintFor(look.accessoryColor, 0x2a2030)]);
+    layers.push([at(`acc_${look.accessory}_trim`), 0xffffff]);
   }
   return layers;
 }
@@ -356,7 +383,7 @@ function updateEntityNode(node, e, now) {
   // Block characters are rendered natively for all four facings.
   const facing = ['down', 'right', 'up', 'left'].includes(e.dir) ? e.dir : 'down';
   const pose = characterPose(e, now);
-  const layers = characterLayers(look, facing, pose, { emote: e.emote || null, blink: Boolean(e.blink) });
+  const layers = characterLayers(look, facing, pose, { emote: e.emote || null, blink: Boolean(e.blink) }, e.outfit);
   const kids = node.body.children;
   while (kids.length < layers.length) node.body.addChild(new Sprite());
   for (let i = 0; i < kids.length; i++) {

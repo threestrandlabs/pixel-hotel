@@ -39,6 +39,16 @@ the grey `TINT` ramp and tinted at runtime with the wardrobe colour; eyes and
 mouth are fixed colours on the head's front face. Poses: idle, 4-frame walk
 (legs stride, arms swing), sit.
 
+### Wearables
+A skin-toned base body is rendered once; ears, bottoms, shoes, tops, hair and
+accessories are each rendered over it and keep only their visible pixels, so
+anything any of them hides stays hidden. Garments sit 0.15 body units proud of
+the body. Wearables use the grey tint ramp; fixed-colour details (gold
+buttons, ties, shirts under jackets) go in a separate `_trim` sprite. Glasses
+and all face features are drawn on the 14x12 face grid. Stacking order:
+skin, ears, bottom, shoes, top, top trim, hair, face, accessory, accessory trim.
+`scripts/preview-wardrobe.mjs` renders the whole catalogue for review.
+
 ## Provenance
 All art is hand-authored for this project in `art/sprites/*.js` and built by
 `scripts/build-atlas.mjs`. No generated or third-party images.
