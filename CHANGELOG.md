@@ -7,6 +7,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changed — PixiJS rebuild and new pixel art
+- Rendering moved from six stacked 2D canvases to one PixiJS 8 scene (Vite + npm).
+- Footprint-box depth sorting: avatars and multi-tile furniture no longer pop
+  through each other.
+- All art redrawn by hand in one style (`docs/art-direction.md`): floors per room
+  material, wainscot walls, every catalogue item as a single sprite with front and
+  back views, isometric block characters with four native facings, walk and sit.
+- Animated pool water with caustics and stone rims; salon partitions form one
+  see-through glass wall; the chandelier hangs above a floor medallion.
+- New city: banded sky with sun, moon, stars and clouds; street-level roads, parks,
+  buildings with lit windows at night, street trees and moving cars; the hotel
+  tower drops from each floor to the street; haze grows with height.
+- Night tint plus warm glow pools from every light source; open-air floors get
+  glass railings.
+- Zoom now moves in whole steps (1x-4x) so pixels stay square.
+
+### Removed
+- The procedural canvas renderer (`render.js`, `sprites.js`, `voxel.js`,
+  `pixelart.js`, `bakeSnap.js`), its review scripts and its renderer-only tests.
+
 ## [0.13.1] - 2026-11-23
 
 Leftover art fixes: monitor glare, fern, Low backdrop windows, street trees, and a crisp city backdrop.

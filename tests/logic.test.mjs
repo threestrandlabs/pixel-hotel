@@ -21,27 +21,13 @@ import {
 import { createDefaultState, loadState, saveState, resetState, sanitizePlacedItemsForRoom, SAVE_KEY } from '../js/save.js';
 import { getCatalogueItem, TILE, SAVE_VERSION, ROOMS, NPCS, CATALOGUE, SEED_FURNITURE, ITEM_CATEGORIES, ROOM_TIERS } from '../js/data.js';
 import { respondToMessage, findWanderTarget, createNpcRuntime, tickNpc } from '../js/npc.js';
-import { LOOKS, renderCharacter, buildParts } from '../js/voxel.js';
+import { LOOKS } from '../js/looks.js';
 import {
-  buildWindowSegment, buildGlassBalustradeSegment, buildBookshelf, FURNITURE_BUILDERS, ART,
-  buildFloorTile, buildWallSegment, buildDoorSegment, buildElevatorDoorSegment,
-  buildStairwellDoorSegment, buildElevatorTile, buildEdgeRailSegment, buildDoorTile,
-  FLOOR_MATERIALS, ISO,
-  buildSuiteBedSprite, buildSofaSprite, buildComputerDeskSprite, buildLampSprite,
-  buildPlantSprite, buildBarCounter, buildArmchairSprite, buildDiningTableSprite, buildDiningChairSprite,
-} from '../js/sprites.js';
-import { materialRamp, getDetail, setDetail } from '../js/pixelart.js';
-import { snapBakeCtx } from '../js/bakeSnap.js';
-import {
-  tileToScreen, computeOrigin, computeGroundDy, computeCityGroundDy,
-  projectIsoCityPoint, buildIsoCityLayout, computeCityVehicles, drawBackground,
+  tileToScreen, computeOrigin, computeGroundDy,
   clampZoom, zoomAtPoint, centerCameraOnTile, screenToTile, worldToScreen,
-  DEFAULT_ZOOM, MIN_ZOOM, MAX_ZOOM, deviceScale, deadzoneCameraTarget, CAMERA_DEADZONE_MARGIN,
-  nearCityLayerTransform, getCachedIsoCityLayout, renderSkylineToCanvas, drawStreetTree, getSeatConfig,
-  TILE_W, TILE_H, drawDiamondOverlay, ensureCameraTransform, ensureDeviceTransform,
-  setActiveCamMatrix, drawSwimWaterlineOverlay, drawPoolWaterLayer, drawCharacter,
-  cutawayBakeScale, CUTAWAY_BAKE_SCALE_MAX, drawTowerCutawayUnderCached, renderRoom,
-} from '../js/render.js';
+  DEFAULT_ZOOM, MIN_ZOOM, MAX_ZOOM, deadzoneCameraTarget, CAMERA_DEADZONE_MARGIN,
+  TILE_W, TILE_H,
+} from '../js/iso.js';
 import { ChiptuneAudio, MOOD_PROFILES, MUSIC_FILES, PLAYLIST, TRACK_ORDER, moodForRoom, formatTime } from '../js/audio.js';
 
 // ---------- fake localStorage ----------
@@ -502,87 +488,10 @@ test('save/load: a pre-0.1.1 save with empty rooms loads unchanged (not re-seede
 
 // ======================= rendering regression (v0.2.0) =======================
 
-test('rendering: all four facing, walk, and sitting frames for player and 4 NPCs generate nonempty bounded sprites', () => {
-  const mockCanvas = (w, h) => ({
-    width: w,
-    height: h,
-    getContext: () => new Proxy({}, { get: () => () => {}, set: () => true }),
-  });
-  const characters = ['player', 'mochi', 'gus', 'drpix', 'lola'];
-  const dirs = ['down', 'up', 'left', 'right'];
-  const poses = [{ stride: 0 }, { stride: 1 }, { stride: -1 }, { sit: true }];
 
-  for (const id of characters) {
-    const look = LOOKS[id];
-    assert.ok(look, `expected look definition for ${id}`);
-    for (const dir of dirs) {
-      for (const pose of poses) {
-        const { canvas, ox, oy } = renderCharacter(look, dir, pose, mockCanvas);
-        assert.ok(canvas.width > 0 && canvas.height > 0, `empty canvas for ${id} ${dir} ${JSON.stringify(pose)}`);
-        assert.ok(ox > 0 && oy > 0, `invalid anchor offset for ${id} ${dir}`);
-        assert.ok(canvas.width < 200 && canvas.height < 200, `unbounded canvas size for ${id}`);
-        assert.ok(Number.isFinite(ox) && Number.isFinite(oy), `non-finite offsets for ${id}`);
-      }
-    }
-  }
-});
-
-test('rendering: both wall window orientations generate nonempty bounded sprites', () => {
-  const sky = { top: '#8fd0ff', bottom: '#fff6c9' };
-  for (const orientation of ['north', 'west']) {
-    const s = buildWindowSegment('#e8d8c8', sky, orientation);
-    assert.ok(s.w > 0 && s.h > 0, `invalid dimensions for ${orientation} window`);
-    assert.ok(s.w <= 128 * ART && s.h <= 128 * ART, `unbounded dimensions for ${orientation} window`);
-    let opaque = 0;
-    for (const row of s.px) for (const p of row) if (p) opaque++;
-    assert.ok(opaque > 0, `expected opaque pixels for ${orientation} window`);
-  }
-});
 
 // ======================= volumetric furniture regression (v0.3.0 / v0.4.0) =======================
 
-test('furniture: all catalogue model sprites generate nonempty bounded sprites with meaningful volumetric faces', () => {
-  assert.ok(CATALOGUE.length >= 41, 'catalogue should contain legacy + v0.3.0 + v0.4.0 items');
-
-  for (const item of CATALOGUE) {
-    const builder = FURNITURE_BUILDERS[item.spriteKey];
-    assert.ok(builder, `missing sprite builder for catalogue item ${item.id} (spriteKey: ${item.spriteKey})`);
-
-    // Verify both rotation 0 and rotation 1
-    for (const rot of [0, 1]) {
-      const s = builder(rot);
-      assert.ok(s, `builder returned null for ${item.id} rot ${rot}`);
-      assert.ok(s.w > 10 && s.w <= 200, `unreasonable width ${s.w} for ${item.id}`);
-      assert.ok(s.h > 10 && s.h <= 200, `unreasonable height ${s.h} for ${item.id}`);
-      assert.ok(Number.isFinite(s.ax) && Number.isFinite(s.ay), `non-finite anchor for ${item.id}`);
-      assert.ok(s.ax > 0 && s.ax < s.w, `anchor x out of bounds for ${item.id}: ax=${s.ax}, w=${s.w}`);
-      assert.ok(s.ay > 0 && s.ay < s.h, `anchor y out of bounds for ${item.id}: ay=${s.ay}, h=${s.h}`);
-
-      // Count non-empty and non-outline pixels
-      const colors = new Map();
-      let opaqueCount = 0;
-      for (let y = 0; y < s.h; y++) {
-        for (let x = 0; x < s.w; x++) {
-          const c = s.px[y][x];
-          if (!c) continue;
-          opaqueCount++;
-          if (c !== '#2a1d2e') {
-            colors.set(c, (colors.get(c) || 0) + 1);
-          }
-        }
-      }
-      assert.ok(opaqueCount >= 40, `too few pixels (${opaqueCount}) for ${item.id} rot ${rot}`);
-
-      // Meaningful volumetric faces check: true 3D isometric voxels have distinct
-      // lit top faces (L=+0.14), mid front-left faces (L=0), and shaded front-right
-      // faces (L=-0.22), resulting in at least 3 distinct non-outline color tones.
-      assert.ok(
-        colors.size >= 3,
-        `expected at least 3 volumetric face tones for ${item.id} rot ${rot}, found ${colors.size}: ${[...colors.keys()].join(', ')}`
-      );
-    }
-  }
-});
 
 test('catalogue: all 8 new v0.3.0 collection items have valid definitions, descriptions and sensible pricing', () => {
   const newIds = [
@@ -778,19 +687,6 @@ test('v0.4.0 quests: gym visit, restaurant dining, My Room decorating, and tower
   assert.ok(visitDone.includes('quest_explorer'));
 });
 
-test('v0.4.0 DPR voxel rendering: renderCharacter scales backing canvas with DPR scale factor', () => {
-  const mockCanvas = (w, h) => ({
-    width: w,
-    height: h,
-    getContext: () => new Proxy({}, { get: () => () => {}, set: () => true }),
-  });
-  const c1 = renderCharacter(LOOKS.player, 'down', { stride: 0 }, mockCanvas, 1);
-  const c2 = renderCharacter(LOOKS.player, 'down', { stride: 0 }, mockCanvas, 2);
-  assert.equal(c2.canvas.width, c1.canvas.width * 2);
-  assert.equal(c2.canvas.height, c1.canvas.height * 2);
-  assert.equal(c2.ox, c1.ox);
-  assert.equal(c2.oy, c1.oy);
-});
 
 // ======================= v0.5.0 irregular rooms, cutaway, interactions & voxel expressions =======================
 
@@ -953,117 +849,9 @@ test('v0.5.0 safe approach tiles & activity resolution: treadmill, swim, lie, ea
   assert.equal(rackApproach.kind, 'use');
 });
 
-test('v0.5.0 voxel characters: distinct treadmill, swim, eat, lie, blink, and breathe poses and side-profile eyes', () => {
-  const stand = buildParts(LOOKS.player, { stride: 0 });
-  const run0 = buildParts(LOOKS.player, { action: 'treadmill', actionFrame: 0 });
-  const run1 = buildParts(LOOKS.player, { action: 'treadmill', actionFrame: 1 });
-  const swim0 = buildParts(LOOKS.player, { action: 'swim', actionFrame: 0 });
-  const swim1 = buildParts(LOOKS.player, { action: 'swim', actionFrame: 1 });
-  const eat0 = buildParts(LOOKS.player, { sit: true, action: 'eat', actionFrame: 0 });
-  const eat1 = buildParts(LOOKS.player, { sit: true, action: 'eat', actionFrame: 1 });
-  const liePose = buildParts(LOOKS.player, { lie: true, action: 'lie' });
-  const breathePose = buildParts(LOOKS.player, { breathe: 1 });
-  const blinkPose = buildParts(LOOKS.player, { blink: true });
-
-  // Head box is the 6.75-unit cube head (x0 === -3.375, x1 === 3.375, y0 === -3.375, y1 === 3.375)
-  const findHead = (parts) => parts.find((p) => p.slot === 'head' || (p.x0 === -3.375 && p.x1 === 3.375));
-
-  // Treadmill alternates vertical body bounce and leg/arm geometry
-  assert.notEqual(findHead(run0).z0, findHead(run1).z0, 'treadmill alternates vertical running cadence');
-  assert.notDeepEqual(run0[0], run1[0], 'treadmill alternates leg lift between frames');
-
-  // Swim submerges lower body (fewer total voxel boxes than standing) and alternates stroke arms
-  assert.ok(swim0.length < stand.length, 'swimming submerges legs below water surface');
-  assert.notDeepEqual(swim0, swim1, 'swimming alternates freestyle arm reach');
-
-  // Eat raises right arm & cup prop toward mouth on frame 1
-  assert.notDeepEqual(eat0, eat1, 'eating lifts right arm and cup between frames');
-
-  // Lie pose reclines head lower onto bed/mat
-  assert.ok(findHead(liePose).z0 < findHead(stand).z0, 'lying pose lowers head z onto bed/mat');
-
-  // Breathe subtly shifts head elevation
-  assert.notEqual(findHead(stand).z0, findHead(breathePose).z0, 'breathing shifts head elevation');
-
-  // Side-profile eyes exist on left/right head faces and blink modifies front eye row
-  const recordTex = (texFn, face) => {
-    const ops = [];
-    const g = {
-      fillStyle: '',
-      fillRect(x, y, w, h) { ops.push({ fill: this.fillStyle, x, y, w, h }); },
-    };
-    texFn(g, 10, 8, (c) => c, face);
-    return ops;
-  };
-  const headStand = findHead(stand);
-  const headBlink = findHead(blinkPose);
-  assert.notDeepEqual(recordTex(headStand.tex, 'front'), recordTex(headBlink.tex, 'front'), 'blinking changes front face texture');
-  const rightOps = recordTex(headStand.tex, 'right');
-  assert.ok(rightOps.length >= 2, 'side-profile head texture includes temple sideburn and cheek contour');
-});
 
 // ======================= v0.6.0 isometric city, lounge audio & persisted mutes =======================
 
-test('v0.6.0 isometric city: roads, crossings, blocks, trees, and buildings share the hotel 2:1 isometric axes', () => {
-  const lobby = ROOMS.lobby;
-  const layout = buildIsoCityLayout(lobby, 1200, 800, 0.5);
-  const { originX, originY } = computeOrigin(lobby, 1200, 800);
-
-  // Verify u and v basis vectors match tileToScreen exactly (+32,+16 and -32,+16)
-  const p00 = projectIsoCityPoint(0, 0, 0, originX, layout.groundOriginY);
-  const p10 = projectIsoCityPoint(1, 0, 0, originX, layout.groundOriginY);
-  const p01 = projectIsoCityPoint(0, 1, 0, originX, layout.groundOriginY);
-  const t00 = tileToScreen(0, 0, originX, originY);
-  const t10 = tileToScreen(1, 0, originX, originY);
-  const t01 = tileToScreen(0, 1, originX, originY);
-  assert.equal(p10[0] - p00[0], t10.sx - t00.sx);
-  assert.equal(p10[1] - p00[1], t10.sy - t00.sy);
-  assert.equal(p01[0] - p00[0], t01.sx - t00.sx);
-  assert.equal(p01[1] - p00[1], t01.sy - t00.sy);
-
-  // Every road segment edge lies along a 2:1 isometric slope (|dy/dx| === 0.5)
-  assert.ok(layout.roads.length >= 8, 'city layout contains u and v road avenues');
-  for (const r of layout.roads) {
-    const [a, b, c] = r.pts;
-    const slopeAB = Math.abs((b[1] - a[1]) / (b[0] - a[0]));
-    const slopeBC = Math.abs((c[1] - b[1]) / (c[0] - b[0]));
-    assert.ok(Math.abs(slopeAB - 0.5) < 1e-6, `road edge AB slope ${slopeAB} must be 0.5`);
-    assert.ok(Math.abs(slopeBC - 0.5) < 1e-6, `road edge BC slope ${slopeBC} must be 0.5`);
-  }
-
-  // Zebra crossings, hotel block, varied building heights, trees,lamps & distance haze
-  assert.ok(layout.crossings.length >= 8, 'intersections include isometric pedestrian crossings');
-  const hotelBlock = layout.blocks.find((b) => b.bi === 0 && b.bj === 0);
-  assert.ok(hotelBlock && hotelBlock.kind === 'hotel', 'central block (0,0) is reserved for hotel plaza');
-  assert.ok(hotelBlock.trees.length > 0 && hotelBlock.lamps.length > 0, 'hotel block has perimeter trees and streetlamps');
-
-  const allBuildings = layout.blocks.flatMap((b) => b.buildings).filter((b) => !b.isPlaza);
-  assert.ok(allBuildings.length >= 12, 'surrounding blocks contain 3D isometric buildings');
-  const heights = new Set(allBuildings.map((b) => b.heightZ));
-  assert.ok(heights.size >= 4, 'neighbouring buildings have varied heights');
-
-  // Distance haze increases for blocks farther toward the horizon
-  const sortedByHaze = [...layout.blocks].filter((b) => !(b.bi === 0 && b.bj === 0));
-  const nearBlock = sortedByHaze.find((b) => b.bi + b.bj >= 2);
-  const farBlock = sortedByHaze.find((b) => b.bi + b.bj <= -1);
-  assert.ok(nearBlock && farBlock);
-  assert.ok(farBlock.haze > nearBlock.haze, 'distant blocks have stronger atmospheric haze than foreground blocks');
-
-  // Night phase lights up building facade windows
-  const nightLayout = buildIsoCityLayout(lobby, 1200, 800, 0.02);
-  const nightLitCount = nightLayout.blocks
-    .flatMap((b) => b.buildings)
-    .filter((b) => !b.isPlaza)
-    .flatMap((b) => [...b.windowsLeft, ...b.windowsRight])
-    .filter((w) => w.lit).length;
-  assert.ok(nightLitCount > 25, 'night city layout illuminates building facade windows');
-
-  // Floor-dependent elevation shifts ground plane downward on upper floors
-  assert.ok(computeGroundDy(1) < computeGroundDy(4));
-  assert.ok(computeGroundDy(4) < computeGroundDy(8));
-  assert.ok(computeCityGroundDy(1) < computeCityGroundDy(4));
-  assert.ok(computeCityGroundDy(4) < computeCityGroundDy(10));
-});
 
 test('v0.6.0 audio: defers AudioContext until user gesture, separates music/SFX mutes & volumes, and switches area moods', () => {
   let createdContexts = 0;
@@ -1496,199 +1284,9 @@ test('picking: screenToTile round-trips for outdoor decks (rooftop, garden) and 
   }
 });
 
-test('picking: drawDiamondOverlay restores camera transform so hover highlight projects with active camera', () => {
-  let appliedTransform = null;
-  let currentTransform = { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
-  const fakeCtx = {
-    save() {},
-    restore() {},
-    globalAlpha: 1,
-    fillStyle: '',
-    beginPath() {},
-    moveTo() {},
-    lineTo() {},
-    closePath() {},
-    fill() { appliedTransform = { ...currentTransform }; },
-    setTransform(a, b, c, d, e, f) {
-      currentTransform = { a, b, c, d, e, f };
-    },
-    getTransform() { return currentTransform; },
-  };
 
-  // Switch context to device transform mode (as left by blitDeviceAligned)
-  ensureDeviceTransform(fakeCtx);
-  assert.equal(currentTransform.a, 1);
 
-  // Calling drawDiamondOverlay must ensure camera transform is restored on ctx
-  drawDiamondOverlay(fakeCtx, 100, 100, '#fff6c9', 0.35);
-  assert.ok(appliedTransform, 'fill was called with a valid transform');
-});
 
-test('pool overlay: drawSwimWaterlineOverlay restores camera transform so swim wake & collar project with active camera', () => {
-  let appliedTransform = null;
-  let currentTransform = { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
-  const fakeCtx = {
-    save() {},
-    restore() {},
-    fillStyle: '',
-    strokeStyle: '',
-    lineWidth: 1,
-    beginPath() {},
-    ellipse() { appliedTransform = { ...currentTransform }; },
-    arc() {},
-    fill() {},
-    stroke() {},
-    setTransform(a, b, c, d, e, f) {
-      currentTransform = { a, b, c, d, e, f };
-    },
-    getTransform() { return currentTransform; },
-  };
-
-  const camMatrix = { a: 1.5, b: 0, c: 0, d: 1.5, e: 140, f: 90 };
-  setActiveCamMatrix(camMatrix);
-  try {
-    // Put context into device transform mode (as left by blitDeviceAligned)
-    ensureDeviceTransform(fakeCtx);
-    assert.deepStrictEqual(currentTransform, { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 });
-
-    // Calling drawSwimWaterlineOverlay must ensure camera transform is restored on ctx
-    drawSwimWaterlineOverlay(fakeCtx, 120, 80, 0);
-    assert.ok(appliedTransform, 'ellipse was called');
-    assert.deepStrictEqual(appliedTransform, camMatrix, 'swim overlay must be drawn with active camera matrix, not identity device transform');
-  } finally {
-    setActiveCamMatrix(null);
-  }
-});
-
-test('pool overlay: drawPoolWaterLayer restores camera transform so caustics shimmer ellipse projects with active camera', () => {
-  let appliedTransform = null;
-  let currentTransform = { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
-  const fakeCtx = {
-    save() {},
-    restore() {},
-    fillStyle: '',
-    beginPath() {},
-    ellipse() { appliedTransform = { ...currentTransform }; },
-    fill() {},
-    drawImage() {},
-    setTransform(a, b, c, d, e, f) {
-      currentTransform = { a, b, c, d, e, f };
-    },
-    getTransform() { return currentTransform; },
-  };
-
-  const camMatrix = { a: 1.25, b: 0, c: 0, d: 1.25, e: 60, f: 45 };
-  setActiveCamMatrix(camMatrix);
-
-  const realDocument = global.document;
-  global.document = {
-    createElement(tag) {
-      const canvas = { width: 0, height: 0 };
-      canvas.getContext = () => ({
-        setTransform() {},
-        clearRect() {},
-        drawImage() {},
-        fillRect() {},
-        beginPath() {},
-        moveTo() {},
-        lineTo() {},
-        closePath() {},
-        fill() {},
-        stroke() {},
-        arc() {},
-        ellipse() {},
-        rect() {},
-        clip() {},
-        save() {},
-        restore() {},
-        imageSmoothingEnabled: false,
-      });
-      return canvas;
-    },
-  };
-
-  try {
-    const poolItems = [{ itemId: 'pool_water', x: 2, y: 2, rot: 0, footprint: { w: 1, h: 1 } }];
-    // drawPoolWaterLayer blits the cached water layer via blitDeviceAligned (putting ctx in device mode)
-    // and must restore camera transform before drawing the caustics shimmer ellipse
-    drawPoolWaterLayer(fakeCtx, poolItems, 400, 300, 1, 1500);
-
-    assert.ok(appliedTransform, 'caustics ellipse was called');
-    assert.deepStrictEqual(appliedTransform, camMatrix, 'caustics shimmer ellipse must be drawn with active camera matrix, not identity device transform');
-  } finally {
-    global.document = realDocument;
-    setActiveCamMatrix(null);
-  }
-});
-
-test('pool overlay: drawCharacter restores camera transform after blitDeviceAligned for swim waterline', () => {
-  let appliedTransform = null;
-  let currentTransform = { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
-  const fakeCtx = {
-    save() {},
-    restore() {},
-    fillStyle: '',
-    strokeStyle: '',
-    lineWidth: 1,
-    beginPath() {},
-    ellipse() { appliedTransform = { ...currentTransform }; },
-    arc() {},
-    fill() {},
-    stroke() {},
-    drawImage() {},
-    setTransform(a, b, c, d, e, f) {
-      currentTransform = { a, b, c, d, e, f };
-    },
-    getTransform() { return currentTransform; },
-  };
-
-  const camMatrix = { a: 2, b: 0, c: 0, d: 2, e: 200, f: 100 };
-  setActiveCamMatrix(camMatrix);
-
-  const realDocument = global.document;
-  global.document = {
-    createElement(tag) {
-      const canvas = { width: 0, height: 0 };
-      canvas.getContext = () => ({
-        setTransform() {},
-        clearRect() {},
-        drawImage() {},
-        fillRect() {},
-        beginPath() {},
-        moveTo() {},
-        lineTo() {},
-        closePath() {},
-        fill() {},
-        stroke() {},
-        arc() {},
-        ellipse() {},
-        rect() {},
-        clip() {},
-        save() {},
-        restore() {},
-      });
-      return canvas;
-    },
-  };
-
-  try {
-    const entity = {
-      spriteKey: 'player',
-      color: '#00b4d8',
-      action: 'swim',
-      actionFrame: 0,
-      dir: 'down',
-      x: 3,
-      y: 3,
-    };
-    drawCharacter(fakeCtx, entity, 150, 120, 1, null);
-    assert.ok(appliedTransform, 'swim overlay ellipse was called');
-    assert.deepStrictEqual(appliedTransform, camMatrix, 'swim overlay after character blit must use active camera matrix');
-  } finally {
-    global.document = realDocument;
-    setActiveCamMatrix(null);
-  }
-});
 
 test('v0.7.0 zoom: zoomAtPoint keeps the world point under the cursor fixed on screen', () => {
   const camera = { zoom: 1, panX: 0, panY: 0 };
@@ -1805,49 +1403,8 @@ test('v0.7.0 persistence: master and ambience volume settings round-trip', () =>
 
 // ======================= v0.7.0 vehicles & per-room music =======================
 
-test('v0.7.0 vehicles: cars, taxis, buses, and scooters render on the isometric roads with headlights at night', () => {
-  const layout = buildIsoCityLayout(ROOMS.lobby, 960, 600, 0.5);
-  const dayVehicles = computeCityVehicles(layout, 0, 0.5);
-  assert.ok(dayVehicles.length >= 8, 'multiple vehicles populate the roads');
-  const types = new Set(dayVehicles.map((v) => v.type));
-  for (const t of ['car', 'taxi', 'bus', 'scooter']) assert.ok(types.has(t), `expected a ${t} among vehicles`);
-  for (const v of dayVehicles) assert.equal(v.lightsOn, false, 'lights off in daylight');
 
-  const nightVehicles = computeCityVehicles(layout, 0, 0.0);
-  assert.ok(nightVehicles.every((v) => v.lightsOn === true), 'headlights/taillights on at night');
-});
 
-test('v0.7.2 vehicles: every vehicle sits inside a road corridor (never over a building block)', () => {
-  const layout = buildIsoCityLayout(ROOMS.lobby, 960, 600, 0.5);
-  // Sample the whole traffic-light cycle so cars occupy many positions along their lanes.
-  for (const now of [0, 1500, 3000, 6000, 9000, 11000]) {
-    for (const v of computeCityVehicles(layout, now, 0.5)) {
-      // The vehicle must ride a road of its own axis, with its cross-axis coordinate
-      // inside that road's width — i.e. on asphalt, never over a building block.
-      const onRoad = layout.roads.some((r) => {
-        if (r.axis !== v.axis) return false;
-        return (r.axis === 'v')
-          ? (v.u >= r.u0 - 0.01 && v.u <= r.u1 + 0.01) // v-road: constrained in u
-          : (v.v >= r.v0 - 0.01 && v.v <= r.v1 + 0.01); // u-road: constrained in v
-      });
-      assert.ok(onRoad, `vehicle ${v.id} (${v.type}) at u=${v.u.toFixed(2)},v=${v.v.toFixed(2)} must be on a ${v.axis}-road`);
-    }
-  }
-});
-
-test('v0.7.2 render: deviceScale bakes at ceil(dpr*zoom) so bitmaps are never upscaled when zoomed in', () => {
-  for (const dpr of [1, 2, 3]) {
-    for (const zoom of [MIN_ZOOM, 0.7, 1, DEFAULT_ZOOM, MAX_ZOOM]) {
-      const ds = deviceScale(dpr, zoom);
-      assert.ok(Number.isInteger(ds), 'device scale is an integer bucket');
-      if (dpr * zoom > 8) continue; // capped at 8 to bound memory
-      assert.ok(ds >= dpr * zoom - 1e-9, `ds=${ds} must be >= dpr*zoom=${(dpr * zoom).toFixed(2)} (no upscaling)`);
-      assert.ok(ds >= 1 && ds <= 8, 'device scale stays within sane bounds');
-    }
-  }
-  assert.equal(deviceScale(1, 1), 1);
-  assert.equal(deviceScale(2, DEFAULT_ZOOM), 4); // ceil(2 * 2) = 4
-});
 
 test('v0.7.0 audio: every hotel room/floor resolves to its own distinct procedural track', () => {
   const trackIds = new Set();
@@ -2082,30 +1639,6 @@ function makeFakeCanvasCtx({ record = false } = {}) {
   };
 }
 
-test('v0.8.1 render: street vehicles are drawn strictly between the street backdrop and the buildings layer, so buildings always occlude them', () => {
-  const realDocument = global.document;
-  global.document = {
-    createElement(tag) {
-      assert.equal(tag, 'canvas', 'drawBackground only creates offscreen <canvas> elements');
-      const canvas = { width: 0, height: 0 };
-      canvas.getContext = () => makeFakeCanvasCtx({ record: false });
-      return canvas;
-    },
-  };
-  try {
-    const liveCtx = makeFakeCanvasCtx({ record: true });
-    drawBackground(liveCtx, 960, 600, 0.5, 8, 1, 5000, ROOMS.myroom, 1, null);
-    const calls = liveCtx._calls;
-    const blitIdx = calls.reduce((acc, c, i) => (c === 'drawImage' ? [...acc, i] : acc), []);
-    assert.equal(blitIdx.length, 2, 'exactly two cached-layer blits land on the live canvas: street backdrop, then buildings');
-    const [backdropIdx, buildingsIdx] = blitIdx;
-    assert.ok(backdropIdx < buildingsIdx, 'the street backdrop must blit before the buildings layer');
-    const vehicleDrawn = calls.some((c, i) => i > backdropIdx && i < buildingsIdx && (c === 'fill' || c === 'arc' || c === 'fillRect'));
-    assert.ok(vehicleDrawn, 'vehicles must be drawn strictly between the backdrop and buildings blits, so buildings always occlude them');
-  } finally {
-    global.document = realDocument;
-  }
-});
 
 // ======================= v0.8.1: lamp/light toggle & save migration =======================
 
@@ -2264,46 +1797,6 @@ test('v0.8.2 multiplayer room snapshots: My Room unchanged dimensions preserve v
 
 // ======================= v0.8.3 cassette player & rooftop railing bugfix =======================
 
-test('v0.8.3 rooftop railing: glass balustrade segments stay within their tile half (west x<32, north x>=32) and meet cleanly at corners without sticking out', () => {
-  const west = buildGlassBalustradeSegment('west');
-  const north = buildGlassBalustradeSegment('north');
-
-  const corner = 32 * ART; // half the (ART-scaled) tile width
-
-  let westOpaqueCount = 0;
-  let westOpaquePastCorner = 0;
-  let westHasCornerPost = false;
-  for (let y = 0; y < west.h; y++) {
-    for (let x = 0; x < west.w; x++) {
-      if (west.px[y][x]) {
-        westOpaqueCount++;
-        if (x >= corner) westOpaquePastCorner++;
-        if (x === corner - 1) westHasCornerPost = true;
-      }
-    }
-  }
-
-  let northOpaqueCount = 0;
-  let northOpaqueBeforeCorner = 0;
-  let northHasCornerPost = false;
-  for (let y = 0; y < north.h; y++) {
-    for (let x = 0; x < north.w; x++) {
-      if (north.px[y][x]) {
-        northOpaqueCount++;
-        if (x < corner) northOpaqueBeforeCorner++;
-        if (x === corner) northHasCornerPost = true;
-      }
-    }
-  }
-
-  assert.ok(westOpaqueCount > 0, 'west balustrade has pixels');
-  assert.equal(westOpaquePastCorner, 0, 'west balustrade must not stick out beyond the corner into empty sky/floor');
-  assert.ok(westHasCornerPost, 'west balustrade reaches the corner post');
-
-  assert.ok(northOpaqueCount > 0, 'north balustrade has pixels');
-  assert.equal(northOpaqueBeforeCorner, 0, 'north balustrade must not stick out before the corner into empty sky/floor');
-  assert.ok(northHasCornerPost, 'north balustrade starts at the corner post');
-});
 
 test('v0.8.3 music player: formatTime formats seconds to M:SS with zero-padding and handles edge cases', () => {
   assert.equal(formatTime(0), '0:00');
@@ -2437,34 +1930,6 @@ test('v0.11.1 rooftop housing structure: elevator and stairwell "To Sky Garden" 
   assert.ok(hasDoorArrivalRoute(roof, SEED_FURNITURE.rooftop));
 });
 
-test('v0.8.3 bookshelf model: solid closed side panels, top cornice, base plinth, and recessed books for rot 0 and 1', () => {
-  for (const rot of [0, 1]) {
-    const shelf = buildBookshelf(rot);
-    assert.ok(shelf.w > 0 && shelf.h > 0);
-    assert.equal(shelf.height, 74);
-
-    // Verify boxes include plinth base (z=0..4), back panel, upright side panels, shelves, and cornice (z=70..74)
-    const baseBox = shelf.boxes.find((b) => b.z0 === 0 && b.z1 === 4);
-    assert.ok(baseBox, `rot ${rot}: base plinth box must exist`);
-
-    const corniceBox = shelf.boxes.find((b) => b.z0 === 70 && b.z1 === 74);
-    assert.ok(corniceBox, `rot ${rot}: top cornice box must exist`);
-
-    const sidePanel = shelf.boxes.find((b) => b.z0 === 4 && b.z1 === 70);
-    assert.ok(sidePanel, `rot ${rot}: vertical upright side panel box must exist`);
-
-    // Verify books are recessed within the frame and do not exceed outer depth or cornice height
-    const bookBoxes = shelf.boxes.filter((b) => b.z0 > 0 && b.z1 - b.z0 <= 20 && b.z1 - b.z0 >= 10);
-    assert.ok(bookBoxes.length >= 15, `rot ${rot}: at least 15 book boxes expected across 3 shelves`);
-    for (const b of bookBoxes) {
-      if (rot % 2 === 0) {
-        assert.ok(b.v1 <= shelf.th - 0.08, `rot ${rot}: books must not protrude past front face`);
-      } else {
-        assert.ok(b.u1 <= shelf.tw - 0.08, `rot ${rot}: books must not protrude past front face`);
-      }
-    }
-  }
-});
 
 test('v0.8.3 library expansion: filled layout with bookshelf rows, study tables, reading nook, and librarian desk', () => {
   const lib = ROOMS.library;
@@ -2987,469 +2452,31 @@ test('v0.9.0 migration: v9 save migrates forward to v10, keeping existing player
 
 // ======================= v0.12.3 city background grounding & alignment =======================
 
-test('v0.12.3 city background: the ground/road/crossing pass clips to y >= horizonY, so nothing paints above the street even though road corridors geometrically extend behind the hotel', () => {
-  // Road & crossing polygons intentionally span the full corridor (including
-  // the stretch behind/north of the hotel, used as an off-screen vehicle
-  // queue), so asserting raw geometry never crosses the horizon would be
-  // wrong. What must hold is that the ground/road/crossing pass clips its
-  // paint region to the visible street band before drawing anything.
-  const room = ROOMS.lobby;
-  const width = 960;
-  const height = 600;
-  const layout = buildIsoCityLayout(room, width, height, 0.5, 400, 320, true);
-  const liveCtx = makeFakeCanvasCtx({ record: true });
-  renderSkylineToCanvas(liveCtx, width, height, 0.5, room.floor || 1, room, 400, 320, 'ground');
 
-  const clipIdx = liveCtx._calls.indexOf('clip');
-  assert.ok(clipIdx > -1, 'the ground/road/crossing pass establishes a clip before painting');
-  assert.ok(liveCtx._rects.length > 0, 'the clip is defined by a rect() call');
-  const [, clipY] = liveCtx._rects[liveCtx._rects.length - 1];
-  assert.ok(Math.abs(clipY - layout.horizonY) < 1, `clip region starts at the horizon (y=${layout.horizonY}), got y=${clipY}`);
-  const restoreIdx = liveCtx._calls.indexOf('restore', clipIdx);
-  assert.ok(restoreIdx > clipIdx, 'ground/roads/crossings are painted inside the horizon clip and restored afterward');
 
-  // Vehicles share the same contract: the caller (main.js's updateVehiclesAndBeacons,
-  // and drawBackground below) must clip to the same horizon band before drawing them.
-  const vehicles = computeCityVehicles(layout, 3000, 0.5);
-  assert.ok(vehicles.length > 0, 'at least one vehicle is active');
-});
 
-test('v0.12.3 city background: drawBackground clips the animated vehicle pass to the same horizon band as the ground/road layer', () => {
-  const realDocument = global.document;
-  global.document = {
-    createElement(tag) {
-      assert.equal(tag, 'canvas');
-      const canvas = { width: 0, height: 0 };
-      canvas.getContext = () => makeFakeCanvasCtx({ record: false });
-      return canvas;
-    },
-  };
-  try {
-    const room = ROOMS.lobby;
-    const width = 960;
-    const height = 600;
-    const layout = buildIsoCityLayout(room, width, height, 0.5, 400, 320, true);
-    const liveCtx = makeFakeCanvasCtx({ record: true });
-    drawBackground(liveCtx, width, height, 0.5, room.floor || 1, 1, 3000, room, 1, null);
-    const clipIdx = liveCtx._calls.indexOf('clip');
-    assert.ok(clipIdx > -1, 'drawBackground clips before drawing the animated vehicle layer');
-    const [, clipY] = liveCtx._rects[liveCtx._rects.length - 1];
-    assert.ok(Math.abs(clipY - layout.horizonY) < 1, `vehicle clip starts at the horizon (y=${layout.horizonY}), got y=${clipY}`);
-  } finally {
-    global.document = realDocument;
-  }
-});
 
-test('v0.12.3 city background: the near layer (ground/roads/buildings/vehicles) uses EXACTLY the camera pan/zoom, never a damped parallax', () => {
-  // Guards against the v0.12.1 regression where the whole baked city layer
-  // (including roads & cars) rode a parallax/zoom-damped CSS transform meant
-  // only for a distant skyline, floating the street above the ground plane.
-  const cameras = [
-    { panX: 0, panY: 0, zoom: 1 },
-    { panX: 140, panY: -90, zoom: DEFAULT_ZOOM },
-    { panX: -260, panY: 310, zoom: MAX_ZOOM },
-  ];
-  for (const camera of cameras) {
-    const near = nearCityLayerTransform(camera);
-    assert.equal(near.panX, camera.panX, 'near layer panX must equal the camera panX exactly');
-    assert.equal(near.panY, camera.panY, 'near layer panY must equal the camera panY exactly');
-    assert.equal(near.zoom, camera.zoom, 'near layer zoom must equal the camera zoom exactly');
-  }
-});
 
-test('v0.12.3 city background: a world point projects to the same screen position through the game camera and through the background CSS transform, within 1 CSS px, at 3 zooms x 3 pans', () => {
-  const width = 960;
-  const height = 600;
-  const room = ROOMS.lobby;
-  const { originX, originY } = computeOrigin(room, width, height);
-  // Known world points: the lobby's front-right (south-east) tile corner, and a
-  // road centreline point just south of the hotel block.
-  const lobbyCorner = tileToScreen(room.width - 1, room.height - 1, originX, originY);
-  const layout = getCachedIsoCityLayout(room, width, height, 0.5, 400, 320);
-  const roadPt = layout.roads[0].pts[0];
-  const worldPoints = [
-    [lobbyCorner.sx, lobbyCorner.sy],
-    [roadPt[0], roadPt[1]],
-  ];
-
-  const zooms = [MIN_ZOOM, DEFAULT_ZOOM, MAX_ZOOM];
-  const pans = [[0, 0], [180, -120], [-340, 260]];
-
-  // Mirrors how performBackgroundBake positions the near-layer canvas inside
-  // #bgLayer (style.left/top = -ox/-oy) — a world point at local (dx, dy) ends
-  // up at bgLayer-local (dx, dy) regardless of the bake margin ox/oy, then the
-  // CSS transform (translate3d + scale, transform-origin: center center) maps
-  // it to the screen exactly like worldToScreen does for the game canvas.
-  const ox = Math.max(380, Math.round(width * 0.45));
-  const oy = Math.max(260, Math.round(height * 0.45));
-  const cssLayerToScreen = (dx, dy, panX, panY, zoom) => {
-    const canvasLocalX = dx + ox; // canvas-internal coordinate
-    const canvasLocalY = dy + oy;
-    const bgLayerLocalX = -ox + canvasLocalX; // canvas.style.left = -ox
-    const bgLayerLocalY = -oy + canvasLocalY;
-    const cx = width / 2;
-    const cy = height / 2;
-    return {
-      sx: cx + (bgLayerLocalX - cx) * zoom + panX,
-      sy: cy + (bgLayerLocalY - cy) * zoom + panY,
-    };
-  };
-
-  for (const zoom of zooms) {
-    for (const [panX, panY] of pans) {
-      const camera = { panX, panY, zoom };
-      const near = nearCityLayerTransform(camera);
-      for (const [wx, wy] of worldPoints) {
-        const viaGameCamera = worldToScreen(wx, wy, camera, width, height);
-        const viaBackground = cssLayerToScreen(wx, wy, near.panX, near.panY, near.zoom);
-        assert.ok(
-          Math.abs(viaGameCamera.sx - viaBackground.sx) <= 1,
-          `x mismatch at zoom=${zoom} pan=(${panX},${panY}): game=${viaGameCamera.sx} bg=${viaBackground.sx}`,
-        );
-        assert.ok(
-          Math.abs(viaGameCamera.sy - viaBackground.sy) <= 1,
-          `y mismatch at zoom=${zoom} pan=(${panX},${panY}): game=${viaGameCamera.sy} bg=${viaBackground.sy}`,
-        );
-      }
-    }
-  }
-});
-
-test('v0.12.3 furniture: seat offset and layer order defined for every seat type and facing', () => {
-  const seatItems = CATALOGUE.filter((c) => c.seat);
-  assert.ok(seatItems.length >= 10, 'catalogue contains seat items');
-  for (const item of seatItems) {
-    for (let rot = 0; rot < 4; rot++) {
-      const cfg = getSeatConfig(item.id, rot);
-      assert.ok(cfg, `seat config exists for ${item.id} rot ${rot}`);
-      assert.ok(typeof cfg.seatHeight === 'number' && cfg.seatHeight > 0, `${item.id} rot ${rot} has positive seatHeight`);
-      assert.equal(cfg.yOffset, -cfg.seatHeight, `${item.id} rot ${rot} yOffset matches -seatHeight`);
-      assert.ok(Array.isArray(cfg.layerOrder) && cfg.layerOrder.includes('avatar'), `${item.id} rot ${rot} layerOrder includes avatar`);
-    }
-  }
-});
-
-test('v0.12.3 city background: road and vehicle y positions lie on or below the horizon/ground plane', () => {
-  const layout = buildIsoCityLayout({ id: 'lobby', width: 12, height: 9, floor: 1 }, 960, 600, 0.5);
-  assert.ok(layout.roads.length > 0, 'layout has roads');
-  for (const r of layout.roads) {
-    for (const pt of r.pts) {
-      assert.ok(pt[1] >= layout.horizonY - 1, `road point y (${pt[1]}) must lie on or below horizonY (${layout.horizonY})`);
-    }
-  }
-  for (let t = 0; t < 12000; t += 400) {
-    const vehicles = computeCityVehicles(layout, t, 0.5);
-    for (const v of vehicles) {
-      assert.ok(v.screenY >= layout.horizonY - 1, `vehicle ${v.id} screenY (${v.screenY}) must lie on or below horizonY (${layout.horizonY})`);
-    }
-  }
-});
 
 // ======================= v0.12.8: tower cutaway memory cap =======================
 
-test('perf guard: cutawayBakeScale caps bake scale to CUTAWAY_BAKE_SCALE_MAX across ds 1..8', () => {
-  assert.equal(CUTAWAY_BAKE_SCALE_MAX, 1);
-  for (let ds = 1; ds <= 8; ds++) {
-    assert.ok(cutawayBakeScale(ds) <= 1, `cutawayBakeScale(${ds}) must not exceed 1`);
-  }
-});
 
-test('perf guard: rendering cutaway for ROOMS.restaurant at ds=2 creates offscreen canvas <= 20,000,000 pixels', () => {
-  const realDocument = global.document;
-  const createdCanvases = [];
-  global.document = {
-    createElement(tag) {
-      assert.equal(tag, 'canvas', 'only offscreen <canvas> elements are created');
-      const canvas = {
-        width: 0,
-        height: 0,
-        getContext: () => makeFakeCanvasCtx({ record: false }),
-      };
-      createdCanvases.push(canvas);
-      return canvas;
-    },
-  };
-  try {
-    const liveCtx = makeFakeCanvasCtx({ record: true });
-    renderRoom(liveCtx, {
-      room: ROOMS.restaurant,
-      placedFurniture: [],
-      entities: [],
-      hoverTile: null,
-      ghost: null,
-      phase: 0.5,
-      walkTarget: null,
-      width: 960,
-      height: 600,
-      dpr: 2,
-      camera: { zoom: 1, panX: 0, panY: 0 },
-    });
-    assert.ok(createdCanvases.length > 0, 'offscreen canvases created');
-    const cutawayUnderCanvas = createdCanvases[0];
-    const totalPixels = cutawayUnderCanvas.width * cutawayUnderCanvas.height;
-    assert.ok(
-      totalPixels > 0 && totalPixels <= 20000000,
-      `restaurant cutaway canvas pixel count (${totalPixels}) must be <= 20,000,000 pixels`,
-    );
-  } finally {
-    global.document = realDocument;
-  }
-});
 
 // ======================= Phase 2: rooms (walls, floors, windows, doors) in the new pixel style =======================
 
-test('phase2 walls: wall body is one solid piece with no vertical panel-line columns', () => {
-  const prevDetail = getDetail();
-  try {
-    for (const d of [1, 2]) {
-      setDetail(d);
-      for (const kind of ['north', 'west']) {
-        const s = buildWallSegment('#e3a27a', kind);
-        const step = ART / d;
-        const wallHSteps = Math.floor((ISO.WALL_H * ART) / step);
-        // Sample a row well inside the plain body (clear of the top cap and the skirting board)
-        const bodyVIdx = Math.floor(wallHSteps / 2);
-        const startX = kind === 'north' ? s.w / 2 : 0;
-        const endX = kind === 'north' ? s.w : s.w / 2;
-        const colorsSeen = new Set();
-        for (let x = startX; x < endX; x += step) {
-          const uStep = kind === 'north'
-            ? Math.floor((x - s.w / 2) / (2 * step))
-            : Math.floor((s.w / 2 - 1 - x) / (2 * step));
-          const y = uStep * step + bodyVIdx * step;
-          if (y >= 0 && y < s.h) colorsSeen.add(s.px[y][x]);
-        }
-        assert.equal(colorsSeen.size, 1, `wall ${kind} body row at DETAIL=${d} must be a single flat colour, saw ${colorsSeen.size} distinct colours (panel-line seam)`);
-      }
-    }
-  } finally {
-    setDetail(prevDetail);
-  }
-});
 
-test('phase2 floors: every floor material bakes pixels strictly from its 4-shade material ramp', () => {
-  const baseColor = '#e9c48f';
-  const rmp = materialRamp(baseColor);
-  const allowed = new Set([rmp.top, rmp.left, rmp.right, rmp.line]);
-  for (const material of FLOOR_MATERIALS) {
-    const s = buildFloorTile(baseColor, 0, material);
-    for (let y = 0; y < s.h; y++) {
-      for (let x = 0; x < s.w; x++) {
-        const c = s.px[y][x];
-        if (!c) continue;
-        assert.ok(allowed.has(c), `floor material "${material}" pixel (${x},${y}) colour ${c} is outside the 4-shade ramp (no dither/speckle allowed)`);
-      }
-    }
-  }
-});
 
-test('phase2 edges: wall segment top edge steps a clean 2:1 stair (no AA notches)', () => {
-  const prevDetail = getDetail();
-  try {
-    for (const d of [1, 2]) {
-      setDetail(d);
-      for (const kind of ['north', 'west']) {
-        const s = buildWallSegment('#e3a27a', kind);
-        const step = ART / d;
-        const startX = kind === 'north' ? s.w / 2 : 0;
-        const endX = kind === 'north' ? s.w : s.w / 2;
-        let prevUStep = null;
-        let runLen = 0;
-        for (let x = startX; x < endX; x += step) {
-          const uStep = kind === 'north'
-            ? Math.floor((x - s.w / 2) / (2 * step))
-            : Math.floor((s.w / 2 - 1 - x) / (2 * step));
-          if (prevUStep === null || uStep === prevUStep) {
-            runLen += 1;
-          } else {
-            assert.equal(runLen, 2, `wall ${kind} top edge run length at DETAIL=${d} must be exactly 2 columns per stair step, saw ${runLen}`);
-            runLen = 1;
-          }
-          prevUStep = uStep;
-        }
-      }
-    }
-  } finally {
-    setDetail(prevDetail);
-  }
-});
 
-test('phase2 perf guard: room-shell sprite canvases (wall/floor/window/door/elevator/stairwell/edge-rail) stay bounded at DETAIL 1 and 2', () => {
-  const prevDetail = getDetail();
-  try {
-    const sky = { top: '#8fd0ff', bottom: '#fff6c9' };
-    for (const d of [1, 2]) {
-      setDetail(d);
-      const sprites = [
-        buildFloorTile('#e9c48f', 0, 'default'),
-        buildDoorTile('#e9c48f'),
-        buildWallSegment('#e3a27a', 'north'),
-        buildWindowSegment('#e3a27a', sky, 'north'),
-        buildDoorSegment('#e3a27a', 'north'),
-        buildElevatorDoorSegment('#e3a27a', 'north'),
-        buildStairwellDoorSegment('#e3a27a', 'north'),
-        buildElevatorTile('#e9c48f'),
-        buildEdgeRailSegment('south'),
-      ];
-      for (const s of sprites) {
-        const pixelCount = s.w * s.h;
-        assert.ok(pixelCount <= 200000, `room-shell sprite at DETAIL=${d} has ${pixelCount} px (w=${s.w}, h=${s.h}), exceeds the bounded single-tile cache budget`);
-      }
-    }
-  } finally {
-    setDetail(prevDetail);
-  }
-});
 
 // ======================= Phase 3: furniture and props in the new pixel style =======================
 
-test('phase3 furniture: all catalogue furniture items use midToneOutline and never near-black #2a1d2e', () => {
-  for (const item of CATALOGUE) {
-    const builder = FURNITURE_BUILDERS[item.spriteKey];
-    assert.ok(builder, `missing sprite builder for catalogue item ${item.id}`);
-    for (const rot of [0, 1]) {
-      const s = builder(rot);
-      assert.ok(s && s.w > 0 && s.h > 0, `valid sprite for ${item.id} rot ${rot}`);
-      for (let y = 0; y < s.h; y++) {
-        for (let x = 0; x < s.w; x++) {
-          const c = s.px[y][x];
-          assert.notEqual(c, '#2a1d2e', `item ${item.id} rot ${rot} pixel (${x},${y}) must not use near-black #2a1d2e`);
-        }
-      }
-    }
-  }
-});
 
-test('phase3 furniture: representative items (bed, sofa, desk, lamp, plant, counter, bookshelf, armchair) meet checked sizes and bounds', () => {
-  const reps = {
-    bed: buildSuiteBedSprite(0),
-    sofa: buildSofaSprite('#e2607a', 0),
-    desk: buildComputerDeskSprite(0),
-    lamp: buildLampSprite(),
-    plant: buildPlantSprite(),
-    counter: buildBarCounter(0),
-    bookshelf: buildBookshelf(0),
-    armchair: buildArmchairSprite(0),
-    dining_table: buildDiningTableSprite(0),
-    dining_chair: buildDiningChairSprite(0),
-  };
-  for (const [name, s] of Object.entries(reps)) {
-    assert.ok(s.w > 0 && s.h > 0, `${name} has positive dimensions`);
-    assert.ok(s.w <= 200 && s.h <= 200, `${name} dimensions (${s.w}x${s.h}) stay within bounds`);
-    assert.ok(s.boxes && s.boxes.length > 0, `${name} retains volumetric box metadata`);
-    assert.ok(Number.isFinite(s.ax) && Number.isFinite(s.ay), `${name} has finite anchor points`);
-  }
-});
 
 // ======================= Phase 4: city, street, and tower exterior in the new pixel style =======================
 
-test('phase4 environment: city layout, roads, and vehicle proportions stay within bounded pixel dimensions', () => {
-  const layout = buildIsoCityLayout({ id: 'lobby', width: 12, height: 9, floor: 1 }, 960, 600, 0.5);
-  assert.ok(layout.roads.length > 0, 'city layout produces roads');
-  assert.ok(layout.crossings.length > 0, 'city layout produces zebra crossings');
-  assert.ok(layout.blocks.length > 0, 'city layout produces city blocks');
-
-  const vehicles = computeCityVehicles(layout, 1000, 0.5);
-  assert.ok(vehicles.length > 0, 'computeCityVehicles generates vehicles');
-  for (const v of vehicles) {
-    assert.ok(Number.isFinite(v.screenX) && Number.isFinite(v.screenY), `vehicle ${v.id} has finite screen coordinates`);
-    assert.ok(v.length <= 2.2, `vehicle ${v.id} length (${v.length}) does not exceed max bounds to prevent stretched streaks`);
-    assert.ok(v.width >= 0.25 && v.width <= 1.0, `vehicle ${v.id} width (${v.width}) within realistic lane bounds`);
-  }
-});
 
 // ======================= Leftovers: backdrop snap, monitor, fern =======================
 
-test('leftovers: snapBakeCtx lands every rect on whole bake pixels at 0.25 and restores native at 1', () => {
-  const rects = [];
-  const g = { fillRect(...a) { rects.push(a); }, getTransform: () => ({ a: 0.25, d: 0.25, e: 10, f: 5 }) };
-  const native = g.fillRect;
-  snapBakeCtx(g, 0.25);
-  for (const [x, y, w, h] of [[3, 7, 11, 1], [100, 101, 1, 1], [5, 5, 2, 18], [8, 8, 40, 31]]) g.fillRect(x, y, w, h);
-  assert.ok(rects.length >= 3);
-  for (const [x, y, w, h] of rects) {
-    for (const v of [x * 0.25 + 10, y * 0.25 + 5, (x + w) * 0.25 + 10, (y + h) * 0.25 + 5]) {
-      assert.equal(v, Math.round(v), 'device edge is an integer (no blended coverage)');
-    }
-  }
-  assert.equal(g.lowBake, true);
-  snapBakeCtx(g, 1);
-  assert.equal(g.fillRect, native);
-  assert.equal(g.lowBake, false);
-});
 
-test('leftovers: desk monitor has a dark navy screen, subtle highlight, dark grey bezel and no bright cyan/blue blob', () => {
-  for (const d of [1, 2]) {
-    setDetail(d);
-    const s = buildComputerDeskSprite(0);
-    const cols = new Set();
-    for (const row of s.px) for (const c of row) if (c) cols.add(c);
-    assert.ok(cols.has('#1d2c5c'), 'navy glass present');
-    assert.ok(cols.has('#2c437e'), 'one-step-lighter navy highlight present');
-    assert.ok(cols.has('#4a515e'), 'dark grey bezel present');
-    assert.ok(!cols.has('#4cb8e6') && !cols.has('#8fe0ff'), 'old bright cyan screen is gone');
-    assert.ok(!cols.has('#5b7fd0') && !cols.has('#4a68b8'), 'bright-blue glare blob is gone');
-  }
-  setDetail(1);
-});
 
-test('leftovers: potted fern is wide and low, every green pixel is one connected plant, and front pot rim and soil read clearly', () => {
-  for (const d of [1, 2]) {
-    setDetail(d);
-    const s = buildPlantSprite();
-    const isGreen = (c) => {
-      if (!c || !/^#[0-9a-f]{6}$/i.test(c)) return false;
-      const [r, g, b] = [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16));
-      return g > r + 12 && g > b + 12;
-    };
-    const pts = [];
-    let rimPx = 0;
-    let soilPx = 0;
-    const rimCols = new Set([materialRamp('#ee9a68').top, materialRamp('#ee9a68').left]);
-    const soilCols = new Set([materialRamp('#5a3e2c').top, materialRamp('#5a3e2c').left]);
-    for (let y = 0; y < s.h; y++) {
-      for (let x = 0; x < s.w; x++) {
-        const c = s.px[y][x];
-        if (isGreen(c)) pts.push([x, y]);
-        if (rimCols.has(c)) rimPx++;
-        if (soilCols.has(c)) soilPx++;
-      }
-    }
-    assert.ok(pts.length > 100 * d * d, 'fern has real foliage');
-    assert.ok(rimPx >= 40 * d * d, `lighter pot rim reads clearly (${rimPx} px at detail ${d})`);
-    assert.ok(soilPx >= 25 * d * d, `dark soil reads clearly (${soilPx} px at detail ${d})`);
-    const seen = new Set([pts[0].join()]);
-    const todo = [pts[0]];
-    const all = new Set(pts.map((p) => p.join()));
-    while (todo.length) {
-      const [x, y] = todo.pop();
-      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]) {
-        const k = `${x + dx},${y + dy}`;
-        if (all.has(k) && !seen.has(k)) { seen.add(k); todo.push([x + dx, y + dy]); }
-      }
-    }
-    assert.equal(seen.size, all.size, `all green pixels connect (detail ${d})`);
-    const xs = pts.map((p) => p[0]);
-    const ys = pts.map((p) => p[1]);
-    const w = Math.max(...xs) - Math.min(...xs) + 1;
-    const h = Math.max(...ys) - Math.min(...ys) + 1;
-    assert.ok(w > h * 1.2, `fern is wider than tall (${w}x${h})`);
-  }
-  setDetail(1);
-});
 
-test('leftovers: street tree uses mid-tone green outline and softened canopy bottom', () => {
-  const rects = [];
-  const g = {
-    fillStyle: '',
-    fillRect(x, y, w, h) { rects.push({ x, y, w, h, c: this.fillStyle }); },
-  };
-  drawStreetTree(g, 50, 50, '#54ac60', '#4e3624');
-  const canopy = rects.filter((r) => r.c.startsWith('#') && r.c !== '#4e3624' && r.c !== '#3e2b1d');
-  const maxY = Math.max(...canopy.map((r) => r.y));
-  const bottomW = canopy.filter((r) => r.y === maxY).reduce((s, r) => s + r.w, 0);
-  assert.ok(bottomW <= 10, `canopy bottom is softened (${bottomW}px wide, not flat 14px)`);
-  const rmp = materialRamp('#54ac60');
-  assert.ok(canopy.some((r) => r.c === rmp.right), 'mid-tone green outline present');
-  assert.ok(!canopy.some((r) => r.c === rmp.line), 'dark outline tone replaced by mid-tone green');
-});

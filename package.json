@@ -12,7 +12,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "start": "vite",
-    "test": "node --test tests/logic.test.mjs tests/depthsort.unit.test.mjs tests/multiplayer.unit.test.mjs tests/arcade.unit.test.mjs tests/pool.unit.test.mjs tests/gumballs.unit.test.mjs tests/trader.unit.test.mjs tests/avatar.unit.test.mjs tests/minigames.unit.test.mjs tests/adaptive-quality.unit.test.mjs tests/weather.unit.test.mjs tests/pixelart.unit.test.mjs",
+    "test": "node --test tests/logic.test.mjs tests/depthsort.unit.test.mjs tests/multiplayer.unit.test.mjs tests/arcade.unit.test.mjs tests/pool.unit.test.mjs tests/gumballs.unit.test.mjs tests/trader.unit.test.mjs tests/avatar.unit.test.mjs tests/minigames.unit.test.mjs tests/adaptive-quality.unit.test.mjs tests/weather.unit.test.mjs tests/art.unit.test.mjs",
     "test:smoke": "node tests/smoke.spec.mjs"
   },
   "devDependencies": {

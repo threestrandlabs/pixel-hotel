@@ -10,7 +10,7 @@ import {
   ACCESSORY_STYLES, ACCESSORY_COLORS,
   DEFAULT_PLAYER_LOOK, validateAvatarLook, randomizeLook,
 } from './avatar.js';
-import { renderCharacter } from './voxel.js';
+import { renderCharacter } from './render/scene.js';
 
 let host = null;
 let avatarDraft = null;

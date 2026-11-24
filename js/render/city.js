@@ -346,13 +346,15 @@ export function buildCity(room, originX, originY, tex) {
   }
 
   const span = 2 * 40;
-  function update(now, phase) {
+  function update(now, phase, lowDetail = false) {
     const { night } = dayNight(phase);
     haze.tint = skyColors(phase).low;
     for (const g of nightWindows) g.alpha = night;
     const t = now / 1000;
     const placed = [];
     for (const c of cars) {
+      c.sp.visible = !lowDetail;
+      if (lowDetail) continue;
       const p = ((c.offset + t * c.speed * c.dir) % span + span) % span - 40;
       let u0; let v0; let box;
       if (c.axis === 'u') { u0 = p + W / 2; v0 = c.line; box = { minX: u0, maxX: u0 + 1, minY: v0, maxY: v0 + 0.5 }; }
@@ -386,7 +388,7 @@ export function buildCity(room, originX, originY, tex) {
 
   node.addChild(haze);
 
-  return { node, update, haze };
+  return { node, update, haze, objectCount: () => statics.length, carCount: () => cars.length };
 }
 
 function overlapX(a, b) {
@@ -432,7 +434,7 @@ export function createSky() {
   let key = '';
   return {
     node,
-    update(w, h, phase, now, panX) {
+    update(w, h, phase, now, panX, lowDetail = false) {
       const bucket = Math.round(phase * 96);
       const k = `${w}x${h}|${bucket}`;
       if (k !== key) {
@@ -446,6 +448,7 @@ export function createSky() {
         }
       }
       const { night } = dayNight(phase);
+      clouds.visible = !lowDetail;
       clouds.alpha = 0.9 - night * 0.6;
       for (const c of clouds.children) {
         const span = w * 1.4 + 200;

@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import fs from 'node:fs';
 import http from 'node:http';
+import { PNG } from 'pngjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
@@ -297,7 +298,25 @@ function check(name, cond) {
   }
 }
 
-function waitForServer(url, timeoutMs = 10000) {
+// Pixel statistics from a real screenshot of the game area (works for the
+// WebGL canvas, unlike reading a 2D context). clip is in CSS px, relative to
+// #gameArea; omitted = the whole area.
+async function gameAreaStats(page, clipFrac = null) {
+  const box = await page.locator('#gameArea').boundingBox();
+  const clip = clipFrac
+    ? { x: box.x + box.width * clipFrac.x, y: box.y + box.height * clipFrac.y, width: box.width * clipFrac.w, height: box.height * clipFrac.h }
+    : box;
+  const png = PNG.sync.read(await page.screenshot({ clip }));
+  const colors = new Set();
+  let r = 0; let g = 0; let b = 0; let n = 0;
+  for (let i = 0; i < png.data.length; i += 4 * 7) {
+    colors.add(`${png.data[i]},${png.data[i + 1]},${png.data[i + 2]}`);
+    r += png.data[i]; g += png.data[i + 1]; b += png.data[i + 2]; n++;
+  }
+  return { distinctColors: colors.size, r: r / n, g: g / n, b: b / n, luma: (0.299 * r + 0.587 * g + 0.114 * b) / n };
+}
+
+function waitForServer(url, timeoutMs = 20000) {
   const start = Date.now();
   return new Promise((resolve, reject) => {
     (function poll() {
@@ -313,8 +332,11 @@ function waitForServer(url, timeoutMs = 10000) {
 async function main() {
   fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
 
-  console.log(`Starting static server on port ${PORT}...`);
-  const server = spawn('python3', ['-m', 'http.server', String(PORT)], { cwd: ROOT, stdio: 'ignore' });
+  // The game is an ES-module Vite app (PixiJS is a bare npm import), so serve
+  // it with the Vite dev server rather than a plain static file server.
+  console.log(`Starting Vite dev server on port ${PORT}...`);
+  const viteBin = path.join(ROOT, 'node_modules', 'vite', 'bin', 'vite.js');
+  const server = spawn(process.execPath, [viteBin, '--port', String(PORT), '--strictPort'], { cwd: ROOT, stdio: 'ignore' });
   const killServer = () => { try { server.kill(); } catch (e) { /* ignore */ } };
   process.on('exit', killServer);
 
@@ -398,7 +420,7 @@ async function main() {
     );
 
     await page.screenshot({ path: path.join(SCREENSHOT_DIR, '01-lobby-1x.png') });
-    await page.screenshot({ path: '/workspace/pixel-hotel-v060-dpr1.png' });
+    await page.screenshot({ path: path.join(SCREENSHOT_DIR, 'pixel-hotel-v060-dpr1.png') });
 
     // ---- v0.7.0: default zoom, zoom controls, pointer->tile mapping, persistence ----
     const cam0 = await page.evaluate(() => window.__pixelHotel.getCamera());
@@ -453,23 +475,16 @@ async function main() {
     await page.evaluate(() => window.__pixelHotel.resetZoom());
     await page.waitForTimeout(80);
 
-    await page.screenshot({ path: '/workspace/pixel-hotel-v070-lobby.png' });
+    await page.screenshot({ path: path.join(SCREENSHOT_DIR, 'pixel-hotel-v070-lobby.png') });
 
     await page.evaluate(() => window.__pixelHotel.setZoom(0.7));
     await page.waitForTimeout(150);
-    await page.screenshot({ path: '/workspace/pixel-hotel-v070-zoomed-out.png' });
+    await page.screenshot({ path: path.join(SCREENSHOT_DIR, 'pixel-hotel-v070-zoomed-out.png') });
     await page.evaluate(() => window.__pixelHotel.resetZoom());
     await page.waitForTimeout(80);
 
     // ---- v0.7.0: vehicles on the isometric city roads ----
-    const roadColors = await page.evaluate(() => {
-      const c = document.getElementById('bgCanvas') || document.getElementById('gameCanvas');
-      const ctx = c.getContext('2d');
-      const data = ctx.getImageData(0, Math.floor(c.height * 0.72), c.width, Math.floor(c.height * 0.22)).data;
-      const colors = new Set();
-      for (let i = 0; i < data.length; i += 4 * 31) colors.add(`${data[i]},${data[i + 1]},${data[i + 2]}`);
-      return colors.size;
-    });
+    const roadColors = (await gameAreaStats(page, { x: 0, y: 0.72, w: 1, h: 0.22 })).distinctColors;
     check('street/road band below the hotel renders many distinct colours (vehicles, lanes, crossings)', roadColors > 15);
 
     // ---- v0.7.0: every catalogue item renders a non-empty icon ----
@@ -583,16 +598,7 @@ async function main() {
     if (pageErrors.length) console.error(pageErrors);
 
     // ---- canvas is non-blank ----
-    const pixelStats = await page.evaluate(() => {
-      const canvas = document.getElementById('gameCanvas');
-      const ctx = canvas.getContext('2d');
-      const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-      const colors = new Set();
-      for (let i = 0; i < data.length; i += 4 * 97) {
-        colors.add(`${data[i]},${data[i + 1]},${data[i + 2]}`);
-      }
-      return { distinctColors: colors.size };
-    });
+    const pixelStats = await gameAreaStats(page);
     check('canvas renders more than one distinct colour', pixelStats.distinctColors > 3);
 
     // ---- click to walk ----
@@ -844,13 +850,13 @@ async function main() {
     // ---- night view rendering ----
     await page.evaluate(() => window.__pixelHotel.setDayPhase(0)); // midnight
     await page.waitForTimeout(350);
-    const nightPixels = await page.evaluate(() => {
-      const c = document.getElementById('skyCanvas') || document.getElementById('bgCanvas') || document.getElementById('gameCanvas');
-      const ctx = c.getContext('2d');
-      const p = ctx.getImageData(100, 10, 1, 1).data;
-      return { r: p[0], g: p[1], b: p[2] };
-    });
-    check('night view renders dark sky at midnight', nightPixels.r < 60 && nightPixels.b > nightPixels.r);
+    const nightPixels = await gameAreaStats(page);
+    await page.evaluate(() => window.__pixelHotel.setDayPhase(0.5)); // noon, for comparison
+    await page.waitForTimeout(350);
+    const noonPixels = await gameAreaStats(page);
+    await page.evaluate(() => window.__pixelHotel.setDayPhase(0));
+    await page.waitForTimeout(350);
+    check('night view is darker and bluer than noon', nightPixels.luma < noonPixels.luma - 15 && nightPixels.b > nightPixels.r);
     await page.screenshot({ path: path.join(SCREENSHOT_DIR, '06-night-myroom.png') });
 
     // ---- deviceScaleFactor = 2 HiDPI verification & screenshots ----
@@ -878,8 +884,8 @@ async function main() {
       metrics2x.dpr === 2 && metrics2x.width === metrics2x.expectedW && metrics2x.height === metrics2x.expectedH
     );
     await page2x.screenshot({ path: path.join(SCREENSHOT_DIR, '07-lobby-2x.png') });
-    await page2x.screenshot({ path: '/workspace/pixel-hotel-v060-street.png' });
-    await page2x.screenshot({ path: '/workspace/pixel-hotel-v060-dpr2.png' });
+    await page2x.screenshot({ path: path.join(SCREENSHOT_DIR, 'pixel-hotel-v060-street.png') });
+    await page2x.screenshot({ path: path.join(SCREENSHOT_DIR, 'pixel-hotel-v060-dpr2.png') });
 
     // Gym screenshot (Floor 4): Pulse Fitness Gym with isometric city mid-level view & dual treadmill cardio
     await page2x.evaluate(() => {
@@ -889,8 +895,8 @@ async function main() {
       window.__pixelHotel.interactWith('treadmill', true);
     });
     await page2x.waitForTimeout(550);
-    await page2x.screenshot({ path: '/workspace/pixel-hotel-v060-gym.png' });
-    await page2x.screenshot({ path: '/workspace/pixel-hotel-v070-gym.png' });
+    await page2x.screenshot({ path: path.join(SCREENSHOT_DIR, 'pixel-hotel-v060-gym.png') });
+    await page2x.screenshot({ path: path.join(SCREENSHOT_DIR, 'pixel-hotel-v070-gym.png') });
 
     // High-floor screenshot (Floor 42 — Rooftop Lounge): open-air balustrade, lounge, bar,
     // infinity pool, and neighbouring isometric rooftops & haze, by day and by night.
@@ -903,7 +909,7 @@ async function main() {
     const roofLabelDay = await page2x.textContent('#roomName');
     check('floor indicator shows the Rooftop by day', roofLabelDay.includes('Floor 42') && roofLabelDay.includes('Rooftop'));
     await page2x.screenshot({ path: path.join(SCREENSHOT_DIR, '08-rooftop-day-2x.png') });
-    await page2x.screenshot({ path: '/workspace/pixel-hotel-v060-highfloor.png' });
+    await page2x.screenshot({ path: path.join(SCREENSHOT_DIR, 'pixel-hotel-v060-highfloor.png') });
 
     // Rooftop at night: illuminated isometric city windows, streetlamps & warm emissive pools
     await page2x.evaluate(() => {
@@ -913,7 +919,7 @@ async function main() {
     const roofLabelNight = await page2x.textContent('#roomName');
     check('floor indicator shows the Rooftop by night', roofLabelNight.includes('Floor 42') && roofLabelNight.includes('Rooftop'));
     await page2x.screenshot({ path: path.join(SCREENSHOT_DIR, '08-rooftop-night-2x.png') });
-    await page2x.screenshot({ path: '/workspace/pixel-hotel-v060-night.png' });
+    await page2x.screenshot({ path: path.join(SCREENSHOT_DIR, 'pixel-hotel-v060-night.png') });
 
     // ---- v0.12.0: desktop sky viewer — walk up, use the viewer, and close it ----
     await page2x.evaluate(() => { window.__pixelHotel.setDayPhase(0.5); });
@@ -937,7 +943,7 @@ async function main() {
       window.__pixelHotel.setZoom(0.9);
     });
     await page2x.waitForTimeout(400);
-    await page2x.screenshot({ path: '/workspace/pixel-hotel-v070-street-night.png' });
+    await page2x.screenshot({ path: path.join(SCREENSHOT_DIR, 'pixel-hotel-v070-street-night.png') });
 
     await page2x.evaluate(() => {
       window.__pixelHotel.takeElevator('restaurant');
@@ -967,32 +973,15 @@ async function main() {
     });
     await page2x.waitForTimeout(200);
 
-    const cityCheck = await page2x.evaluate(async () => {
-      const { getCachedIsoCityLayout, computeCityVehicles } = await import('/js/render.js');
-      const roomSpec = { id: 'lobby', width: 12, height: 9, floor: 1 };
-      const width = 960;
-      const height = 600;
-      const ox = 400;
-      const oy = 320;
-      const layout = getCachedIsoCityLayout(roomSpec, width, height, 0.5, ox, oy);
-      const vehicles = computeCityVehicles(layout, performance.now(), 0.5);
-
-      const roadYMin = Math.min(...layout.roads.flatMap((r) => (r.pts || []).map((p) => p[1])));
-      const vehiclesYMin = vehicles.length ? Math.min(...vehicles.map((v) => v.screenY)) : layout.horizonY;
-
-      return {
-        allRoadsOnOrBelowHorizon: roadYMin >= layout.horizonY - 0.5,
-        allVehiclesOnOrBelowHorizon: vehiclesYMin >= layout.horizonY - 0.5,
-        vehicleCount: vehicles.length,
-      };
-    });
+    const cityCheck = await page2x.evaluate(() => window.__pixelHotel.getRenderStats());
 
     check('v0.12.3: background captured at 2 zoom levels',
       fs.existsSync(path.join(shotsV0123, 'bg-zoom-0.8.png')) &&
       fs.existsSync(path.join(shotsV0123, 'bg-zoom-1.5.png'))
     );
-    check('v0.12.3: city roads lie on or below horizon plane', cityCheck.allRoadsOnOrBelowHorizon);
-    check('v0.12.3: city vehicles lie on or below horizon plane', cityCheck.allVehiclesOnOrBelowHorizon && cityCheck.vehicleCount > 0);
+    check('city: street level has buildings, trees and the tower', cityCheck.cityObjects > 20);
+    check('city: cars drive the roads', cityCheck.cars > 0);
+    check('renderer: running on WebGL or WebGPU', ['webgl', 'webgpu'].includes(cityCheck.backend));
 
     // ---- v0.8.0: multiplayer panel opens/switches tabs with zero network calls until opt-in ----
     await page.click('#btnMultiplayer');

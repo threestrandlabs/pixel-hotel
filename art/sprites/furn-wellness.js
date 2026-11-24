@@ -79,6 +79,15 @@ export default function build(add) {
   }, { symmetric: true });
 
   // ---- pool deck ----
+  // Shop/inventory icon for the pool (in rooms it is drawn from water tiles).
+  item(add, 'pool_water', [2, 2], 12, (k) => {
+    k.box(0, 0, 2, 2, 0, 4, M.stone, { lit: 0, details: (d) => {
+      d.top(0.15, 0.15, 1.85, 1.85, M.water[3], 4);
+      d.top(0.25, 0.25, 1.85, 1.85, M.water[2], 4);
+      for (const [u, v] of [[0.6, 0.7], [1.2, 1.1], [0.9, 1.5]]) d.top(u, v, u + 0.3, v + 0.06, M.water[0], 4);
+    } });
+  }, { symmetric: true });
+
   item(add, 'deckchair', [1, 1], 40, (k) => {
     k.custom(0.15, 0.1, 0.85, 0.95, 0, 34, ({ P, cv }) => {
       for (const u of [0.18, 0.82]) for (let t = 0; t <= 1; t += 0.02) {

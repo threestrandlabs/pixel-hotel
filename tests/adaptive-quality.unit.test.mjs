@@ -3,8 +3,6 @@ import assert from 'node:assert/strict';
 import { FpsMonitor, resolveBackgroundDetail, resolveSpriteDetail, resolveSpriteDetailMode } from '../js/adaptiveQuality.js';
 import { createDefaultState, loadState, saveState, SAVE_KEY } from '../js/save.js';
 import { SAVE_VERSION } from '../js/data.js';
-import { setDetail, registerCacheClearHook } from '../js/pixelart.js';
-import { LOOKS, getCharacterCanvas, clearCharacterCache, getCharacterCacheSize, MAX_CHARACTER_CACHE_SIZE } from '../js/voxel.js';
 
 function makeFakeStorage(initial = {}) {
   const store = new Map(Object.entries(initial));
@@ -170,89 +168,4 @@ test('settings persistence: spriteDetail defaults to auto and persists in saveSt
 
   const loadedLow = loadState(storage);
   assert.equal(loadedLow.settings.spriteDetail, 'low');
-});
-
-test('adaptive quality: switching detail triggers exactly one cache clear/rebuild', () => {
-  setDetail(1);
-  let clearCount = 0;
-  const unregister = registerCacheClearHook(() => {
-    clearCount += 1;
-  });
-
-  // Re-applying same detail: zero cache clears
-  setDetail(1);
-  assert.equal(clearCount, 0);
-
-  // Switching to DETAIL=2: exactly one cache clear
-  setDetail(2);
-  assert.equal(clearCount, 1);
-
-  // Simulating successive frames at DETAIL=2 without change: zero additional clears
-  for (let frame = 0; frame < 60; frame++) {
-    setDetail(2);
-  }
-  assert.equal(clearCount, 1);
-
-  // Switching back to DETAIL=1: exactly one more cache clear
-  setDetail(1);
-  assert.equal(clearCount, 2);
-
-  unregister();
-});
-
-test('perf guard: character sprite cache stays bounded under fixed LRU cap (MAX_CHARACTER_CACHE_SIZE)', () => {
-  const realDocument = global.document;
-  global.document = {
-    createElement(tag) {
-      const canvas = { width: 0, height: 0 };
-      canvas.getContext = () => ({
-        setTransform() {},
-        clearRect() {},
-        drawImage() {},
-        save() {},
-        restore() {},
-        beginPath() {},
-        closePath() {},
-        clip() {},
-        rect() {},
-        moveTo() {},
-        lineTo() {},
-        fill() {},
-        stroke() {},
-        fillRect() {},
-        globalCompositeOperation: 'source-over',
-        fillStyle: '#000',
-        strokeStyle: '#000',
-        lineWidth: 1,
-      });
-      return canvas;
-    },
-  };
-
-  try {
-    clearCharacterCache();
-    assert.equal(getCharacterCacheSize(), 0);
-
-    const baseLook = LOOKS.player;
-    const pose = { stride: 0, sit: false, lie: false, blink: false, breathe: 0 };
-
-    // Fill the cache up to MAX_CHARACTER_CACHE_SIZE (256)
-    for (let i = 0; i < MAX_CHARACTER_CACHE_SIZE; i++) {
-      getCharacterCanvas(`test_key_${i}`, baseLook, 'down', pose, 1);
-    }
-    assert.equal(getCharacterCacheSize(), MAX_CHARACTER_CACHE_SIZE);
-
-    // Add 50 more distinct items: LRU eviction must keep size <= MAX_CHARACTER_CACHE_SIZE
-    for (let i = 0; i < 50; i++) {
-      getCharacterCanvas(`overflow_key_${i}`, baseLook, 'down', pose, 1);
-      assert.ok(getCharacterCacheSize() <= MAX_CHARACTER_CACHE_SIZE, `Cache size ${getCharacterCacheSize()} must not exceed ${MAX_CHARACTER_CACHE_SIZE}`);
-    }
-    assert.equal(getCharacterCacheSize(), MAX_CHARACTER_CACHE_SIZE);
-
-    // Oldest key `test_key_0` was evicted
-    clearCharacterCache();
-    assert.equal(getCharacterCacheSize(), 0);
-  } finally {
-    global.document = realDocument;
-  }
 });

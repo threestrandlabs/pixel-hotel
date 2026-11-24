@@ -13,7 +13,7 @@ import {
 } from '../iso.js';
 import { buildCity, createSky } from './city.js';
 import { sortDrawables, furnitureBox, entityBox } from '../depthSort.js';
-import { LOOKS } from '../voxel.js';
+import { LOOKS } from '../looks.js';
 
 TextureStyle.defaultOptions.scaleMode = 'nearest';
 
@@ -438,14 +438,14 @@ export function renderRoom(opts) {
 
   // --- sky, city and lighting ---
   const phase = opts.phase ?? 0.5;
-  sky.update(width, height, phase, now, panX);
+  sky.update(width, height, phase, now, panX, Boolean(opts.lowDetail));
   const cityKey = `${room.id}|${originX},${originY}`;
   if (!city || city.key !== cityKey) {
     if (city) city.node.destroy({ children: true });
     city = { key: cityKey, ...buildCity(room, originX, originY, tex) };
     layers.city.addChild(city.node);
   }
-  city.update(now, phase);
+  city.update(now, phase, Boolean(opts.lowDetail));
   const { night } = dayNight(phase);
   const amb = room.ambientLighting;
   const cityTint = multiplyTint(NIGHT_TINT, 0.5 * night);
@@ -691,4 +691,79 @@ function updateGlows(placedFurniture, originX, originY, lightsOn, strength) {
   for (const [id, sp] of glowNodes) {
     if (!seen.has(id)) { sp.destroy(); glowNodes.delete(id); }
   }
+}
+
+// ---------- character previews (wardrobe, salon) ----------
+
+const PREVIEW_MAG = 3; // previews show the avatar 3x larger than in the room
+
+/**
+ * Composite the tinted character layers into a 2D canvas.
+ * Returns { canvas } sized so that canvas.width / scale is the on-screen size
+ * (callers divide by `scale`), with the art magnified PREVIEW_MAG times.
+ */
+export function renderCharacter(look, dir = 'down', pose = {}, makeCanvas = null, scale = 1) {
+  const facing = ['down', 'right', 'up', 'left'].includes(dir) ? dir : 'down';
+  const poseName = pose?.sit ? 'sit0' : pose?.stride ? 'walk0' : 'idle0';
+  const l = look || LOOKS.player || {};
+  const tints = {
+    skin: tintFor(l.skin, 0xf0c49a), hair: tintFor(l.hair, 0x5a3826), top: tintFor(l.shirt, 0x4da3ff),
+    bottom: tintFor(l.pants, 0x2c3e63), shoes: tintFor(l.shoe, 0xf4f4f4), face: 0xffffff,
+  };
+  const parts = [];
+  let x0 = Infinity; let y0 = Infinity; let x1 = -Infinity; let y1 = -Infinity;
+  for (const name of CHAR_LAYERS) {
+    const t = tex[`char/${facing}/${poseName}/${name}`];
+    if (!t?.source?.resource) continue;
+    const { width: w, height: h } = t.frame;
+    const ax = Math.round(t.defaultAnchor.x * w);
+    const ay = Math.round(t.defaultAnchor.y * h);
+    parts.push({ t, name, ax, ay, w, h });
+    x0 = Math.min(x0, -ax); y0 = Math.min(y0, -ay); x1 = Math.max(x1, w - ax); y1 = Math.max(y1, h - ay);
+  }
+  if (!parts.length) return null;
+  const W = x1 - x0; const H = y1 - y0;
+  // compose at 1x, tinting each layer by per-pixel multiply
+  const base = document.createElement('canvas');
+  base.width = W; base.height = H;
+  const bctx = base.getContext('2d');
+  for (const p of parts) {
+    const tmp = document.createElement('canvas');
+    tmp.width = p.w; tmp.height = p.h;
+    const tctx = tmp.getContext('2d');
+    tctx.drawImage(p.t.source.resource, p.t.frame.x, p.t.frame.y, p.w, p.h, 0, 0, p.w, p.h);
+    const tint = tints[p.name];
+    if (tint !== 0xffffff) {
+      const img = tctx.getImageData(0, 0, p.w, p.h);
+      const tr = (tint >> 16) & 255; const tg = (tint >> 8) & 255; const tb = tint & 255;
+      for (let i = 0; i < img.data.length; i += 4) {
+        img.data[i] = (img.data[i] * tr) / 255;
+        img.data[i + 1] = (img.data[i + 1] * tg) / 255;
+        img.data[i + 2] = (img.data[i + 2] * tb) / 255;
+      }
+      tctx.putImageData(img, 0, 0);
+    }
+    bctx.drawImage(tmp, -p.ax - x0, -p.ay - y0);
+  }
+  const k = PREVIEW_MAG * scale;
+  const out = makeCanvas ? makeCanvas(Math.round(W * k), Math.round(H * k)) : document.createElement('canvas');
+  out.width = Math.round(W * k);
+  out.height = Math.round(H * k);
+  const octx = out.getContext('2d');
+  octx.imageSmoothingEnabled = false;
+  octx.drawImage(base, 0, 0, out.width, out.height);
+  return { canvas: out, width: out.width, height: out.height };
+}
+
+// ---------- debug / smoke-test stats ----------
+
+export function getRenderStats() {
+  return {
+    backend: app?.renderer?.name || null,
+    cityObjects: city?.objectCount?.() ?? 0,
+    cars: city?.carCount?.() ?? 0,
+    glows: glowNodes.size,
+    furniture: furnitureNodes.size,
+    entities: entityNodes.size,
+  };
 }
