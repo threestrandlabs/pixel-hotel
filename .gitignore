@@ -24,3 +24,4 @@ claude_run*.log
 !.agent/skills/impeccable/
 !.agent/skills/impeccable/**
 dist/
+art/out/

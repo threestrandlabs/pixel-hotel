@@ -5,7 +5,10 @@
   "description": "A cosy, original pixel-art isometric virtual hotel built with plain HTML/CSS/JS.",
   "type": "module",
   "scripts": {
+    "art": "node scripts/build-atlas.mjs",
+    "predev": "npm run art",
     "dev": "vite",
+    "prebuild": "npm run art",
     "build": "vite build",
     "preview": "vite preview",
     "start": "vite",

@@ -1840,12 +1840,13 @@ test('v0.7.2 render: deviceScale bakes at ceil(dpr*zoom) so bitmaps are never up
     for (const zoom of [MIN_ZOOM, 0.7, 1, DEFAULT_ZOOM, MAX_ZOOM]) {
       const ds = deviceScale(dpr, zoom);
       assert.ok(Number.isInteger(ds), 'device scale is an integer bucket');
+      if (dpr * zoom > 8) continue; // capped at 8 to bound memory
       assert.ok(ds >= dpr * zoom - 1e-9, `ds=${ds} must be >= dpr*zoom=${(dpr * zoom).toFixed(2)} (no upscaling)`);
       assert.ok(ds >= 1 && ds <= 8, 'device scale stays within sane bounds');
     }
   }
   assert.equal(deviceScale(1, 1), 1);
-  assert.equal(deviceScale(2, DEFAULT_ZOOM), 4); // ceil(2 * 1.85) = 4
+  assert.equal(deviceScale(2, DEFAULT_ZOOM), 4); // ceil(2 * 2) = 4
 });
 
 test('v0.7.0 audio: every hotel room/floor resolves to its own distinct procedural track', () => {

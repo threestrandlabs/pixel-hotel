@@ -10,13 +10,15 @@ export const TILE_H = 32;
 export const WALL_H = 56;
 export const TOP_PADDING = 54;
 
-export const DEFAULT_ZOOM = 1.85;
-export const MIN_ZOOM = 0.55;
-export const MAX_ZOOM = 2.5;
+// Whole-number zoom only, so every art pixel is an exact square of screen
+// pixels (fractional zoom makes pixel art shimmer and uneven).
+export const DEFAULT_ZOOM = 2;
+export const MIN_ZOOM = 1;
+export const MAX_ZOOM = 4;
 
 export function clampZoom(z) {
   const num = typeof z === 'number' && !isNaN(z) ? z : DEFAULT_ZOOM;
-  return Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Math.round(num * 100) / 100));
+  return Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Math.round(num)));
 }
 
 export function tileToScreen(x, y, originX, originY) {

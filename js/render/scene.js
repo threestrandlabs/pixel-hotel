@@ -5,7 +5,7 @@
 // proven before the hand-made art lands. renderRoom(opts) takes the same
 // options main.js used to pass to the old canvas renderer.
 
-import { Application, Container, Graphics, Text, TextStyle, TextureStyle } from 'pixi.js';
+import { Application, Assets, Container, Graphics, Sprite, Text, TextStyle, TextureStyle } from 'pixi.js';
 import { TILE, getCatalogueItem } from '../data.js';
 import {
   TILE_W, TILE_H, WALL_H, tileToScreen, worldToScreen, computeOrigin,
@@ -21,6 +21,17 @@ const furnitureNodes = new Map(); // instanceId -> { node, back?, front?, key }
 const entityNodes = new Map(); // entity id -> { node, key }
 const labelNodes = new Map(); // entity id -> { tag, bubble }
 let floorKey = '';
+let tex = {}; // atlas textures by frame name
+let poolRec = null; // { key, node, cells: [{water, sprite}] }
+
+const CHAR_LAYERS = ['skin', 'bottom', 'shoes', 'top', 'hair', 'face'];
+const WATER_FRAMES = 8;
+
+// Floor art per room; rooms not listed yet keep the greybox colour.
+const FLOOR_ART = {
+  lobby: ['floor/marble_a', 'floor/marble_b'],
+  cafe: ['floor/parquet'], restaurant: ['floor/parquet'], library: ['floor/parquet'], myroom: ['floor/parquet'],
+};
 
 export const entityScreenBounds = new Map();
 
@@ -56,6 +67,8 @@ export async function initRenderer(host, beforeEl) {
   app.canvas.id = 'pixiCanvas';
   host.insertBefore(app.canvas, beforeEl);
   app.ticker.stop(); // main.js drives rendering from its own rAF loop
+  const sheet = await Assets.load('assets/atlas.json');
+  tex = sheet.textures;
   Object.assign(window, { app });
 
   layers.world = new Container();
@@ -139,8 +152,9 @@ function buildFloor(room, originX, originY, lightsOn) {
   layers.floor.removeChildren().forEach((c) => c.destroy());
   layers.walls.removeChildren().forEach((c) => c.destroy());
   const base = hexNum(room.floorColor || (room.id === 'rooftop' ? '#d8b98c' : '#e9c48f'));
-  const wall = hexNum(room.wallColor || (room.id === 'rooftop' ? '#6f9ec4' : '#e3a27a'));
   const dim = lightsOn ? 0 : -0.5;
+  const dimTint = lightsOn ? 0xffffff : 0x7a7090;
+  const art = FLOOR_ART[room.id];
   const g = new Graphics();
   const hw = TILE_W / 2;
   const hh = TILE_H / 2;
@@ -148,46 +162,68 @@ function buildFloor(room, originX, originY, lightsOn) {
     for (let x = 0; x < room.width; x++) {
       const t = room.grid[y][x];
       if (t === TILE.VOID || t === TILE.WALL || t === TILE.WINDOW) continue;
+      if (t === TILE.DOOR && (x === 0 || y === 0)) continue;
       const { sx, sy } = tileToScreen(x, y, originX, originY);
-      const c = shade(base, ((x + y) % 2 ? -0.06 : 0) + dim);
-      g.poly([sx, sy - hh, sx + hw, sy, sx, sy + hh, sx - hw, sy]).fill(t === TILE.DOOR ? shade(c, -0.3) : c);
+      if (art) {
+        const sp = new Sprite(tex[art[(x + y) % art.length]]);
+        sp.anchor.copyFrom(sp.texture.defaultAnchor);
+        sp.position.set(sx, sy);
+        sp.tint = dimTint;
+        layers.floor.addChild(sp);
+      } else {
+        const c = shade(base, ((x + y) % 2 ? -0.06 : 0) + dim);
+        g.poly([sx, sy - hh, sx + hw, sy, sx, sy + hh, sx - hw, sy]).fill(c);
+      }
     }
   }
-  layers.floor.addChild(g);
+  layers.floor.addChildAt(g, 0);
 
-  // Back walls: north wall along y === 0, west wall along x === 0.
-  const wg = new Graphics();
-  const face = (pts, color) => wg.poly(pts).fill(color).stroke({ color: shade(color, -0.4), width: 1, alignment: 1 });
-  for (let x = 0; x < room.width; x++) {
+  // Back walls stand on the boundary between grid row/column 0 and 1:
+  // north wall along y = 0.5, west wall along x = 0.5.
+  const kindOf = (t) => (t === TILE.WINDOW ? 'window' : t === TILE.DOOR ? 'door' : 'plain');
+  const addWall = (name, x, y) => {
+    const sp = new Sprite(tex[name]);
+    sp.anchor.copyFrom(sp.texture.defaultAnchor);
+    const { sx, sy } = tileToScreen(x, y, originX, originY);
+    sp.position.set(sx, sy);
+    sp.tint = dimTint;
+    layers.walls.addChild(sp);
+  };
+  for (let x = 1; x < room.width; x++) {
     const t = room.grid[0][x];
-    if (t === TILE.VOID) continue;
-    // north edge of tile (x, 1): from its west corner to its north corner
-    const { sx, sy } = tileToScreen(x, 1, originX, originY);
-    const a = [sx - hw, sy];
-    const b = [sx, sy - hh];
-    const col = shade(t === TILE.WINDOW ? 0x9fd4f0 : t === TILE.DOOR ? shade(wall, -0.45) : wall, dim - 0.1);
-    face([a[0], a[1], b[0], b[1], b[0], b[1] - WALL_H, a[0], a[1] - WALL_H], col);
+    if (t === TILE.VOID || room.grid[1]?.[x] === TILE.VOID) continue;
+    addWall(`wall/north_${kindOf(t)}`, x - 0.5, 0.5);
   }
-  for (let y = 0; y < room.height; y++) {
+  for (let y = 1; y < room.height; y++) {
     const t = room.grid[y][0];
-    if (t === TILE.VOID) continue;
-    const { sx, sy } = tileToScreen(1, y, originX, originY);
-    const a = [sx, sy - hh];
-    const b = [sx - hw, sy];
-    const col = shade(t === TILE.WINDOW ? 0x9fd4f0 : t === TILE.DOOR ? shade(wall, -0.45) : wall, dim + 0.05);
-    face([a[0], a[1], b[0], b[1], b[0], b[1] - WALL_H, a[0], a[1] - WALL_H], col);
+    if (t === TILE.VOID || room.grid[y][1] === TILE.VOID) continue;
+    addWall(`wall/west_${kindOf(t)}`, 0.5, y - 0.5);
   }
-  layers.walls.addChild(wg);
 }
 
 function furnitureKey(f, lightsOn) {
-  return `${f.itemId}|${f.x},${f.y}|${f.footprint.w}x${f.footprint.h}|${lightsOn ? 1 : 0}`;
+  return `${f.itemId}|${f.x},${f.y}|${f.rot || 0}|${f.footprint.w}x${f.footprint.h}|${lightsOn ? 1 : 0}`;
+}
+
+function furnitureTexture(itemId, rot = 0) {
+  const r4 = ((rot % 4) + 4) % 4;
+  const t = tex[`furn/${itemId}/${r4 & 2}`];
+  return t ? { texture: t, mirrored: (r4 & 1) === 1 } : null;
 }
 
 function makeFurnitureNode(f, item, originX, originY, lightsOn) {
-  const node = new Graphics();
   // Position at the footprint's north corner.
   const { sx, sy } = tileToScreen(f.x - 0.5, f.y - 0.5, originX, originY);
+  const art = furnitureTexture(f.itemId, f.rot);
+  if (art) {
+    const sp = new Sprite(art.texture);
+    sp.anchor.copyFrom(art.texture.defaultAnchor);
+    sp.position.set(sx, sy);
+    if (art.mirrored) sp.scale.x = -1;
+    if (item.lightSource && !lightsOn) sp.tint = 0x8a7f9a;
+    return sp;
+  }
+  const node = new Graphics();
   node.position.set(sx, sy);
   let color = CATEGORY_COLORS[item.category] ?? 0x9a8c7a;
   if (item.lightSource && !lightsOn) color = shade(color, -0.45);
@@ -214,28 +250,95 @@ function entityColors(e) {
   };
 }
 
-const ENTITY_H = 46;
+const ENTITY_H = 36;
 
-function makeEntityNode(e) {
-  const c = entityColors(e);
-  const g = new Graphics();
-  g.ellipse(0, 0, 12, 5).fill({ color: 0x000000, alpha: 0.22 });
-  if (e.lying) {
-    g.roundRect(-20, -12, 40, 10, 4).fill(c.shirt);
-    g.circle(-20, -10, 6).fill(c.skin);
-  } else {
-    const legH = e.sitting ? 6 : 14;
-    g.rect(-6, -legH, 5, legH).fill(c.pants);
-    g.rect(1, -legH, 5, legH).fill(c.pants);
-    g.roundRect(-8, -legH - 18, 16, 19, 4).fill(c.shirt).stroke({ color: shade(c.shirt, -0.5), width: 1 });
-    g.circle(0, -legH - 25, 8).fill(c.skin).stroke({ color: shade(c.skin, -0.45), width: 1 });
-    g.rect(-8, -legH - 34, 16, 5).fill(c.hair);
-  }
-  return g;
+// Grey-ramp layers are authored with 0xde as the base tone; scale the tint so
+// the base lands exactly on the wardrobe colour.
+function tintFor(hexColor, fallback) {
+  const c = hexNum(hexColor, fallback);
+  const k = 255 / 0xde;
+  const ch = (v) => Math.min(255, Math.round(v * k));
+  return (ch((c >> 16) & 255) << 16) | (ch((c >> 8) & 255) << 8) | ch(c & 255);
 }
 
-function entityKey(e) {
-  return `${e.sitting ? 's' : ''}${e.lying ? 'l' : ''}${e.look ? JSON.stringify(e.look) : e.spriteKey}`;
+function makeEntityNode() {
+  const node = new Container();
+  const shadow = new Graphics().ellipse(0, 0, 9, 4).fill({ color: 0x1e1428, alpha: 0.25 });
+  node.addChild(shadow);
+  node.parts = {};
+  for (const name of CHAR_LAYERS) {
+    const sp = new Sprite();
+    node.parts[name] = sp;
+    node.addChild(sp);
+  }
+  return node;
+}
+
+function updateEntityNode(node, e, now) {
+  const look = e.look || LOOKS[e.spriteKey] || LOOKS.player || {};
+  const dir = e.dir || 'down';
+  const facing = dir === 'up' || dir === 'left' ? 'up' : 'down';
+  const mirrored = dir === 'right' || dir === 'left';
+  const pose = e.walking ? `walk${Math.floor(now / 140) % 4}` : 'idle0';
+  const tints = {
+    skin: tintFor(look.skin, 0xf0c49a),
+    hair: tintFor(look.hair, 0x5a3826),
+    top: tintFor(look.shirt, 0x4da3ff),
+    bottom: tintFor(look.pants, 0x2c3e63),
+    shoes: tintFor(look.shoe, 0xf4f4f4),
+    face: 0xffffff,
+  };
+  for (const name of CHAR_LAYERS) {
+    const sp = node.parts[name];
+    const t = tex[`char/${facing}/${pose}/${name}`];
+    sp.visible = Boolean(t);
+    if (!t) continue;
+    if (sp.texture !== t) {
+      sp.texture = t;
+      sp.anchor.copyFrom(t.defaultAnchor);
+    }
+    sp.tint = tints[name];
+    sp.scale.x = mirrored ? -1 : 1;
+    sp.y = e.sitting ? -7 : 0;
+  }
+}
+
+// ---------- pool water ----------
+
+function buildPool(items, originX, originY) {
+  const cells = new Set();
+  for (const f of items) {
+    for (let dy = 0; dy < f.footprint.h; dy++) {
+      for (let dx = 0; dx < f.footprint.w; dx++) cells.add(`${f.x + dx},${f.y + dy}`);
+    }
+  }
+  const key = [...cells].sort().join(';') + `|${originX},${originY}`;
+  if (poolRec && poolRec.key === key) return poolRec;
+  if (poolRec) poolRec.node.destroy({ children: true });
+  const node = new Container();
+  const water = [];
+  const rims = new Container();
+  for (const c of cells) {
+    const [x, y] = c.split(',').map(Number);
+    const { sx, sy } = tileToScreen(x, y, originX, originY);
+    const w = new Sprite(tex['water/frame0_00']);
+    w.anchor.copyFrom(w.texture.defaultAnchor);
+    w.position.set(sx, sy);
+    w.parity = `${x & 1}${y & 1}`;
+    node.addChild(w);
+    water.push(w);
+    const edges = { n: `${x},${y - 1}`, w: `${x - 1},${y}`, s: `${x},${y + 1}`, e: `${x + 1},${y}` };
+    for (const [edge, n] of Object.entries(edges)) {
+      if (cells.has(n)) continue;
+      const r = new Sprite(tex[`water/rim_${edge}`]);
+      r.anchor.copyFrom(r.texture.defaultAnchor);
+      r.position.set(sx, sy);
+      rims.addChild(r);
+    }
+  }
+  node.addChild(rims);
+  poolRec = { key, node, water };
+  return poolRec;
 }
 
 // ---------- labels ----------
@@ -316,9 +419,11 @@ export function renderRoom(opts) {
   const flats = [];
   const overheads = [];
   const solids = [];
+  const poolItems = [];
   for (const f of placedFurniture) {
     const item = getCatalogueItem(f.itemId);
     if (!item) continue;
+    if (f.itemId === 'pool_water') { poolItems.push(f); continue; }
     const id = f.instanceId || `${f.itemId}@${f.x},${f.y}`;
     seen.add(id);
     const key = furnitureKey(f, lightsOn);
@@ -337,6 +442,15 @@ export function renderRoom(opts) {
   for (const [id, rec] of furnitureNodes) {
     if (!seen.has(id)) { rec.node.destroy(); furnitureNodes.delete(id); }
   }
+  if (poolItems.length) {
+    const pool = buildPool(poolItems, originX, originY);
+    const f = Math.floor(now / 160) % WATER_FRAMES;
+    for (const w of pool.water) w.texture = tex[`water/frame${f}_${w.parity}`];
+    flats.unshift(pool.node);
+  } else if (poolRec) {
+    poolRec.node.destroy({ children: true });
+    poolRec = null;
+  }
   reparent(layers.floorDecor, flats);
   reparent(layers.overhead, overheads);
 
@@ -346,13 +460,12 @@ export function renderRoom(opts) {
   const seatOf = new Map(); // seat furniture id -> entity id
   for (const e of entities) {
     seenE.add(e.id);
-    const key = entityKey(e);
     let rec = entityNodes.get(e.id);
-    if (!rec || rec.key !== key) {
-      if (rec) rec.node.destroy();
-      rec = { node: makeEntityNode(e), key };
+    if (!rec) {
+      rec = { node: makeEntityNode() };
       entityNodes.set(e.id, rec);
     }
+    updateEntityNode(rec.node, e, now);
     const { sx, sy } = tileToScreen(e.x, e.y, originX, originY);
     rec.node.position.set(Math.round(sx), Math.round(sy));
     const d = { id: `e:${e.id}`, node: rec.node, box: entityBox(e.x, e.y), entity: e };

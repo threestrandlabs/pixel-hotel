@@ -1961,9 +1961,12 @@ window.addEventListener('mouseup', () => { ui.dragging = false; });
 
 canvas.addEventListener('wheel', (evt) => {
   evt.preventDefault();
+  // Whole-number zoom steps; throttle so one wheel flick moves one step.
+  const t = performance.now();
+  if (t - (ui.lastWheelZoomAt || 0) < 180 || evt.deltaY === 0) return;
+  ui.lastWheelZoomAt = t;
   const { x, y } = getCanvasPos(evt);
-  const delta = evt.deltaY > 0 ? -0.1 : 0.1;
-  setZoomAtPoint(ui.camera.zoom + delta, x, y);
+  setZoomAtPoint(ui.camera.zoom + (evt.deltaY > 0 ? -1 : 1), x, y);
 }, { passive: false });
 
 // Touch controls: pinch-to-zoom, one-finger drag pan, tap to walk/interact, long-press
@@ -2021,8 +2024,12 @@ canvas.addEventListener('touchmove', (evt) => {
     const rect = canvas.getBoundingClientRect();
     const cx = (evt.touches[0].clientX + evt.touches[1].clientX) / 2 - rect.left;
     const cy = (evt.touches[0].clientY + evt.touches[1].clientY) / 2 - rect.top;
-    setZoomAtPoint(ui.camera.zoom * (dist / ui.pinchDist), cx, cy);
-    ui.pinchDist = dist;
+    // Step one whole zoom level each time the pinch grows/shrinks by 35%.
+    const ratio = dist / ui.pinchDist;
+    if (ratio > 1.35 || ratio < 1 / 1.35) {
+      setZoomAtPoint(ui.camera.zoom + (ratio > 1 ? 1 : -1), cx, cy);
+      ui.pinchDist = dist;
+    }
   } else if (evt.touches.length === 1 && ui.dragging) {
     const { x, y } = getCanvasPos(evt);
     const dx = x - ui.dragLast.x;
@@ -2134,8 +2141,8 @@ function rotatePlacing() {
 
 document.getElementById('btnRotate').addEventListener('click', rotatePlacing);
 document.getElementById('btnCancelPlace').addEventListener('click', cancelPlacing);
-document.getElementById('btnZoomIn').addEventListener('click', () => stepZoom(0.15));
-document.getElementById('btnZoomOut').addEventListener('click', () => stepZoom(-0.15));
+document.getElementById('btnZoomIn').addEventListener('click', () => stepZoom(1));
+document.getElementById('btnZoomOut').addEventListener('click', () => stepZoom(-1));
 document.getElementById('btnZoomReset').addEventListener('click', resetZoom);
 document.getElementById('btnCenterPlayer').addEventListener('click', () => { recenterCamera(player.x, player.y, ui.camera.zoom); persistZoom(); });
 document.getElementById('btnFollowCamera').addEventListener('click', () => {
@@ -2335,8 +2342,8 @@ window.addEventListener('keydown', (e) => {
     if (idx >= 0 && idx < EMOTES.length) triggerEmote(EMOTES[idx].id);
   }
   else if (e.key.toLowerCase() === 'r' && ui.placing) rotatePlacing();
-  else if ((e.key === '+' || e.key === '=') && !isTypingTarget(e)) stepZoom(0.15);
-  else if (e.key === '-' && !isTypingTarget(e)) stepZoom(-0.15);
+  else if ((e.key === '+' || e.key === '=') && !isTypingTarget(e)) stepZoom(1);
+  else if (e.key === '-' && !isTypingTarget(e)) stepZoom(-1);
   else if (e.key === '0' && !isTypingTarget(e)) resetZoom();
   else if (e.key.toLowerCase() === 'e' && !isTypingTarget(e)) togglePanel('elevatorPanel');
   else if (e.key.toLowerCase() === 'i' && !isTypingTarget(e)) togglePanel('inventoryPanel');
