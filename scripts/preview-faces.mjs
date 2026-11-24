@@ -4,11 +4,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PNG } from 'pngjs';
+import { loadAtlas } from './atlas-pages.mjs';
 import { faceFor, IRIS_SHAPES } from '../js/faces.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const atlas = PNG.sync.read(fs.readFileSync(path.join(root, 'public/assets/atlas.png')));
-const { frames } = JSON.parse(fs.readFileSync(path.join(root, 'public/assets/atlas.json'), 'utf8'));
+const { frames, pixel } = loadAtlas(root);
 const out = process.argv[2] || path.join(root, 'art/out/face-preview.png');
 
 const hex = (h) => { const n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
@@ -32,7 +32,7 @@ const CASES = [
 function layers(look, facing, state) {
   const L = [];
   const hairStyle = look.hairStyle;
-  for (const [n, c] of [['skin', look.skin], ['bottom', look.pants], ['shoes', look.shoe], ['top', look.shirt]]) L.push([`char/${facing}/idle0/${n}`, tintOf(c)]);
+  for (const [n, c] of [['skin', look.skin], ['bottom_pants', look.pants], ['shoes_sneakers', look.shoe], ['top_tee', look.shirt]]) L.push([`char/${facing}/idle0/${n}`, tintOf(c)]);
   L.push([`char/${facing}/idle0/hair_${hairStyle}`, tintOf(look.hair)]);
   const f = faceFor(look, state);
   const at = (p) => `face/${facing}/stand/${p}`;
@@ -59,10 +59,10 @@ for (let i = 0; i < W * H; i++) png.data.set([236, 232, 244, 255], i * 4);
       if (!f) { console.warn('missing', name); continue; }
       const ax = Math.round(f.anchor.x * f.frame.w); const ay = Math.round(f.anchor.y * f.frame.h);
       for (let y = 0; y < f.frame.h; y++) for (let x = 0; x < f.frame.w; x++) {
-        const i = ((f.frame.y + y) * atlas.width + f.frame.x + x) * 4;
-        const a = atlas.data[i + 3] / 255;
+        const px0 = pixel(name, x, y);
+        const a = px0[3] / 255;
         if (!a) continue;
-        const rgb = [0, 1, 2].map((k) => atlas.data[i + k] * tint[k] / 255);
+        const rgb = [0, 1, 2].map((k) => px0[k] * tint[k] / 255);
         for (let dy = 0; dy < S; dy++) for (let dx = 0; dx < S; dx++) {
           const px = cx + (x - ax) * S + dx; const py = cy + (y - ay) * S + dy;
           if (px < col * CW || px >= (col + 1) * CW || py < row * CH || py >= (row + 1) * CH) continue;

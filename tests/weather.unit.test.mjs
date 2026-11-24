@@ -87,9 +87,10 @@ test('getSingaporeParts extracts a 0-23 hour and zero-padded date parts', () => 
 // ---------- v0.12.0 Sky viewing platforms: catalogue + viewer interaction ----------
 
 import { getCatalogueItem, SEED_FURNITURE } from '../js/data.js';
-import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { loadAtlasFrames } from '../scripts/atlas-pages.mjs';
 
-const ATLAS = JSON.parse(fs.readFileSync(new URL('../public/assets/atlas.json', import.meta.url), 'utf8'));
+const ATLAS = loadAtlasFrames(fileURLToPath(new URL('..', import.meta.url)));
 import { CITY_DEFS, renderCityCanvas, drawWeatherOverlay } from '../js/viewer.js';
 
 const SKY_VIEWER_IDS = ['sky_viewer_nyc', 'sky_viewer_singapore', 'sky_viewer_tokyo', 'sky_viewer_paris'];

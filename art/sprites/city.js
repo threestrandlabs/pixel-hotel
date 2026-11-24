@@ -57,6 +57,29 @@ function glow() {
   return cv;
 }
 
+// Ring of ripples around a swimmer's waist, 4 frames growing outward.
+function ripple(f) {
+  const W = 44; const H = 24;
+  const cv = new PixelCanvas(W, H);
+  const rings = [[10 + f * 2, 0.9], [16 + f * 2, 0.45]];
+  for (const [rx, strength] of rings) {
+    const ry = rx / 2;
+    for (let t = 0; t < 360; t += 2) {
+      const a = (t * Math.PI) / 180;
+      const x = Math.round(W / 2 + Math.cos(a) * rx);
+      const y = Math.round(H / 2 + Math.sin(a) * ry);
+      if ((t / 2 + f) % 5 === 0) continue; // broken ring reads as moving water
+      cv.set(x, y, [235, 252, 255, Math.round(220 * strength * (1 - f * 0.15))]);
+    }
+  }
+  // the bright waterline right at the body
+  for (let x = W / 2 - 8; x <= W / 2 + 8; x++) {
+    const y = Math.round(H / 2 + Math.sqrt(Math.max(0, 1 - ((x - W / 2) / 8.5) ** 2)) * 4);
+    cv.set(x, y, [255, 255, 255, 230]);
+  }
+  return cv;
+}
+
 // Glass railing segment for open-air floors; same footprint as a wall segment.
 function rail() {
   const H = 30;
@@ -88,6 +111,7 @@ export default function build(add) {
     add(`city/tree${i}`, t.cv, t.pivot);
   }
   add('fx/glow', glow(), [48, 24]);
+  for (let f = 0; f < 4; f++) add(`fx/ripple${f}`, ripple(f), [22, 12]);
   const r = rail();
   add('wall/rail_north', r, [0, 30]);
   add('wall/rail_west', r.mirrored(), [HW, 30]);

@@ -46,56 +46,68 @@ function trim(s) {
 
 const trimmed = sprites.map(trim).sort((a, b) => b.cv.h - a.cv.h || b.cv.w - a.cv.w);
 
-// Shelf packing with 1px extruded borders (prevents bleeding when zoomed).
+// Shelf packing with 1px extruded borders (prevents bleeding when zoomed),
+// spread over as many 2048x2048 pages as needed. Page 0 is atlas.json /
+// atlas.png and lists the other pages in meta.related_multi_packs (PixiJS
+// loads them automatically). atlas-index.json lists every page for tools.
 const PAD = 1;
 const GAP = 2;
-const ATLAS_W = 1024;
-let x = 0; let y = 0; let shelfH = 0;
+const PAGE = 2048;
+const pages = [];
+let page = null;
+const newPage = () => { page = { sprites: [], x: 0, y: 0, shelfH: 0, h: 0 }; pages.push(page); };
+newPage();
 for (const s of trimmed) {
   const w = s.cv.w + PAD * 2;
   const h = s.cv.h + PAD * 2;
-  if (x + w > ATLAS_W) { x = 0; y += shelfH + GAP; shelfH = 0; }
-  s.at = [x + PAD, y + PAD];
-  x += w + GAP;
-  shelfH = Math.max(shelfH, h);
-}
-let atlasH = 1;
-while (atlasH < y + shelfH) atlasH *= 2;
-
-const png = new PNG({ width: ATLAS_W, height: atlasH });
-png.data.fill(0);
-const put = (px, py, p) => {
-  const i = (py * ATLAS_W + px) * 4;
-  png.data[i] = p[0]; png.data[i + 1] = p[1]; png.data[i + 2] = p[2]; png.data[i + 3] = p[3];
-};
-const frames = {};
-for (const s of trimmed) {
-  const [ax, ay] = s.at;
-  const { cv } = s;
-  for (let yy = -PAD; yy < cv.h + PAD; yy++) {
-    for (let xx = -PAD; xx < cv.w + PAD; xx++) {
-      const sx = Math.max(0, Math.min(cv.w - 1, xx));
-      const sy = Math.max(0, Math.min(cv.h - 1, yy));
-      const p = cv.get(sx, sy);
-      if (p) put(ax + xx, ay + yy, p);
-    }
-  }
-  frames[s.name] = {
-    frame: { x: ax, y: ay, w: cv.w, h: cv.h },
-    rotated: false,
-    trimmed: false,
-    spriteSourceSize: { x: 0, y: 0, w: cv.w, h: cv.h },
-    sourceSize: { w: cv.w, h: cv.h },
-    anchor: { x: s.pivot[0] / cv.w, y: s.pivot[1] / cv.h },
-  };
+  if (page.x + w > PAGE) { page.x = 0; page.y += page.shelfH + GAP; page.shelfH = 0; }
+  if (page.y + h > PAGE) { newPage(); }
+  s.at = [page.x + PAD, page.y + PAD];
+  page.x += w + GAP;
+  page.shelfH = Math.max(page.shelfH, h);
+  page.h = Math.max(page.h, page.y + h);
+  page.sprites.push(s);
 }
 
 fs.mkdirSync(outDir, { recursive: true });
-fs.writeFileSync(path.join(outDir, 'atlas.png'), PNG.sync.write(png));
-fs.writeFileSync(path.join(outDir, 'atlas.json'), JSON.stringify({
-  frames,
-  meta: { image: 'atlas.png', format: 'RGBA8888', size: { w: ATLAS_W, h: atlasH }, scale: '1' },
-}));
+for (const f of fs.readdirSync(outDir)) if (/^atlas(-\d+)?\.(png|json)$/.test(f)) fs.unlinkSync(path.join(outDir, f));
+const pageName = (i) => (i === 0 ? 'atlas' : `atlas-${i}`);
+const index = [];
+pages.forEach((pg, pi) => {
+  let H = 1;
+  while (H < pg.h) H *= 2;
+  const png = new PNG({ width: PAGE, height: H });
+  png.data.fill(0);
+  const put = (px, py, p) => {
+    const i = (py * PAGE + px) * 4;
+    png.data[i] = p[0]; png.data[i + 1] = p[1]; png.data[i + 2] = p[2]; png.data[i + 3] = p[3];
+  };
+  const frames = {};
+  for (const s of pg.sprites) {
+    const [ax, ay] = s.at;
+    const { cv } = s;
+    for (let yy = -PAD; yy < cv.h + PAD; yy++) {
+      for (let xx = -PAD; xx < cv.w + PAD; xx++) {
+        const p = cv.get(Math.max(0, Math.min(cv.w - 1, xx)), Math.max(0, Math.min(cv.h - 1, yy)));
+        if (p) put(ax + xx, ay + yy, p);
+      }
+    }
+    frames[s.name] = {
+      frame: { x: ax, y: ay, w: cv.w, h: cv.h },
+      rotated: false,
+      trimmed: false,
+      spriteSourceSize: { x: 0, y: 0, w: cv.w, h: cv.h },
+      sourceSize: { w: cv.w, h: cv.h },
+      anchor: { x: s.pivot[0] / cv.w, y: s.pivot[1] / cv.h },
+    };
+  }
+  const meta = { image: `${pageName(pi)}.png`, format: 'RGBA8888', size: { w: PAGE, h: H }, scale: '1' };
+  if (pi === 0 && pages.length > 1) meta.related_multi_packs = pages.slice(1).map((_, i) => `${pageName(i + 1)}.json`);
+  fs.writeFileSync(path.join(outDir, `${pageName(pi)}.png`), PNG.sync.write(png));
+  fs.writeFileSync(path.join(outDir, `${pageName(pi)}.json`), JSON.stringify({ frames, meta }));
+  index.push({ json: `${pageName(pi)}.json`, image: `${pageName(pi)}.png`, sprites: pg.sprites.length });
+});
+fs.writeFileSync(path.join(outDir, 'atlas-index.json'), JSON.stringify({ pages: index }));
 
 // Contact sheet: every sprite at 3x over a checkerboard, for review.
 const S = Number(process.env.SHEET_SCALE || 3);
@@ -130,4 +142,4 @@ for (const [s, ox, oy] of placed) {
 fs.mkdirSync(qaDir, { recursive: true });
 fs.writeFileSync(path.join(qaDir, 'contact-sheet.png'), PNG.sync.write(sheet));
 
-console.log(`atlas: ${trimmed.length} sprites, ${ATLAS_W}x${atlasH}`);
+console.log(`atlas: ${trimmed.length} sprites on ${pages.length} page(s) of ${PAGE}px`);

@@ -23,8 +23,8 @@ const ID = Object.fromEntries(LAYERS.map((n, i) => [n, i + 1]));
 const GREY = (h) => parseInt(h.slice(1, 3), 16);
 const G = { hi: GREY(TINT.hi), base: GREY(TINT.base), shade: GREY(TINT.shade), deep: GREY(TINT.deep), line: GREY(TINT.line) };
 
-const CW = 56; // canvas size
-const CH = 76;
+const CW = 64; // canvas size
+const CH = 84;
 const OX = CW / 2; // pivot: feet centre
 const OY = CH - 12;
 const U = 1 / 16; // body unit in tiles
@@ -134,13 +134,14 @@ function drawBox(cv, map, box) {
 
 // Paint details on the head face that points "forward" (b1 side) when visible.
 // Each entry: [da, dz, w, h, colour] — da along a from a0, dz down from z1.
-function frontDetail(cv, map, box, pixels, facing) {
-  if (facing === 'up' || facing === 'left') return;
+function frontDetail(cv, map, box, pixels, facing, r = null) {
+  if (!faceVisible(r, facing)) return;
   for (const [da, dz, w, h, colour] of pixels) {
     for (let i = 0; i < w; i++) {
       for (let j = 0; j < h; j++) {
-        const [u, v] = map(box.a0 + da + i + 0.5 - CA, box.b1 - CB);
-        const z = box.z1 - dz - j;
+        const [pa, pb, pz] = xfPoint(r, box.a0 + da + i + 0.5, box.b1, box.z1 - dz - j);
+        const [u, v] = map(pa - CA, pb - CB);
+        const z = pz;
         const [x, y] = project(u, v, z);
         const px = Math.round(x);
         const py = Math.round(y - 0.5);
@@ -162,20 +163,117 @@ function frontDetail(cv, map, box, pixels, facing) {
 // Shared geometry for one pose; the mannequin and every wearable are built
 // from it so they line up exactly.
 
-function rig(pose, step) {
-  const sit = pose === 'sit';
-  const fwdL = step === -1 ? 1 : step === 1 ? -1 : 0; // which leg strides forward
-  const legs = [[0.5, 3, fwdL], [4, 6.5, -fwdL]].map(([a0, a1, f]) => {
-    if (sit) {
+// Arm shapes. Each arm is a list of segments (shoulder first) plus a hand;
+// `upper` segments are what a short sleeve covers.
+//   side: -1 = left arm (a -2..0), +1 = right arm (a 7..9)
+function arm(side, kind, zt, sw = 0) {
+  const a0 = side < 0 ? -2 : 7;
+  const a1 = a0 + 2;
+  const out = side; // outward along a
+  const at = (da = 0) => [a0 + da, a1 + da];
+  const sg = ([x0, x1], b0, b1, z0, z1, upper = false) => ({ a0: x0, a1: x1, b0, b1, z0, z1, upper });
+  const z = zt;
+  switch (kind) {
+    case 'forward':
+    case 'reach': {
+      const dz = kind === 'reach' ? -2 : 0;
       return {
-        a0, a1,
-        thigh: { b0: 0.5, b1: 7, z0: 7, z1: 11 },
-        shin: { b0: 4.5, b1: 7, z0: 2, z1: 7 },
-        foot: { b0: 4.5, b1: 7, z0: 0, z1: 2 },
-        toe: { b0: 7, b1: 8, z0: 0, z1: 3 },
+        segs: [sg(at(), 0.5, 3.5, z + 11 + dz, z + 14 + dz, true), sg(at(), 3.5, 6.5, z + 11 + dz, z + 14 + dz)],
+        hand: sg(at(), 6.5, 8, z + 11 + dz, z + 14 + dz),
       };
     }
-    const zl = f > 0 ? 1 : 0; // the forward leg lifts a pixel
+    case 'up':
+    case 'upLow':
+    case 'wave0':
+    case 'wave1': {
+      const dz = kind === 'upLow' ? -3 : kind === 'wave1' ? -1 : 0;
+      const da = kind === 'wave0' ? out * 1 : kind === 'wave1' ? out * 0.3 : 0;
+      return {
+        segs: [sg(at(da * 0.4), 0.5, 3.5, z + 12 + dz, z + 17 + dz, true), sg(at(da), 0.5, 3.5, z + 17 + dz, z + 24 + dz)],
+        hand: sg(at(da), 0.5, 3.5, z + 24 + dz, z + 27 + dz),
+      };
+    }
+    case 'mouth':
+      return {
+        segs: [sg(at(), 0.5, 3.5, z + 9, z + 15, true), sg(at(-out * 0.3), 3, 5.5, z + 12, z + 15)],
+        hand: sg(at(-out * 0.6), 4.5, 6.3, z + 15, z + 18),
+      };
+    case 'clapIn':
+    case 'clapOut':
+    case 'heart': {
+      const inward = kind === 'clapOut' ? 0 : -out * 1.2;
+      const dz = kind === 'heart' ? 1 : 0;
+      const hand = kind === 'clapOut' ? at() : side < 0 ? [1.5, 3.5] : [3.5, 5.5];
+      return {
+        segs: [sg(at(), 0.5, 3.5, z + 10 + dz, z + 13 + dz, true), sg(at(inward), 3.5, 5.8, z + 10 + dz, z + 13 + dz)],
+        hand: sg(hand, 5.5, 7.2, z + 10 + dz, z + 13 + dz + (kind === 'heart' ? 1 : 0)),
+      };
+    }
+    case 'thumbs':
+      return {
+        segs: [sg(at(), 0.5, 3.5, z + 11, z + 14, true), sg(at(), 3.5, 6, z + 11, z + 14)],
+        hand: sg(at(), 6, 7.5, z + 12, z + 17),
+      };
+    case 'back':
+      sw = -1.5;
+    // falls through
+    default: // 'down'
+      return {
+        segs: [sg(at(), 0.5 + sw, 3.5 + sw, z + 9, z + 15, true), sg(at(), 0.5 + sw, 3.5 + sw, z + 4, z + 9)],
+        hand: sg(at(), 0.5 + sw, 3.5 + sw, z + 1, z + 4),
+      };
+  }
+}
+
+// Pose table: everything the renderer can ask for, per facing.
+//   base  stand | sit      step/stride  leg stride      swing  arm swing
+//   arms  [left, right]    pedal  -1/1 lifts a leg      xf  'lie' | 'swim'
+export const POSES = {
+  idle0: {},
+  walk0: { step: -1, swing: -1 }, walk1: {}, walk2: { step: 1, swing: 1 }, walk3: {},
+  run0: { step: -1, stride: 2, swing: -2 }, run1: {}, run2: { step: 1, stride: 2, swing: 2 }, run3: {},
+  sit0: { base: 'sit' },
+  lie0: { xf: 'lie' },
+  swim0: { xf: 'swim', arms: ['forward', 'forward'] },
+  swim1: { xf: 'swim', arms: ['forward', 'down'] },
+  swim2: { xf: 'swim', arms: ['down', 'down'] },
+  swim3: { xf: 'swim', arms: ['down', 'forward'] },
+  eat0: { arms: ['down', 'mouth'] }, eat1: {},
+  eatsit0: { base: 'sit', arms: ['down', 'mouth'] }, eatsit1: { base: 'sit' },
+  use0: { arms: ['forward', 'forward'] }, use1: { arms: ['reach', 'reach'] },
+  play0: { base: 'sit', arms: ['forward', 'reach'] }, play1: { base: 'sit', arms: ['reach', 'forward'] },
+  pedal0: { base: 'sit', pedal: 1, arms: ['forward', 'forward'] }, pedal1: { base: 'sit', pedal: -1, arms: ['forward', 'forward'] },
+  row0: { base: 'sit', arms: ['forward', 'forward'] }, row1: { base: 'sit', arms: ['back', 'back'] },
+  wave0: { arms: ['down', 'wave0'] }, wave1: { arms: ['down', 'wave1'] },
+  clap0: { arms: ['clapIn', 'clapIn'] }, clap1: { arms: ['clapOut', 'clapOut'] },
+  cheer0: { arms: ['up', 'up'] }, cheer1: { arms: ['upLow', 'upLow'] },
+  dance0: { step: -1, arms: ['up', 'down'] }, dance1: {}, dance2: { step: 1, arms: ['down', 'up'] }, dance3: {},
+  thumbs0: { arms: ['down', 'thumbs'] },
+  heart0: { arms: ['heart', 'heart'] },
+};
+
+// Which face sprites a pose uses (the head sits in the same place).
+export const FACE_KIND = (pose) => (pose.startsWith('lie') ? 'lie'
+  : pose.startsWith('swim') ? 'swim'
+    : /^(sit|eatsit|play|pedal|row)/.test(pose) ? 'sit' : 'stand');
+
+function rig(spec = {}) {
+  const sit = spec.base === 'sit';
+  const stride = spec.stride || 1;
+  const step = spec.step || 0;
+  const fwdL = step === -1 ? stride : step === 1 ? -stride : 0; // which leg strides forward
+  const legs = [[0.5, 3, fwdL, 1], [4, 6.5, -fwdL, -1]].map(([a0, a1, f, which]) => {
+    if (sit) {
+      const lift = spec.pedal === which ? 2 : 0; // pedalling raises one knee
+      return {
+        a0, a1,
+        thigh: { b0: 0.5, b1: 7, z0: 7 + lift, z1: 11 + lift },
+        shin: { b0: 4.5, b1: 7, z0: 2 + lift, z1: 7 + lift },
+        foot: { b0: 4.5, b1: 7, z0: lift, z1: 2 + lift },
+        toe: { b0: 7, b1: 8, z0: lift, z1: 3 + lift },
+      };
+    }
+    const zl = f > 0 ? Math.min(2, f) : 0; // the forward leg lifts
     return {
       a0, a1,
       leg: { b0: 0.5 + f, b1: 3.5 + f, z0: 2 + zl, z1: 13 },
@@ -185,14 +283,34 @@ function rig(pose, step) {
     };
   });
   const zt = sit ? 11 : 13; // torso base (hips)
-  const swing = step || 0; // arms swing opposite to the legs
-  const arms = [
-    { a0: -2, a1: 0, b0: 0.5 + swing, b1: 3.5 + swing },
-    { a0: 7, a1: 9, b0: 0.5 - swing, b1: 3.5 - swing },
-  ];
+  const swing = spec.swing || 0; // arms swing opposite to the legs
+  const [kl, kr] = spec.arms || ['down', 'down'];
+  const arms = [arm(-1, kl, zt, swing), arm(1, kr, zt, -swing)];
   const zh = zt + 16; // head base
   const head = { a0: 0, a1: 7, b0: -1, b1: 5, z0: zh, z1: zh + 12, layer: 'skin' };
-  return { sit, legs, zt, zh, arms, head };
+  return { sit, legs, zt, zh, arms, head, xf: spec.xf || null };
+}
+
+// Whole-body transforms. Lying turns the standing figure onto its back
+// along b (feet toward +b, face up); swimming cuts it at the waterline.
+const LIE_FEET_B = 11;
+const SWIM_CUT = 17;
+function xfPoint(r, a, b, z) {
+  if (!r || !r.xf) return [a, b, z];
+  if (r.xf === 'lie') return [a, LIE_FEET_B - z / 2, 2 * (b + 2)];
+  return [a, b, z - SWIM_CUT];
+}
+function xfBox(r, box) {
+  if (!r || !r.xf) return box;
+  if (r.xf === 'lie') {
+    return { ...box, b0: LIE_FEET_B - box.z1 / 2, b1: LIE_FEET_B - box.z0 / 2, z0: 2 * (box.b0 + 2), z1: 2 * (box.b1 + 2) };
+  }
+  if (box.z1 <= SWIM_CUT) return null;
+  return { ...box, z0: Math.max(box.z0, SWIM_CUT) - SWIM_CUT, z1: box.z1 - SWIM_CUT };
+}
+// A lying figure shows its face (on top) from every side.
+function faceVisible(r, facing) {
+  return (r && r.xf === 'lie') || facing === 'down' || facing === 'right';
 }
 
 const B = (layer) => (a0, a1, b0, b1, z0, z1, extra = {}) => ({ a0, a1, b0, b1, z0, z1, layer, ...extra });
@@ -208,7 +326,10 @@ function mannequin(r) {
   }
   const skin = B('skin');
   boxes.push(skin(0, 7, 0, 4, r.zt, r.zt + 15));
-  for (const a of r.arms) boxes.push(skin(a.a0, a.a1, a.b0, a.b1, r.zt + 1, r.zt + 15));
+  for (const a of r.arms) {
+    for (const sgm of a.segs) boxes.push(skin(sgm.a0, sgm.a1, sgm.b0, sgm.b1, sgm.z0, sgm.z1));
+    boxes.push(skin(a.hand.a0, a.hand.a1, a.hand.b0, a.hand.b1, a.hand.z0, a.hand.z1));
+  }
   boxes.push(skin(2.5, 4.5, 1, 3, r.zt + 15, r.zt + 16)); // neck
   boxes.push(r.head);
   return boxes;
@@ -255,7 +376,8 @@ const SHOES = {
 
 function torso(r, z1 = r.zt + 15) { return B('top')(-D, 7 + D, -D, 4 + D, r.zt + 3, z1 + D); }
 function sleeves(r, long) {
-  return r.arms.map((a) => B('top')(a.a0 - D, a.a1 + D, a.b0 - D, a.b1 + D, long ? r.zt + 4 : r.zt + 10, r.zt + 15 + D));
+  return r.arms.flatMap((a) => a.segs.filter((sg) => long || sg.upper)
+    .map((sg) => B('top')(sg.a0 - D, sg.a1 + D, sg.b0 - D, sg.b1 + D, sg.z0 - (long ? 0 : 0), sg.z1 + D)));
 }
 // A detail on the front of the torso (b = 4 + D), as a thin box.
 function front(layer, a0, a1, z0, z1, extra = {}) {
@@ -291,7 +413,7 @@ const TOPS = {
     torso(r), ...sleeves(r, true),
     B('top')(1.6, 5.4, 0.6, 3.4, r.zt + 15, r.zt + 16.5), // stand-up collar
     ...[r.zt + 5, r.zt + 8, r.zt + 11].map((z) => front('trim', 3.2, 3.8, z, z + 1.4, trim('#e8b23a'))),
-    ...r.arms.map((a) => B('trim')(a.a0 - D, a.a1 + D, a.b0 - D, a.b1 + D, r.zt + 14, r.zt + 15.4, trim('#e8b23a'))), // epaulettes
+    ...[[-2, 0], [7, 9]].map(([x0, x1]) => B('trim')(x0 - D, x1 + D, 0.5 - D, 3.5 + D, r.zt + 14, r.zt + 15.4, trim('#e8b23a'))), // epaulettes
   ],
   labcoat: (r) => [
     torso(r), ...sleeves(r, true),
@@ -446,8 +568,9 @@ function outline(cv) {
 function render(facing, r, extra = [], fringe = []) {
   const map = FACING[facing];
   const cv = new BodyCanvas(CW, CH);
-  for (const b of order(map, [...mannequin(r), ...extra])) drawBox(cv, map, b);
-  if (fringe.length) frontDetail(cv, map, r.head, fringe.map((f) => [...f, [G.base, ID.hair, 0, 255]]), facing);
+  const boxes = [...mannequin(r), ...extra].map((b) => xfBox(r, b)).filter(Boolean);
+  for (const b of order(map, boxes)) drawBox(cv, map, b);
+  if (fringe.length) frontDetail(cv, map, r.head, fringe.map((f) => [...f, [G.base, ID.hair, 0, 255]]), facing, r);
   outline(cv);
   const out = {};
   for (let y = 0; y < CH; y++) for (let x = 0; x < CW; x++) {
@@ -515,29 +638,32 @@ const MOUTHS = {
 };
 
 // Screen pixel for face cell (fx, fz) on the visible front of the head.
-function facePixel(map, head, fx, fz) {
+function facePixel(map, r, head, fx, fz) {
   const unit = Math.floor(fx / 2);
-  const [u, v] = map(head.a0 + unit + 0.5 - CA, head.b1 - CB);
-  const [x, y] = project(u, v, head.z1 - fz);
+  const [pa, pb, pz] = xfPoint(r, head.a0 + unit + 0.5, head.b1, head.z1 - fz);
+  const [u, v] = map(pa - CA, pb - CB);
+  const [x, y] = project(u, v, pz);
   return [Math.round(x) - 1 + (fx % 2), Math.round(y - 0.5)];
 }
 
-function paintMask(cv, map, head, [fx0, fz0], rows, palette = FACE_COLOURS) {
+function paintMask(cv, map, r, [fx0, fz0], rows, palette = FACE_COLOURS) {
+  const { head } = r;
   rows.forEach((row, j) => {
     for (let i = 0; i < row.length; i++) {
       const ch = row[i];
       if (ch === '.') continue;
       const c = palette[ch];
-      const [x, y] = facePixel(map, head, fx0 + i, fz0 + j);
+      const [x, y] = facePixel(map, r, head, fx0 + i, fz0 + j);
       cv.set(x, y, c);
     }
   });
 }
 
 // Face parts for one facing and body pose ('stand' or 'sit').
+const FACE_SPECS = { stand: POSES.idle0, sit: POSES.sit0, lie: POSES.lie0, swim: POSES.swim0 };
 function faceParts(facing, kind) {
   const map = FACING[facing];
-  const { head } = rig(kind, 0);
+  const head = rig(FACE_SPECS[kind]);
   const parts = {};
   const part = (name, paint) => {
     const cv = new PixelCanvas(CW, CH);
@@ -589,17 +715,9 @@ export const WEARABLES = {
 };
 
 export default function build(add) {
-  const poses = {
-    idle0: ['stand', 0],
-    walk0: ['stand', -1],
-    walk1: ['stand', 0],
-    walk2: ['stand', 1],
-    walk3: ['stand', 0],
-    sit0: ['sit', 0],
-  };
   for (const facing of Object.keys(FACING)) {
-    for (const [pose, [kind, step]] of Object.entries(poses)) {
-      const r = rig(kind, step);
+    for (const [pose, spec] of Object.entries(POSES)) {
+      const r = rig(spec);
       const at = (name) => `char/${facing}/${pose}/${name}`;
       add(at('skin'), render(facing, r).skin, [OX, OY]);
       // each wearable over the bare mannequin: keep its own visible pixels
@@ -615,11 +733,11 @@ export default function build(add) {
         const out = render(facing, r, h.boxes, h.fringe);
         if (out.hair) add(at(`hair_${style}`), out.hair, [OX, OY]);
       }
-      if ((pose === 'idle0' || pose === 'sit0') && (facing === 'down' || facing === 'right')) {
-        // faces only exist on the two facings toward the viewer
-        const kindName = kind === 'sit' ? 'sit' : 'stand';
-        for (const [name, cv] of Object.entries(faceParts(facing, kind))) add(`face/${facing}/${kindName}/${name}`, cv, [OX, OY]);
-      }
+    }
+    // faces: one set per head position, on the facings where the face shows
+    for (const kind of Object.keys(FACE_SPECS)) {
+      if (!faceVisible(rig(FACE_SPECS[kind]), facing)) continue;
+      for (const [name, cv] of Object.entries(faceParts(facing, kind))) add(`face/${facing}/${kind}/${name}`, cv, [OX, OY]);
     }
   }
 }

@@ -15,6 +15,7 @@ import { buildCity, createSky } from './city.js';
 import { sortDrawables, furnitureBox, entityBox } from '../depthSort.js';
 import { LOOKS } from '../looks.js';
 import { faceFor, IRIS_SHAPES } from '../faces.js';
+import { poseFor, LIE_SURFACE } from '../poses.js';
 import { validateAvatarLook, DEFAULT_PLAYER_LOOK } from '../avatar.js';
 
 TextureStyle.defaultOptions.scaleMode = 'nearest';
@@ -103,8 +104,9 @@ export async function initRenderer(host, beforeEl) {
   app.canvas.id = 'pixiCanvas';
   host.insertBefore(app.canvas, beforeEl);
   app.ticker.stop(); // main.js drives rendering from its own rAF loop
+  // The atlas may span several pages (meta.related_multi_packs); merge them.
   const sheet = await Assets.load('assets/atlas.json');
-  tex = sheet.textures;
+  tex = Object.assign({}, ...[sheet, ...(sheet.linkedSheets || [])].map((s) => s.textures));
   Object.assign(window, { app });
 
   sky = createSky();
@@ -322,7 +324,7 @@ function tintFor(hexColor, fallback) {
 
 // Every sprite that makes up one character, back to front:
 // [frame name, tint]. Shared by the room renderer and the previews.
-function characterLayers(rawLook, facing, pose, faceState = {}, outfitOverride = null) {
+function characterLayers(rawLook, facing, pose, faceState = {}, outfitOverride = null, faceKind = null) {
   const look = normalLook(rawLook);
   const at = (name) => `char/${facing}/${pose}/${name}`;
   const layers = [];
@@ -340,8 +342,9 @@ function characterLayers(rawLook, facing, pose, faceState = {}, outfitOverride =
   const hatted = look.accessory === 'cap' || look.accessory === 'beanie';
   const hairLook = hatted && (look.hairStyle === 'spiky' || look.hairStyle === 'curls') ? { ...look, hairStyle: 'classic' } : look;
   layers.push([hairFrame(facing, pose, hairLook), tintFor(look.hair, 0x5a3826)]);
-  if (facing === 'down' || facing === 'right') {
-    const kind = pose === 'sit0' ? 'sit' : 'stand';
+  const kind = faceKind || (pose === 'sit0' ? 'sit' : 'stand');
+  // a lying figure shows its face (on top) from every side
+  if (kind === 'lie' || facing === 'down' || facing === 'right') {
     const f = faceFor(look, faceState);
     const face = (part) => `face/${facing}/${kind}/${part}`;
     const iris = tintFor(look.eye, 0x2b2230);
@@ -366,27 +369,24 @@ function characterLayers(rawLook, facing, pose, faceState = {}, outfitOverride =
   return layers;
 }
 
-function characterPose(e, now) {
-  if (e.walking) return `walk${Math.floor(now / 140) % 4}`;
-  if (e.sitting) return 'sit0';
-  return 'idle0';
-}
-
 function makeEntityNode() {
   const node = new Container();
-  const shadow = new Graphics().ellipse(0, 0, 9, 4).fill({ color: 0x1e1428, alpha: 0.25 });
-  node.addChild(shadow);
+  node.shadow = new Graphics().ellipse(0, 0, 9, 4).fill({ color: 0x1e1428, alpha: 0.25 });
+  node.addChild(node.shadow);
   node.body = new Container();
   node.addChild(node.body);
+  node.ripple = new Sprite();
+  node.ripple.visible = false;
+  node.addChild(node.ripple); // over the waist, so the body rises out of the water
   return node;
 }
 
-function updateEntityNode(node, e, now) {
+function updateEntityNode(node, e, now, furnitureById) {
   const look = e.look || LOOKS[e.spriteKey] || LOOKS.player || {};
   // Block characters are rendered natively for all four facings.
   const facing = ['down', 'right', 'up', 'left'].includes(e.dir) ? e.dir : 'down';
-  const pose = characterPose(e, now);
-  const layers = characterLayers(look, facing, pose, { emote: e.emote || null, blink: Boolean(e.blink) }, e.outfit);
+  const { pose, face } = poseFor(e, now);
+  const layers = characterLayers(look, facing, pose, { emote: e.emote || null, blink: Boolean(e.blink) }, e.outfit, face);
   const kids = node.body.children;
   while (kids.length < layers.length) node.body.addChild(new Sprite());
   for (let i = 0; i < kids.length; i++) {
@@ -400,7 +400,25 @@ function updateEntityNode(node, e, now) {
     }
     sp.tint = layers[i][1];
   }
-  node.body.y = e.sitting ? -9 : 0; // up onto the seat cushion
+  // Lift onto the seat or mattress; swimmers sit at the waterline.
+  let lift = 0;
+  if (face === 'lie') {
+    const bed = furnitureById?.get(e.sittingInstanceId || e.sitting);
+    lift = (LIE_SURFACE[bed?.itemId] ?? 20) - 4; // the body's back is 4 px above its pivot
+  } else if (face === 'sit') {
+    lift = 9; // up onto the seat cushion
+  }
+  node.body.y = -lift;
+  node.shadow.visible = face !== 'lie' && face !== 'swim';
+  const swimming = face === 'swim';
+  node.ripple.visible = swimming;
+  if (swimming) {
+    const t = tex[`fx/ripple${Math.floor(now / 200) % 4}`];
+    if (t && node.ripple.texture !== t) {
+      node.ripple.texture = t;
+      node.ripple.anchor.copyFrom(t.defaultAnchor);
+    }
+  }
 }
 
 // ---------- pool water ----------
@@ -593,6 +611,7 @@ export function renderRoom(opts) {
   reparent(layers.overhead, overheads);
 
   // --- entities ---
+  const furnitureById = new Map(placedFurniture.map((f) => [f.instanceId, f]));
   const seenE = new Set();
   const drawables = [];
   const seatOf = new Map(); // seat furniture id -> entity id
@@ -603,7 +622,7 @@ export function renderRoom(opts) {
       rec = { node: makeEntityNode() };
       entityNodes.set(e.id, rec);
     }
-    updateEntityNode(rec.node, e, now);
+    updateEntityNode(rec.node, e, now, furnitureById);
     const { sx, sy } = tileToScreen(e.x, e.y, originX, originY);
     rec.node.position.set(Math.round(sx), Math.round(sy));
     const d = { id: `e:${e.id}`, node: rec.node, box: entityBox(e.x, e.y), entity: e };
@@ -767,7 +786,7 @@ const PREVIEW_MAG = 3; // previews show the avatar 3x larger than in the room
  */
 export function renderCharacter(look, dir = 'down', pose = {}, makeCanvas = null, scale = 1) {
   const facing = ['down', 'right', 'up', 'left'].includes(dir) ? dir : 'down';
-  const poseName = pose?.sit ? 'sit0' : pose?.stride ? 'walk0' : 'idle0';
+  const poseName = pose?.lie ? 'lie0' : pose?.sit ? 'sit0' : pose?.stride ? 'walk0' : 'idle0';
   const l = look || LOOKS.player || {};
   const parts = [];
   let x0 = Infinity; let y0 = Infinity; let x1 = -Infinity; let y1 = -Infinity;
