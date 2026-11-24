@@ -98,11 +98,13 @@ fs.writeFileSync(path.join(outDir, 'atlas.json'), JSON.stringify({
 }));
 
 // Contact sheet: every sprite at 3x over a checkerboard, for review.
-const S = 3;
+const S = Number(process.env.SHEET_SCALE || 3);
 const cell = (s) => [s.cv.w * S + 12, s.cv.h * S + 12];
 let cx = 0; let cy = 0; let rowH = 0; const SHEET_W = 1600;
 const placed = [];
-for (const s of [...trimmed].sort((a, b) => a.name.localeCompare(b.name))) {
+// SHEET=furn/ limits the contact sheet to sprites whose name starts with it.
+const sheetFilter = process.env.SHEET || '';
+for (const s of [...trimmed].filter((t) => t.name.startsWith(sheetFilter)).sort((a, b) => a.name.localeCompare(b.name))) {
   const [w, h] = cell(s);
   if (cx + w > SHEET_W) { cx = 0; cy += rowH; rowH = 0; }
   placed.push([s, cx, cy]);

@@ -1,5 +1,5 @@
 // Floor tiles: 64x32 diamonds, pivot at the tile centre.
-import { PixelCanvas, mix } from '../lib/canvas.js';
+import { PixelCanvas, mix, bleed } from '../lib/canvas.js';
 import { r } from '../palette.js';
 
 const DIAMOND = [[32, 0], [64, 16], [32, 32], [0, 16]];
@@ -77,7 +77,73 @@ function parquet(tone) {
   return cv;
 }
 
-export default function build(add) {
+// Generic patterned tile: paint(u, v, x, y) -> colour, u/v in 0..1 across the tile.
+function patterned(paint, groutColor) {
+  const cv = base('#000000');
+  for (let y = 0; y < 32; y++) for (let x = 0; x < 64; x++) {
+    if (!cv.opaque(x, y)) continue;
+    const [u, v] = uv(x, y);
+    cv.set(x, y, paint(u, v, x, y));
+  }
+  if (groutColor) grout(cv, groutColor);
+  return cv;
+}
+
+const hash = (x, y, s = 0) => {
+  let h = (x * 374761393 + y * 668265263 + s * 982451653) >>> 0;
+  h = ((h ^ (h >>> 13)) * 1274126177) >>> 0;
+  return (h >>> 8) / 16777216;
+};
+
+export default function build(addRaw) {
+  // every ground tile gets a 1px bleed so tiles overlap instead of leaving seams
+  const add = (name, cv) => addRaw(name, bleed(cv), [33, 17]);
+  // gym rubber: dark slate with sparse coloured fleck
+  add('floor/rubber', patterned((u, v, x, y) => {
+    const n = hash(x, y, 1);
+    if (n > 0.97) return '#7fb0c8';
+    if (n > 0.94) return '#5d6a78';
+    return n < 0.05 ? '#3a4350' : '#46505e';
+  }, '#323944'), [32, 16]);
+  // spa stone: four pale aqua slabs per tile
+  add('floor/spa_stone', patterned((u, v, x, y) => {
+    const q = (u < 0.5 ? 0 : 1) + (v < 0.5 ? 0 : 2);
+    const tones = ['#d9efec', '#cfe8e4', '#c6e2de', '#d3ebe7'];
+    const edge = Math.abs(u - 0.5) < 0.025 || Math.abs(v - 0.5) < 0.025;
+    if (edge) return '#a9cfca';
+    return hash(x, y, 2) > 0.93 ? '#e8f7f5' : tones[q];
+  }, '#9cc4bf'), [32, 16]);
+  // arcade: deep purple with a neon grid
+  add('floor/arcade', patterned((u, v, x, y) => {
+    if (Math.abs(u - 0.5) < 0.02 || Math.abs(v - 0.5) < 0.02) return '#b05ad8';
+    if (hash(x, y, 3) > 0.985) return '#7af0ff';
+    return (u < 0.5) === (v < 0.5) ? '#2e2444' : '#352a4e';
+  }, '#5a3d8a'), [32, 16]);
+  // library carpet: warm red with a small gold diamond motif
+  add('floor/carpet', patterned((u, v, x, y) => {
+    const du = Math.abs(u - 0.5); const dv = Math.abs(v - 0.5);
+    if (du + dv < 0.12) return '#e8b23a';
+    if (du + dv < 0.18) return '#7e2a3e';
+    if (du > 0.44 || dv > 0.44) return '#6e2436';
+    return hash(x, y, 4) > 0.9 ? '#9c3a4e' : '#8a3246';
+  }, null), [32, 16]);
+  // grass: tufts in three greens
+  add('floor/grass', patterned((u, v, x, y) => {
+    const n = hash(x, y, 5);
+    if (n > 0.9) return '#b8dc7a';
+    if (n > 0.6) return '#86c060';
+    if (n < 0.12) return '#4f9440';
+    return '#6fae50';
+  }, null), [32, 16]);
+  // rooftop decking: pale weathered planks along u
+  add('floor/decking', patterned((u, v, x, y) => {
+    const plank = Math.floor(v * 4);
+    if (Math.abs(v * 4 - Math.round(v * 4)) < 0.07) return '#8a6a4a';
+    const c = plank % 2 ? '#d8b98c' : '#ccab7c';
+    return hash(x, y, 6) > 0.95 ? '#b8956a' : c;
+  }, '#7a5c40'), [32, 16]);
+
+
   const cream = r('cream');
   const sand = ['#f7e7cf', '#e8d2b0', '#d2b78f', '#b39570', '#7f6650'];
   add('floor/marble_a', marble(3, cream), [32, 16]);

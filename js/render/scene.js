@@ -27,11 +27,19 @@ let poolRec = null; // { key, node, cells: [{water, sprite}] }
 const CHAR_LAYERS = ['skin', 'bottom', 'shoes', 'top', 'hair', 'face'];
 const WATER_FRAMES = 8;
 
-// Floor art per room; rooms not listed yet keep the greybox colour.
+// Floor art per room floor material.
 const FLOOR_ART = {
-  lobby: ['floor/marble_a', 'floor/marble_b'],
-  cafe: ['floor/parquet'], restaurant: ['floor/parquet'], library: ['floor/parquet'], myroom: ['floor/parquet'],
+  lobby_marble: ['floor/marble_a', 'floor/marble_b'],
+  dark_parquet: ['floor/parquet'],
+  gym_rubber: ['floor/rubber'],
+  spa_stone: ['floor/spa_stone'],
+  arcade_neon: ['floor/arcade'],
+  library_carpet: ['floor/carpet'],
+  grass: ['floor/grass'],
+  decking: ['floor/decking'],
 };
+// Items flagged flat (walkable) that are tall structures drawn over avatars.
+const OVERHEAD_ART = new Set(['pergola']);
 
 export const entityScreenBounds = new Map();
 
@@ -154,7 +162,7 @@ function buildFloor(room, originX, originY, lightsOn) {
   const base = hexNum(room.floorColor || (room.id === 'rooftop' ? '#d8b98c' : '#e9c48f'));
   const dim = lightsOn ? 0 : -0.5;
   const dimTint = lightsOn ? 0xffffff : 0x7a7090;
-  const art = FLOOR_ART[room.id];
+  const art = FLOOR_ART[room.floorMaterial || (room.id === 'rooftop' ? 'decking' : '')];
   const g = new Graphics();
   const hw = TILE_W / 2;
   const hh = TILE_H / 2;
@@ -384,14 +392,18 @@ export function renderRoom(opts) {
   const panY = camera?.panY ?? 0;
   // world -> screen: translate(w/2 + pan) * scale(zoom) * translate(-w/2)
   layers.world.scale.set(zoom);
-  layers.world.position.set(width / 2 + panX - (width / 2) * zoom, height / 2 + panY - (height / 2) * zoom);
+  // Snap the camera to whole screen pixels so tiles never land on half pixels.
+  layers.world.position.set(
+    Math.round(width / 2 + panX - (width / 2) * zoom),
+    Math.round(height / 2 + panY - (height / 2) * zoom),
+  );
 
   const { originX, originY } = computeOrigin(room, width, height);
   const fk = `${room.id}|${originX},${originY}|${lightsOn ? 1 : 0}`;
   if (fk !== floorKey) {
     floorKey = fk;
     buildFloor(room, originX, originY, lightsOn);
-    for (const rec of furnitureNodes.values()) rec.node.destroy();
+    for (const rec of furnitureNodes.values()) { rec.node.destroy(); rec.floorNode?.destroy(); }
     furnitureNodes.clear();
   }
 
@@ -429,18 +441,30 @@ export function renderRoom(opts) {
     const key = furnitureKey(f, lightsOn);
     let rec = furnitureNodes.get(id);
     if (!rec || rec.key !== key) {
-      if (rec) rec.node.destroy();
+      if (rec) { rec.node.destroy(); rec.floorNode?.destroy(); }
       rec = { node: makeFurnitureNode(f, item, originX, originY, lightsOn), key };
       furnitureNodes.set(id, rec);
     }
     // Overhead first: the chandelier is flagged flat+overhead and used to be
     // drawn on the floor because the flat check won.
-    if (item.overhead) overheads.push(rec.node);
+    if (item.overhead || OVERHEAD_ART.has(f.itemId)) {
+      overheads.push(rec.node);
+      // optional floor part (e.g. the chandelier's medallion) drawn on the floor
+      const floorTex = tex[`furn/${f.itemId}_floor/0`];
+      if (floorTex) {
+        if (!rec.floorNode) {
+          rec.floorNode = new Sprite(floorTex);
+          rec.floorNode.anchor.copyFrom(floorTex.defaultAnchor);
+          rec.floorNode.position.copyFrom(rec.node.position);
+        }
+        flats.push(rec.floorNode);
+      }
+    }
     else if (item.flat) flats.push(rec.node);
     else solids.push({ f, item, rec, id });
   }
   for (const [id, rec] of furnitureNodes) {
-    if (!seen.has(id)) { rec.node.destroy(); furnitureNodes.delete(id); }
+    if (!seen.has(id)) { rec.node.destroy(); rec.floorNode?.destroy(); furnitureNodes.delete(id); }
   }
   if (poolItems.length) {
     const pool = buildPool(poolItems, originX, originY);
@@ -553,4 +577,35 @@ function reparent(container, nodes) {
     if (n.parent !== container) container.addChildAt(n, i);
     else if (container.children[i] !== n) container.setChildIndex(n, i);
   }
+}
+
+// ---------- item icons (shop / inventory) ----------
+
+const iconCache = new Map();
+
+/**
+ * Data URL of an item's rotation-0 sprite fitted into a size x size square,
+ * scaled by a whole number (or 1/2) so the pixels stay crisp.
+ */
+export function getItemIconDataUrl(itemId, size = 52, dpr = 1) {
+  const key = `${itemId}:${size}@${dpr}`;
+  if (iconCache.has(key)) return iconCache.get(key);
+  const t = tex[`furn/${itemId}/0`];
+  const res = t?.source?.resource;
+  if (!t || !res) return '';
+  const px = Math.max(1, Math.round(size * dpr));
+  const canvas = document.createElement('canvas');
+  canvas.width = px;
+  canvas.height = px;
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  const { x, y, width: w, height: h } = t.frame;
+  const fit = Math.min((px - 4) / w, (px - 4) / h);
+  const scale = fit >= 1 ? Math.floor(fit) : fit >= 0.5 ? 0.5 : fit;
+  const dw = Math.round(w * scale);
+  const dh = Math.round(h * scale);
+  ctx.drawImage(res, x, y, w, h, Math.round((px - dw) / 2), Math.round((px - dh) / 2), dw, dh);
+  const url = canvas.toDataURL();
+  iconCache.set(key, url);
+  return url;
 }

@@ -205,3 +205,21 @@ export function objectCanvas(w, h, height, pad = 2) {
   const oy = height + pad;
   return { cv, P: projector(ox, oy), pivot: [ox, oy] };
 }
+
+// Grow a ground tile by one pixel on every side (copying edge colours outward)
+// so neighbouring tiles overlap slightly and never show hairline seams.
+// Returns a new canvas 2px larger; shift the pivot by +1, +1.
+export function bleed(cv) {
+  const out = new PixelCanvas(cv.w + 2, cv.h + 2);
+  out.blit(cv, 1, 1);
+  const adds = [];
+  for (let y = 0; y < out.h; y++) for (let x = 0; x < out.w; x++) {
+    if (out.opaque(x, y)) continue;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const p = out.get(x + dx, y + dy);
+      if (p) { adds.push([x, y, p]); break; }
+    }
+  }
+  for (const [x, y, p] of adds) out.set(x, y, p);
+  return out;
+}

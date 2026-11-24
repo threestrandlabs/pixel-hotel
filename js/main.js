@@ -9,9 +9,9 @@ import { loadState, saveState, resetState, sanitizePlacedItemsForRoom } from './
 import {
   createNpcRuntime, tickNpc, findWanderTarget, directionBetween, respondToMessage, pickRandom,
 } from './npc.js';
-import { renderRoom, hitTestNpc, initRenderer } from './render/scene.js';
+import { renderRoom, hitTestNpc, initRenderer, getItemIconDataUrl } from './render/scene.js';
 import {
-  computeOrigin, screenToTile, tileToScreen, worldToScreen, getItemIconDataUrl, drawElevatorTransition,
+  computeOrigin, screenToTile, tileToScreen, worldToScreen, drawElevatorTransition,
   DEFAULT_ZOOM, MIN_ZOOM, MAX_ZOOM, clampZoom, zoomAtPoint, centerCameraOnTile, deadzoneCameraTarget,
   renderSkylineToCanvas, getCachedIsoCityLayout, computeCityVehicles, drawCityVehicles,
   nearCityLayerTransform, warmUpRoomSprites, clearSpriteCache, warmupRoomCache,

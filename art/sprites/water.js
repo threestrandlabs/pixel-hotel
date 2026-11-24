@@ -1,6 +1,6 @@
 // Pool water: 8-frame animated tile that repeats seamlessly across the iso
 // lattice, plus rim overlays for each edge of a pool tile.
-import { PixelCanvas, mix } from '../lib/canvas.js';
+import { PixelCanvas, mix, bleed } from '../lib/canvas.js';
 import { r } from '../palette.js';
 
 const DIAMOND = [[32, 0], [64, 16], [32, 32], [0, 16]];
@@ -65,7 +65,7 @@ function rim(edge) {
 
 export default function build(add) {
   for (let f = 0; f < FRAMES; f++) {
-    for (const pu of [0, 1]) for (const pv of [0, 1]) add(`water/frame${f}_${pu}${pv}`, waterFrame(f, pu, pv), [32, 16]);
+    for (const pu of [0, 1]) for (const pv of [0, 1]) add(`water/frame${f}_${pu}${pv}`, bleed(waterFrame(f, pu, pv)), [33, 17]);
   }
   for (const e of ['n', 'w', 's', 'e']) add(`water/rim_${e}`, rim(e), [32, 16]);
 }
