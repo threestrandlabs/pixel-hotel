@@ -95,17 +95,24 @@ function model(pose, step) {
       { a0: 4, a1: 6.5, b0: 0.5, b1: 7, z0: 7, z1: 11, layer: 'bottom' },
       { a0: 0.5, a1: 3, b0: 4.5, b1: 7, z0: 2, z1: 7, layer: 'bottom' },
       { a0: 4, a1: 6.5, b0: 4.5, b1: 7, z0: 2, z1: 7, layer: 'bottom' },
-      { a0: 0.5, a1: 3, b0: 4.5, b1: 8, z0: 0, z1: 2, layer: 'shoes' },
-      { a0: 4, a1: 6.5, b0: 4.5, b1: 8, z0: 0, z1: 2, layer: 'shoes' },
+      // shoe = sole under the shin + toe cap in front of it (see standing legs)
+      { a0: 0.5, a1: 3, b0: 4.5, b1: 7, z0: 0, z1: 2, layer: 'shoes' },
+      { a0: 4, a1: 6.5, b0: 4.5, b1: 7, z0: 0, z1: 2, layer: 'shoes' },
+      { a0: 0.5, a1: 3, b0: 7, b1: 8, z0: 0, z1: 3, layer: 'shoes' },
+      { a0: 4, a1: 6.5, b0: 7, b1: 8, z0: 0, z1: 3, layer: 'shoes' },
     );
   } else {
     // legs swing along b; the forward leg also lifts a pixel
     const fwdL = step === -1 ? 1 : step === 1 ? -1 : 0;
     for (const [a0, a1, f] of [[0.5, 3, fwdL], [4, 6.5, -fwdL]]) {
       const zl = f > 0 ? 1 : 0;
+      // A shoe is a sole directly under the leg (same centre, lower, so it is
+      // drawn first and the leg stands on it) plus a toe cap in front of the
+      // leg. One long box would paint its top face over the leg's base.
       boxes.push(
+        { a0, a1, b0: 0.5 + f, b1: 3.5 + f, z0: zl, z1: 2 + zl, layer: 'shoes' },
         { a0, a1, b0: 0.5 + f, b1: 3.5 + f, z0: 2 + zl, z1: 13, layer: 'bottom' },
-        { a0, a1, b0: 0.5 + f, b1: 4.5 + f, z0: zl, z1: 2 + zl, layer: 'shoes' },
+        { a0, a1, b0: 3.5 + f, b1: 4.5 + f, z0: zl, z1: 3 + zl, layer: 'shoes' },
       );
     }
   }
