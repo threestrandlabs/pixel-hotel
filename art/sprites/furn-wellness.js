@@ -223,13 +223,29 @@ export default function build(add) {
     k.box(0.2, 1.3, 0.8, 1.5, 22, 24, M.lavender, { edge: false });
   });
 
+  // Frosted glass wall section. The glass runs along v and spans the whole
+  // tile, so a row of partitions joins into one continuous see-through wall.
   item(add, 'spa_partition', [1, 1], 92, (k) => {
-    k.box(0.05, 0.42, 0.95, 0.58, 0, 84, M.brass, { front: (d) => {
-      d.rect(0.1, 0.9, 4, 80, M.teal[0]);
-      d.rect(0.12, 0.88, 6, 78, M.glass[1]);
-      for (let z = 14; z < 74; z += 16) d.rect(0.2, 0.25, z, z + 10, '#ffffff');
-    } });
-  });
+    const u = 0.5;
+    k.box(u - 0.06, 0, u + 0.06, 1, 0, 6, M.brass, { edge: false }); // floor rail
+    k.custom(u - 0.02, 0, u + 0.02, 1, 6, 80, ({ P, cv }) => {
+      // translucent aquamarine glass with a frosted band and soft sheen
+      const top = 80; const bottom = 6;
+      for (let z = bottom; z < top; z++) {
+        for (let i = 0; i < 64; i++) {
+          const v = i / 64;
+          const [x, y] = P(u, v, z);
+          const frosted = z > 30 && z < 58;
+          let c = frosted ? [196, 236, 232, 150] : [150, 214, 214, 95];
+          const d = (i + Math.round(z * 0.9)) % 46;
+          if (d < 2) c = [255, 255, 255, 170];
+          cv.set(Math.round(x), Math.round(y), c);
+        }
+      }
+    });
+    k.box(u - 0.05, 0, u + 0.05, 1, 80, 84, M.brass, { edge: false }); // top rail
+    k.box(u - 0.05, 0, u + 0.05, 0.05, 6, 80, M.brass, { edge: false }); // slim post
+  }, { selout: 0 });
 
   item(add, 'spa_door', [2, 1], 100, (k) => {
     for (const u of [0.05, 1.8]) k.box(u, 0.3, u + 0.15, 0.7, 0, 84, M.brass);

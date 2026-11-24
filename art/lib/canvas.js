@@ -133,10 +133,12 @@ export class PixelCanvas {
         }
       }
     }
+    if (k <= 0) return this;
     for (const [x, y] of edge) {
-      const [r, g, b] = this.get(x, y);
+      const [r, g, b, a] = this.get(x, y);
       const t = k;
-      this.set(x, y, [Math.round(r * (1 - t) + 26 * t), Math.round(g * (1 - t) + 16 * t), Math.round(b * (1 - t) + 36 * t), 255]);
+      // keep the pixel's own alpha so translucent glass stays translucent
+      this.set(x, y, [Math.round(r * (1 - t) + 26 * t), Math.round(g * (1 - t) + 16 * t), Math.round(b * (1 - t) + 36 * t), a]);
     }
     return this;
   }
