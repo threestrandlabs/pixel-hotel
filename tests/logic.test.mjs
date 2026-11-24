@@ -2810,7 +2810,7 @@ test('v0.8.5 audio: floor mapping resolves every floor to its matching v2 soundt
     for (const [key, track] of Object.entries(MUSIC_FILES)) {
       assert.ok(track.src.startsWith('audio/music/v2/'), `track ${key} (${track.src}) uses audio/music/v2/`);
       assert.ok(!key.startsWith('classic-'), `track key ${key} is not a classic track`);
-      assert.ok(fs.existsSync(path.resolve(__dirname, '..', track.src)), `track file ${track.src} exists on disk`);
+      assert.ok(fs.existsSync(path.resolve(__dirname, '..', 'public', track.src)), `track file ${track.src} exists on disk`);
     }
     assert.equal(PLAYLIST.filter((k) => k.startsWith('classic-')).length, 0);
   } finally {
@@ -2942,12 +2942,12 @@ test('v0.8.8 music: playlist strictly contains only audio/music/v2 tracks, zero 
     assert.ok(!def.label.toLowerCase().includes('classic'), `track ${key} label does not mention classic`);
     assert.ok(!key.startsWith('classic-'), `track key ${key} does not start with classic-`);
 
-    const fullPath = path.resolve(__dirname, '..', def.src);
+    const fullPath = path.resolve(__dirname, '..', 'public', def.src);
     assert.ok(fs.existsSync(fullPath), `track file ${def.src} exists on disk at ${fullPath}`);
   }
 
   // Confirm old tracks 01-*.mp3 .. 10-*.mp3 are not present on disk
-  const musicDir = path.resolve(__dirname, '..', 'audio/music');
+  const musicDir = path.resolve(__dirname, '..', 'public/audio/music');
   const filesInMusicDir = fs.readdirSync(musicDir);
   const oldFiles = filesInMusicDir.filter((f) => /^(0[1-9]|10)-.*\.mp3$/.test(f));
   assert.equal(oldFiles.length, 0, `no deleted 01-..10- mp3 files remain on disk (found: ${oldFiles.join(',')})`);

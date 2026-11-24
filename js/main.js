@@ -9,8 +9,9 @@ import { loadState, saveState, resetState, sanitizePlacedItemsForRoom } from './
 import {
   createNpcRuntime, tickNpc, findWanderTarget, directionBetween, respondToMessage, pickRandom,
 } from './npc.js';
+import { renderRoom, hitTestNpc, initRenderer } from './render/scene.js';
 import {
-  renderRoom, computeOrigin, screenToTile, tileToScreen, worldToScreen, hitTestNpc, getItemIconDataUrl,
+  computeOrigin, screenToTile, tileToScreen, worldToScreen, getItemIconDataUrl, drawElevatorTransition,
   DEFAULT_ZOOM, MIN_ZOOM, MAX_ZOOM, clampZoom, zoomAtPoint, centerCameraOnTile, deadzoneCameraTarget,
   renderSkylineToCanvas, getCachedIsoCityLayout, computeCityVehicles, drawCityVehicles,
   nearCityLayerTransform, warmUpRoomSprites, clearSpriteCache, warmupRoomCache,
@@ -47,9 +48,13 @@ const STEP_MS = 240;
 const DAY_CYCLE_MS = 120000;
 const HELP_SEEN_KEY = 'pixelHotel.helpSeen.v1';
 
+// #gameCanvas is now a transparent 2D overlay (weather, elevator transition)
+// that also receives all pointer input; the room itself is drawn by PixiJS on
+// a canvas inserted just beneath it.
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 ctx.imageSmoothingEnabled = false;
+await initRenderer(document.getElementById('gameArea'), canvas);
 
 // City backdrop bake scale. High Sprite Detail bakes at native 1:1 (crisp, integer CSS scale);
 // Low keeps the cheap 0.25 bake (phones, the 25.2 fps floor) but snaps every rect to whole bake
@@ -1854,7 +1859,7 @@ function frame(now) {
 
   updateBackground(now, room, ui.cssW, ui.cssH, ui.phase, ui.camera, qualityMode);
 
-  renderRoom(ctx, {
+  renderRoom({
     room,
     placedFurniture: placedFurnitureWithFootprint(roomRuntime),
     entities: buildEntities(now),
@@ -1871,6 +1876,10 @@ function frame(now) {
     lightsOn: roomRuntime.lightsOn !== false,
   });
 
+  const overlayDpr = Math.max(1, Math.min(2, ui.dpr || 1));
+  ctx.setTransform(overlayDpr, 0, 0, overlayDpr, 0, 0);
+  ctx.clearRect(0, 0, ui.cssW, ui.cssH);
+  if (ui.elevatorAnim) drawElevatorTransition(ctx, ui.cssW, ui.cssH, ui.elevatorAnim, now);
   if (room.openEdges && state.settings.weatherEffects !== false) {
     drawWeatherOverlay(ctx, ui.cssW, ui.cssH, weatherStateThrottled(now), now, 0.55);
   }
