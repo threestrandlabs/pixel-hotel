@@ -12,15 +12,19 @@ const { frames } = JSON.parse(fs.readFileSync(path.join(root, 'public/assets/atl
 const out = process.argv[2] || path.join(root, 'art/out/character-preview.png');
 
 const LAYERS = ['skin', 'bottom', 'shoes', 'top', 'hair', 'face'];
-const LOOKS = [
+// One row per hair style; columns = 4 facings x (idle, walk).
+const STYLES = ['classic', 'bob', 'long', 'ponytail', 'spiky', 'curls', 'bald'];
+const OUTFITS = [
   { skin: '#f0c49a', hair: '#5a3826', top: '#4da3ff', bottom: '#2c3e63', shoes: '#f4f4f4' },
   { skin: '#8d5a3b', hair: '#1c1418', top: '#e0507a', bottom: '#3a3040', shoes: '#2a2030' },
   { skin: '#ffd9a8', hair: '#e8c45a', top: '#4fae6a', bottom: '#c8b48a', shoes: '#7a4a2a' },
+  { skin: '#c98a62', hair: '#b83828', top: '#f2c94c', bottom: '#4a3a60', shoes: '#f4f4f4' },
 ];
-const POSES = ['idle0', 'walk0', 'walk2', 'sit0'];
-const S = 4;
+const LOOKS = STYLES.map((style, i) => ({ ...OUTFITS[i % OUTFITS.length], style }));
+const POSES = ['idle0', 'walk0'];
+const S = 3;
 const CELL_W = 40 * S;
-const CELL_H = 64 * S;
+const CELL_H = 60 * S;
 const W = CELL_W * POSES.length * 4;
 const H = CELL_H * LOOKS.length;
 const png = new PNG({ width: W, height: H });
@@ -38,7 +42,8 @@ LOOKS.forEach((look, row) => {
       const cx = (d * POSES.length + p) * CELL_W + CELL_W / 2;
       const cy = row * CELL_H + CELL_H - 4 * S;
       for (const layer of LAYERS) {
-        const f = frames[`char/${dir}/${pose}/${layer}`];
+        const name = layer === 'hair' ? `hair_${look.style}` : layer;
+        const f = frames[`char/${dir}/${pose}/${name}`];
         if (!f) continue;
         const tint = layer === 'face' ? [255, 255, 255] : hex(look[layer]).map((v) => Math.min(255, v * tintK));
         const ax = Math.round(f.anchor.x * f.frame.w);

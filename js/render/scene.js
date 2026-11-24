@@ -31,6 +31,15 @@ const glowNodes = new Map(); // instanceId -> glow sprite
 const NIGHT_TINT = 0x5b6bb0;
 
 const CHAR_LAYERS = ['skin', 'bottom', 'shoes', 'top', 'hair', 'face'];
+const HAIR_STYLE_IDS = new Set(['classic', 'bob', 'long', 'ponytail', 'spiky', 'curls', 'bald']);
+
+// Atlas frame name for one character layer; hair picks the look's style.
+function charFrame(facing, pose, layer, look) {
+  if (layer !== 'hair') return `char/${facing}/${pose}/${layer}`;
+  let style = look?.hairStyle === 'short' ? 'classic' : look?.hairStyle;
+  if (!HAIR_STYLE_IDS.has(style)) style = 'classic';
+  return `char/${facing}/${pose}/hair_${style}`; // bald has no frame -> hidden
+}
 const WATER_FRAMES = 8;
 
 // Floor art per room floor material.
@@ -328,7 +337,7 @@ function updateEntityNode(node, e, now) {
   };
   for (const name of CHAR_LAYERS) {
     const sp = node.parts[name];
-    const t = tex[`char/${facing}/${pose}/${name}`];
+    const t = tex[charFrame(facing, pose, name, look)];
     sp.visible = Boolean(t);
     if (!t) continue;
     if (sp.texture !== t) {
@@ -713,7 +722,7 @@ export function renderCharacter(look, dir = 'down', pose = {}, makeCanvas = null
   const parts = [];
   let x0 = Infinity; let y0 = Infinity; let x1 = -Infinity; let y1 = -Infinity;
   for (const name of CHAR_LAYERS) {
-    const t = tex[`char/${facing}/${poseName}/${name}`];
+    const t = tex[charFrame(facing, poseName, name, l)];
     if (!t?.source?.resource) continue;
     const { width: w, height: h } = t.frame;
     const ax = Math.round(t.defaultAnchor.x * w);

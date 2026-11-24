@@ -23,9 +23,14 @@ test('atlas: every catalogue item has a front and back sprite', () => {
 test('atlas: characters have every layer pose for all four facings', () => {
   for (const dir of ['down', 'right', 'up', 'left']) {
     for (const pose of ['idle0', 'walk0', 'walk1', 'walk2', 'walk3', 'sit0']) {
-      for (const layer of ['skin', 'hair', 'top', 'bottom', 'shoes']) {
+      for (const layer of ['skin', 'top', 'bottom', 'shoes']) {
         assert.ok(frames[`char/${dir}/${pose}/${layer}`], `char/${dir}/${pose}/${layer}`);
       }
+      // every wardrobe hair style except bald has its own hair layer
+      for (const style of ['classic', 'bob', 'long', 'ponytail', 'spiky', 'curls']) {
+        assert.ok(frames[`char/${dir}/${pose}/hair_${style}`], `char/${dir}/${pose}/hair_${style}`);
+      }
+      assert.ok(!frames[`char/${dir}/${pose}/hair_bald`], 'bald has no hair layer');
     }
   }
   // faces only show on the two facings toward the viewer
@@ -67,6 +72,14 @@ test('atlas: frame anchors are sane and frames do not overlap', () => {
       const overlap = a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
       assert.ok(!overlap, `${a.name} overlaps ${b.name}`);
     }
+  }
+});
+
+test('looks: every wardrobe hair style has art (or is bald)', async () => {
+  const { HAIR_STYLES } = await import('../js/avatar.js');
+  for (const h of HAIR_STYLES) {
+    if (h.id === 'bald') continue;
+    assert.ok(frames[`char/down/idle0/hair_${h.id}`], `missing hair art for ${h.id}`);
   }
 });
 

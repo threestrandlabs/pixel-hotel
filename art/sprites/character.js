@@ -129,13 +129,62 @@ function model(pose, step) {
   );
   const zh = zt + 16; // head base
   const head = { a0: 0, a1: 7, b0: -1, b1: 5, z0: zh, z1: zh + 12, layer: 'skin' };
-  boxes.push(
-    head,
-    { a0: -0.5, a1: 7.5, b0: -1.5, b1: 1.5, z0: zh + 3, z1: zh + 13, layer: 'hair' }, // back of head
-    { a0: -0.5, a1: 7.5, b0: -1.5, b1: 5.5, z0: zh + 12, z1: zh + 14, layer: 'hair' }, // top
-  );
-  return { boxes, head };
+  boxes.push(head);
+  return { boxes, head, zh };
 }
+
+// ---------- hair styles ----------
+// Head: a 0..7 (side to side), b -1..5 (back to face), z zh..zh+12.
+// Each style is a set of hair blocks around the head plus a fringe painted on
+// the face side: [da, dz, w, h] cells measured from the head's top-left.
+const box = (a0, a1, b0, b1, z0, z1) => ({ a0, a1, b0, b1, z0, z1, layer: 'hair' });
+
+export const HAIR_STYLES = {
+  classic: (z) => ({
+    boxes: [box(-0.5, 7.5, -1.5, 1.5, z + 3, z + 13), box(-0.5, 7.5, -1.5, 5.5, z + 12, z + 14)],
+    fringe: [[0, 0, 7, 3], [0, 3, 1, 2], [6, 3, 1, 3]],
+  }),
+  bob: (z) => ({
+    boxes: [
+      box(-0.5, 7.5, -1.5, 2, z + 1, z + 13), box(-0.5, 7.5, -1.5, 5.5, z + 12, z + 14),
+      box(-0.75, 0.25, -1.5, 4.5, z + 1, z + 12), box(6.75, 7.75, -1.5, 4.5, z + 1, z + 12),
+    ],
+    fringe: [[0, 0, 7, 4], [0, 4, 1, 4], [6, 4, 1, 4]],
+  }),
+  long: (z) => ({
+    boxes: [
+      box(0, 7, -1.75, -0.75, z - 16, z + 4), // falls down the back
+      box(-0.5, 7.5, -1.5, 1.5, z + 2, z + 13), box(-0.5, 7.5, -1.5, 5.5, z + 12, z + 14),
+      box(-0.75, 0.25, -1.5, 3.5, z - 2, z + 12), box(6.75, 7.75, -1.5, 3.5, z - 2, z + 12),
+    ],
+    fringe: [[0, 0, 7, 2], [0, 2, 4, 2], [0, 4, 1, 5], [6, 2, 1, 6]],
+  }),
+  ponytail: (z) => ({
+    boxes: [
+      box(-0.5, 7.5, -1.5, 1.5, z + 4, z + 13), box(-0.5, 7.5, -1.5, 5.5, z + 12, z + 14),
+      box(2.5, 4.5, -3.25, -1.5, z + 3, z + 11), // tail
+      box(3, 4, -3, -2, z - 5, z + 4), // tip hanging down
+    ],
+    fringe: [[0, 0, 7, 2], [0, 2, 1, 2], [6, 2, 1, 2]],
+  }),
+  spiky: (z) => ({
+    boxes: [
+      box(-0.5, 7.5, -1.5, 1.5, z + 4, z + 13), box(-0.5, 7.5, -1.5, 5.5, z + 12, z + 13),
+      ...[[0.25, -1], [2.75, -1.25], [5.25, -1], [1.5, 1.5], [4, 1.5], [0.25, 3.5], [2.75, 3.75], [5.25, 3.5]]
+        .map(([a, b], i) => box(a, a + 1.5, b, b + 1.5, z + 13, z + 16 + (i % 3))),
+    ],
+    fringe: [[0, 0, 7, 1], [0, 1, 1, 2], [2, 1, 1, 2], [4, 1, 1, 2], [6, 1, 1, 3]],
+  }),
+  curls: (z) => ({
+    boxes: [
+      box(-1, 8, -2, 2, z + 1, z + 12), box(-1, 8, -2, 6, z + 11, z + 15),
+      box(-1, 0, -2, 4.5, z + 2, z + 12), box(7, 8, -2, 4.5, z + 2, z + 12),
+      ...[[0, -1], [3, -1.5], [6, -1], [1.5, 2], [4.5, 2], [0, 4.5], [3, 4.5], [6, 4.5]]
+        .map(([a, b]) => box(a - 0.5, a + 1, b, b + 1.5, z + 15, z + 16.5)),
+    ],
+    fringe: [[0, 0, 7, 3], [1, 3, 1, 1], [3, 3, 1, 1], [5, 3, 1, 1], [0, 3, 1, 3], [6, 3, 1, 3]],
+  }),
+};
 
 // Painter's order: further boxes first (smaller u+v of the centre), then lower.
 function order(map, boxes) {
@@ -161,18 +210,20 @@ function outline(cv) {
   }
 }
 
-function render(facing, pose, step) {
+// style: a key of HAIR_STYLES, or null for the bald base figure.
+function render(facing, pose, step, style = null) {
   const map = FACING[facing];
   const cv = new BodyCanvas(CW, CH);
-  const { boxes, head } = model(pose, step);
-  for (const b of order(map, boxes)) drawBox(cv, map, b);
+  const { boxes, head, zh } = model(pose, step);
+  const hairStyle = style ? HAIR_STYLES[style](zh) : { boxes: [], fringe: [] };
+  for (const b of order(map, [...boxes, ...hairStyle.boxes])) drawBox(cv, map, b);
 
   // Fringe and face on the head's front.
   const hair = [G.base, ID.hair, 0, 255];
   const eye = [0, ID.face, 0, 255];
   const mouth = [1, ID.face, 0, 255];
   frontDetail(cv, map, head, [
-    [0, 0, 7, 3, hair], [0, 3, 1, 2, hair], [6, 3, 1, 3, hair],
+    ...hairStyle.fringe.map((f) => [...f, hair]),
     [1.5, 6, 1, 2, eye], [4.5, 6, 1, 2, eye], [2.5, 9, 2, 1, mouth],
   ], facing);
   outline(cv);
@@ -203,9 +254,16 @@ export default function build(add) {
   };
   for (const facing of Object.keys(FACING)) {
     for (const [pose, [kind, step]] of Object.entries(poses)) {
-      const layers = render(facing, kind, step);
+      // Body layers come from the bald base figure; each hair style is
+      // rendered over it on its own, and only its hair pixels are kept, so the
+      // parts hidden behind the head or body stay hidden.
+      const base = render(facing, kind, step, null);
       for (const name of CHARACTER_LAYERS) {
-        if (layers[name]) add(`char/${facing}/${pose}/${name}`, layers[name], [OX, OY]);
+        if (name !== 'hair' && base[name]) add(`char/${facing}/${pose}/${name}`, base[name], [OX, OY]);
+      }
+      for (const style of Object.keys(HAIR_STYLES)) {
+        const styled = render(facing, kind, step, style);
+        if (styled.hair) add(`char/${facing}/${pose}/hair_${style}`, styled.hair, [OX, OY]);
       }
     }
   }
