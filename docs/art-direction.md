@@ -10,7 +10,7 @@ has to change, change it here first.
 - **Scale:** 1 art pixel = 1 world pixel. The camera zooms in whole steps
   (1×–4×, default 2×) so pixels stay square.
 - **Walls:** 88 px tall above the floor line.
-- **Characters:** ~36 px tall (big head, chibi proportions), feet on the tile centre.
+- **Characters:** isometric block figures ~44 px tall, feet on the tile centre.
 - **Furniture:** one sprite per object and rotation, pivot at the footprint's
   north (top) corner on the floor. Rotations 1 and 3 are mirrors of 0 and 2;
   asymmetric items get all four.
@@ -29,10 +29,15 @@ has to change, change it here first.
   accents; berry and teal fabrics.
 
 ## Characters
-Layers are drawn in a grey ramp (`TINT` in the palette) and tinted at runtime
-with the wardrobe colour: skin, hair, top, bottom, shoes. Eyes and mouth are
-fixed colours. Two authored facings (front `down`, back `up`); `right` and
-`left` are their mirrors.
+Characters are built from isometric blocks (head cube, torso, arms, legs,
+shoes, hair caps) in `art/sprites/character.js` and projected exactly like the
+furniture, so they read as solid 3D figures in the room. One body unit is
+1/16 tile; a standing avatar is ~44 px tall. All four facings are rendered
+natively (never mirrored) so the lit side always matches the room light.
+Each block belongs to a tint layer (skin, hair, top, bottom, shoes) drawn in
+the grey `TINT` ramp and tinted at runtime with the wardrobe colour; eyes and
+mouth are fixed colours on the head's front face. Poses: idle, 4-frame walk
+(legs stride, arms swing), sit.
 
 ## Provenance
 All art is hand-authored for this project in `art/sprites/*.js` and built by

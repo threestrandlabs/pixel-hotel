@@ -17,11 +17,11 @@ const LOOKS = [
   { skin: '#8d5a3b', hair: '#1c1418', top: '#e0507a', bottom: '#3a3040', shoes: '#2a2030' },
   { skin: '#ffd9a8', hair: '#e8c45a', top: '#4fae6a', bottom: '#c8b48a', shoes: '#7a4a2a' },
 ];
-const POSES = ['idle0', 'walk0', 'walk1', 'walk2', 'walk3'];
-const S = 6;
-const CELL_W = 26 * S;
-const CELL_H = 48 * S;
-const W = CELL_W * POSES.length * 2;
+const POSES = ['idle0', 'walk0', 'walk2', 'sit0'];
+const S = 4;
+const CELL_W = 40 * S;
+const CELL_H = 64 * S;
+const W = CELL_W * POSES.length * 4;
 const H = CELL_H * LOOKS.length;
 const png = new PNG({ width: W, height: H });
 for (let i = 0; i < W * H; i++) {
@@ -33,7 +33,7 @@ const hex = (h) => { const n = parseInt(h.slice(1), 16); return [(n >> 16) & 255
 const tintK = 255 / 0xde;
 
 LOOKS.forEach((look, row) => {
-  ['down', 'up'].forEach((dir, d) => {
+  ['down', 'right', 'up', 'left'].forEach((dir, d) => {
     POSES.forEach((pose, p) => {
       const cx = (d * POSES.length + p) * CELL_W + CELL_W / 2;
       const cy = row * CELL_H + CELL_H - 4 * S;

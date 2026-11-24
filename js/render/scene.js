@@ -250,7 +250,7 @@ function entityColors(e) {
   };
 }
 
-const ENTITY_H = 36;
+const ENTITY_H = 46;
 
 // Grey-ramp layers are authored with 0xde as the base tone; scale the tint so
 // the base lands exactly on the wardrobe colour.
@@ -276,10 +276,11 @@ function makeEntityNode() {
 
 function updateEntityNode(node, e, now) {
   const look = e.look || LOOKS[e.spriteKey] || LOOKS.player || {};
-  const dir = e.dir || 'down';
-  const facing = dir === 'up' || dir === 'left' ? 'up' : 'down';
-  const mirrored = dir === 'right' || dir === 'left';
-  const pose = e.walking ? `walk${Math.floor(now / 140) % 4}` : 'idle0';
+  // Block characters are rendered natively for all four facings.
+  const facing = ['down', 'right', 'up', 'left'].includes(e.dir) ? e.dir : 'down';
+  let pose = 'idle0';
+  if (e.walking) pose = `walk${Math.floor(now / 140) % 4}`;
+  else if (e.sitting) pose = 'sit0';
   const tints = {
     skin: tintFor(look.skin, 0xf0c49a),
     hair: tintFor(look.hair, 0x5a3826),
@@ -298,8 +299,7 @@ function updateEntityNode(node, e, now) {
       sp.anchor.copyFrom(t.defaultAnchor);
     }
     sp.tint = tints[name];
-    sp.scale.x = mirrored ? -1 : 1;
-    sp.y = e.sitting ? -7 : 0;
+    sp.y = e.sitting ? -9 : 0; // up onto the seat cushion
   }
 }
 
