@@ -141,7 +141,7 @@ export function isDiningSeat(placedOrRoom, placedSeat, slotTile = null) {
 export const FRONT_OPERATED = new Set([
   'arcade_snake_1', 'arcade_snake_2', 'arcade_breakout_1', 'arcade_breakout_2', 'arcade_drop_1', 'arcade_drop_2',
   'arcade_leaderboard', 'mini_arcade', 'jukebox', 'karaoke_machine', 'capsule_dispenser', 'water_cooler',
-  'computer_desk', 'kitchen_range', 'wardrobe',
+  'computer_desk', 'kitchen_range', 'wardrobe', 'claw_machine', 'prize_counter', 'racing_cabinet', 'token_machine',
 ]);
 
 export function findApproachTile(room, placedItem, isBlocked, fromPos, occupants = [], reservations = []) {

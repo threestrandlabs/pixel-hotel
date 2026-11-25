@@ -26,6 +26,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   Account panel (Share → Add to Home Screen hint on iPhone/iPad). No
   service worker, so the game always loads the latest version.
 
+### Added — garden, arcade and restaurant fit-out
+- Sky Garden: stone path from both doors, hedged koi corner with lanterns
+  and a bird bath, raised herb and veg beds, a shaded lounge under the
+  pergola and a sun deck facing the view.
+- Arcade: claw machines, a racing bank island, air hockey, a dance
+  machine, a prize counter and token machine by the door, so the floor
+  walks as a loop instead of one wall of cabinets.
+- Restaurant: waiting area at the host stand, a six-stool bar with a
+  bartender lane, full booth pairs, two-tops and four-tops around the
+  round tables, and planters screening the kitchen with service gaps.
+- New pieces: hedge, herb & veg bed, stepping stones, stone lantern, bird
+  bath, planter divider, claw machine, prize counter, air hockey, dance
+  machine, racing cabinet, token machine.
+
 ### Added — the Azure salon
 - Styling stations (wall mirror, chair, trolley), wash basins, hood
   dryers, product display, manicure station and a waiting lounge.

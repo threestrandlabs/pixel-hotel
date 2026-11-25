@@ -2557,3 +2557,26 @@ test('arcade cabinets are played from the front, never from behind', async () =>
   assert.deepEqual(a.tile, { x: 6, y: 4 }, 'the front tile');
   assert.equal(a.dir, 'up', 'facing the screen');
 });
+
+test('v0.14 fit-out: garden, arcade and restaurant have no overlaps and everything is reachable', async () => {
+  const { findApproachTile, hasDoorArrivalRoute, isFurnitureWalkable } = await import('../js/inventory.js');
+  for (const roomId of ['garden', 'arcade', 'restaurant']) {
+    const room = ROOMS[roomId];
+    const placed = createDefaultState().rooms[roomId].placed;
+    const kept = sanitizePlacedItemsForRoom(room, placed, []);
+    assert.equal(kept.length, placed.length, `${roomId}: nothing dropped`);
+    assert.ok(kept.every((k) => { const o = placed.find((p) => p.instanceId === k.instanceId); return o.x === k.x && o.y === k.y; }), `${roomId}: nothing overlaps`);
+    assert.ok(hasDoorArrivalRoute(room, placed), `${roomId}: door route clear`);
+    const blocked = new Set();
+    for (const p of placed) {
+      const it = getCatalogueItem(p.itemId);
+      if (it && !isFurnitureWalkable(it)) for (const c of footprintCells(p.x, p.y, it.footprint, p.rot || 0)) blocked.add(`${c.x},${c.y}`);
+    }
+    const isBlocked = (x, y) => x < 0 || y < 0 || x >= room.width || y >= room.height || (room.grid[y][x] !== TILE.FLOOR && room.grid[y][x] !== TILE.DOOR) || blocked.has(`${x},${y}`);
+    for (const p of placed) {
+      const it = getCatalogueItem(p.itemId);
+      if (!it?.interaction || it.walkable || it.flat) continue;
+      assert.ok(findApproachTile({ ...room, placed }, p, isBlocked, room.spawn, [], []), `${roomId}: ${p.itemId} at ${p.x},${p.y} reachable`);
+    }
+  }
+});
