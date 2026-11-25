@@ -3000,6 +3000,8 @@ function init() {
     enterVisitScene: (displayName, roomData) => enterVisitScene(displayName, roomData),
     exitVisitScene: () => exitVisitScene(),
     getSaveState: () => state,
+    saveGame: () => saveState(window.localStorage, state),
+    onGumballsChanged: () => onGumballCollectionChanged(),
     showToast: (msg) => showToast(msg),
     playMusic: (trackId) => { audio.setTrack(trackId, true); audio.play(); },
     stopMusic: () => audio.stopLoop(),

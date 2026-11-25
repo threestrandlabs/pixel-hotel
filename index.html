@@ -201,10 +201,12 @@
       <span id="multiplayerPanelTitle">🌐 Multiplayer</span>
       <button class="panel-close" data-close="multiplayerPanel" aria-label="Close">✕</button>
     </div>
-    <div class="panel-tabs">
+    <div class="panel-tabs mp-tabs">
       <button class="tab-btn active" data-tab="mpConnectTab">Connect</button>
-      <button class="tab-btn" data-tab="mpVisitTab">Visit Friend</button>
-      <button class="tab-btn" data-tab="mpRoomTab">Party Room</button>
+      <button class="tab-btn" data-tab="mpVisitTab">Friends</button>
+      <button class="tab-btn" data-tab="mpShowcaseTab">Showcase</button>
+      <button class="tab-btn" data-tab="mpTradesTab">Trades <span id="mpTradesBadge" class="mp-badge hidden"></span></button>
+      <button class="tab-btn" data-tab="mpRoomTab">Party</button>
     </div>
     <div id="mpConnectTab" class="tab-content">
       <p class="mp-hint">Opt-in only: nothing here touches the network until you press Connect. Single-player play and saves are never affected.</p>
@@ -224,8 +226,37 @@
     </div>
     <div id="mpVisitTab" class="tab-content hidden">
       <input id="mpVisitCodeInput" type="text" maxlength="6" placeholder="Friend code (e.g. AB12CD)" />
+      <button id="btnMpAddFriend" class="pixel-btn">Add friend</button>
       <button id="btnMpVisit" class="pixel-btn">Visit</button>
+      <div class="mp-section-head">
+        <span>Your friends</span>
+        <button id="btnMpRefreshFriends" class="pixel-btn mp-mini" aria-label="Refresh friends">↻</button>
+      </div>
+      <ul id="mpFriendList" class="mp-list" aria-live="polite"></ul>
+      <p class="mp-hint">Friends who add you back can trade gumballs with you.</p>
       <div id="mpGuestbookWrap"></div>
+    </div>
+    <div id="mpShowcaseTab" class="tab-content hidden">
+      <label class="mp-check"><input id="mpShowcaseOptIn" type="checkbox" /> List my room in the showcase</label>
+      <p class="mp-hint">Shows your display name and shared room to every player. Off by default.</p>
+      <div class="mp-seg" role="group" aria-label="Sort rooms">
+        <button id="btnMpShowcaseTop" class="pixel-btn mp-mini active" aria-pressed="true">Top</button>
+        <button id="btnMpShowcaseNew" class="pixel-btn mp-mini" aria-pressed="false">New</button>
+      </div>
+      <ul id="mpShowcaseList" class="mp-list" aria-live="polite"></ul>
+    </div>
+    <div id="mpTradesTab" class="tab-content hidden">
+      <div class="mp-trade-form">
+        <label>Friend <select id="mpTradeFriend"></select></label>
+        <label>You give <select id="mpTradeGive"></select></label>
+        <label>You get <select id="mpTradeWant"></select></label>
+        <button id="btnMpSendTrade" class="pixel-btn">Send offer</button>
+      </div>
+      <p class="mp-hint">Your gumball is set aside while the offer is open and comes back if it's declined or cancelled.</p>
+      <div class="mp-section-head"><span>Offers for you</span></div>
+      <ul id="mpTradesIn" class="mp-list"></ul>
+      <div class="mp-section-head"><span>Your offers</span></div>
+      <ul id="mpTradesOut" class="mp-list"></ul>
     </div>
     <div id="mpRoomTab" class="tab-content hidden">
       <div id="mpRoomIdleRow">

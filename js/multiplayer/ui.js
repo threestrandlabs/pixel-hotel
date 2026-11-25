@@ -31,6 +31,7 @@ import {
 import { validateAvatarLook } from '../avatar.js';
 import { EMOTE_ICONS } from '../emotes.js';
 import { getMutedUserIds, setUserMuted, getLastDisplayName, setLastDisplayName } from './localPrefs.js';
+import { initSocialUI, onSocialConnected, onSocialDisconnected } from './socialUi.js';
 import {
   initMinigamesUI, setMultiplayerContext, handleMinigameBroadcast, tickMinigameUI, getMinigameEntities,
 } from '../minigames/ui.js';
@@ -92,6 +93,7 @@ async function handleConnectClick() {
     setStatus(`Connected as ${profile.display_name}.`);
     const ownRoom = state.host?.getMyRoomPlaced?.();
     if (ownRoom) publishOwnRoomSnapshot(ownRoom);
+    onSocialConnected();
   } catch (err) {
     setStatus(`Could not connect: ${err.message || err}`);
   }
@@ -116,6 +118,7 @@ async function handleDisconnectClick() {
     try { await signOutMultiplayer(state.client); } catch (e) { /* ignore */ }
   }
   state.profile = null;
+  onSocialDisconnected();
   renderConnectTab();
   setStatus('Disconnected from multiplayer.');
 }
@@ -500,6 +503,16 @@ export function initMultiplayerUI(host) {
   });
   renderConnectTab();
   renderRoomTab();
+  initSocialUI({
+    getClient: () => state.client,
+    getProfile: () => state.profile,
+    getSaveState: () => host.getSaveState?.(),
+    saveGame: () => host.saveGame?.(),
+    onGumballsChanged: () => host.onGumballsChanged?.(),
+    visitOwner: (ownerId, displayName) => enterVisit(ownerId, displayName),
+    setStatus: (msg) => setStatus(msg),
+    showToast: (msg) => host.showToast?.(msg),
+  });
   byId('btnMpConnect')?.addEventListener('click', handleConnectClick);
   byId('btnMpRename')?.addEventListener('click', handleRenameClick);
   byId('btnMpDisconnect')?.addEventListener('click', handleDisconnectClick);

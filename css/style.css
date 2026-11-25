@@ -2287,3 +2287,25 @@ body.has-touch .sky-viewer-hint { display: none; }
 }
 .event-banner .quest-title { font-size: 13px; }
 .install-section.hidden { display: none; }
+
+/* Multiplayer: friends, showcase, trades (v0.14) */
+.mp-tabs .tab-btn { font-size: 12px; padding: 7px 2px; }
+.mp-badge { display: inline-block; min-width: 16px; padding: 0 4px; border-radius: 8px; background: #ff5a6a; color: #fff; font-size: 10px; line-height: 16px; font-weight: 800; }
+.mp-badge.hidden { display: none; }
+.mp-section-head { display: flex; align-items: center; justify-content: space-between; margin: 10px 0 4px; font-weight: 700; color: #ffd27a; font-size: 13px; }
+.mp-mini { padding: 2px 8px; font-size: 12px; }
+.mp-list { list-style: none; margin: 0 0 6px; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.mp-list li { display: flex; align-items: center; gap: 6px; background: #352a5c; border: 2px solid #0e0a1d; border-radius: 6px; padding: 5px 6px; font-size: 12.5px; }
+.mp-list li .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.mp-list li .sub { display: block; color: var(--text-muted); font-size: 11px; }
+.mp-list .empty { background: none; border: none; color: var(--text-muted); padding: 2px 0; }
+.mp-dot { width: 9px; height: 9px; border-radius: 50%; background: #6c6680; flex: none; }
+.mp-dot.on { background: #4fd67f; box-shadow: 0 0 0 2px rgba(79, 214, 127, 0.25); }
+.mp-check { display: flex; gap: 6px; align-items: center; font-size: 13px; margin: 4px 0; }
+.mp-seg { display: flex; gap: 4px; margin: 6px 0; }
+.mp-seg .active { background: #6a4fb0; }
+.mp-like.liked { background: #a23a5a; color: #fff; }
+.mp-trade-form { display: grid; gap: 6px; }
+.mp-trade-form label { display: grid; grid-template-columns: 70px 1fr; align-items: center; gap: 6px; font-size: 12.5px; }
+.mp-trade-form select { font-family: inherit; background: #1b1430; color: #f4eeff; border: 2px solid #0e0a1d; border-radius: 4px; padding: 4px 6px; font-size: 13px; min-width: 0; }
+.mp-gum { display: inline-block; width: 10px; height: 10px; border-radius: 50%; vertical-align: -1px; margin-right: 3px; border: 1px solid rgba(0, 0, 0, 0.4); }
