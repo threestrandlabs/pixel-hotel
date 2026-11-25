@@ -1,8 +1,10 @@
-// Avatar Creator Modal Controller for Pixel Hotel v0.9.0.
-// Live voxel preview, rotating view, responsive tabs, shop unlocks, randomise & save.
+// Avatar Creator Modal Controller for Pixel Hotel.
+// Live block-character preview, rotating view, responsive tabs, shop unlocks,
+// randomise & save.
 
 import {
-  SKIN_TONES, EYE_PRESETS, MOUTH_PRESETS,
+  SKIN_TONES, MOUTH_PRESETS,
+  EYE_SHAPES, EYE_COLORS, BROW_STYLES, EAR_STYLES, SHOE_STYLES,
   HAIR_STYLES, HAIR_COLORS,
   TOP_STYLES, TOP_COLORS,
   BOTTOM_STYLES, BOTTOM_COLORS,
@@ -10,7 +12,7 @@ import {
   ACCESSORY_STYLES, ACCESSORY_COLORS,
   DEFAULT_PLAYER_LOOK, validateAvatarLook, randomizeLook,
 } from './avatar.js';
-import { renderCharacter } from './voxel.js';
+import { renderCharacter } from './render/scene.js';
 
 let host = null;
 let avatarDraft = null;
@@ -19,6 +21,13 @@ let activeCategoryTab = 'skin';
 
 const PREVIEW_DIRS = ['down', 'left', 'up', 'right'];
 const DIR_LABELS = { down: 'Front', left: 'Left', up: 'Back', right: 'Right' };
+
+function darkenHex(hex, k) {
+  const n = parseInt(String(hex).replace('#', ''), 16);
+  if (!Number.isFinite(n)) return '#4a2f20';
+  const ch = (s) => Math.round(((n >> s) & 255) * (1 - k));
+  return `#${[ch(16), ch(8), ch(0)].map((v) => v.toString(16).padStart(2, '0')).join('')}`;
+}
 
 function makeCanvas(w, h) {
   const c = document.createElement('canvas');
@@ -99,6 +108,28 @@ function renderTabContent() {
     return { group, grid };
   };
 
+  // A group of buttons where exactly one option is selected.
+  const choices = (title, items, { isSel, pick, label = (it) => it.name, swatch = null }) => {
+    const { group, grid } = createGroup(title);
+    for (const it of items) {
+      const btn = document.createElement('button');
+      btn.className = `pixel-btn avatar-choice-btn ${isSel(it) ? 'selected' : ''}`;
+      if (swatch) btn.innerHTML = `<span class="avatar-swatch-circle" style="background:${swatch(it)};"></span><span>${label(it)}</span>`;
+      else btn.textContent = label(it);
+      btn.addEventListener('click', () => {
+        pick(it);
+        renderTabContent();
+        updatePreviewCanvas();
+      });
+      grid.appendChild(btn);
+    }
+    container.appendChild(group);
+  };
+  const toggle = (title, key, onName = 'On', offName = 'Off') => choices(title, [{ name: onName, v: true }, { name: offName, v: false }], {
+    isSel: (it) => Boolean(avatarDraft[key]) === it.v,
+    pick: (it) => { avatarDraft[key] = it.v; },
+  });
+
   switch (activeCategoryTab) {
     case 'skin': {
       const { group, grid } = createGroup('Skin Tone');
@@ -118,35 +149,33 @@ function renderTabContent() {
     }
 
     case 'face': {
-      const { group: eyeGroup, grid: eyeGrid } = createGroup('Eye Preset');
-      for (const p of EYE_PRESETS) {
-        const isSel = avatarDraft.eye === p.eyeColor && Boolean(avatarDraft.lashes) === Boolean(p.lashes);
-        const btn = document.createElement('button');
-        btn.className = `pixel-btn avatar-choice-btn ${isSel ? 'selected' : ''}`;
-        btn.innerHTML = `<span class="avatar-swatch-circle" style="background:${p.eyeColor};"></span><span>${p.name}</span>`;
-        btn.addEventListener('click', () => {
-          avatarDraft.eye = p.eyeColor;
-          avatarDraft.lashes = p.lashes;
-          renderTabContent();
-          updatePreviewCanvas();
-        });
-        eyeGrid.appendChild(btn);
-      }
-      container.appendChild(eyeGroup);
-
-      const { group: mouthGroup, grid: mouthGrid } = createGroup('Mouth Expression');
-      for (const m of MOUTH_PRESETS) {
-        const btn = document.createElement('button');
-        btn.className = `pixel-btn avatar-choice-btn ${avatarDraft.mouth === m.mouth ? 'selected' : ''}`;
-        btn.textContent = m.name;
-        btn.addEventListener('click', () => {
-          avatarDraft.mouth = m.mouth;
-          renderTabContent();
-          updatePreviewCanvas();
-        });
-        mouthGrid.appendChild(btn);
-      }
-      container.appendChild(mouthGroup);
+      choices('Eye Shape', EYE_SHAPES, {
+        isSel: (it) => (avatarDraft.eyeShape || 'round') === it.id,
+        pick: (it) => { avatarDraft.eyeShape = it.id; },
+      });
+      choices('Eye Colour', EYE_COLORS, {
+        isSel: (it) => (avatarDraft.eye || '').toLowerCase() === it.color.toLowerCase(),
+        pick: (it) => { avatarDraft.eye = it.color; },
+        swatch: (it) => it.color,
+      });
+      toggle('Lashes', 'lashes');
+      choices('Brows', BROW_STYLES, {
+        isSel: (it) => (avatarDraft.browStyle || 'soft') === it.id,
+        pick: (it) => { avatarDraft.browStyle = it.id; },
+      });
+      choices('Mouth Expression', MOUTH_PRESETS, {
+        isSel: (it) => avatarDraft.mouth === it.mouth,
+        pick: (it) => { avatarDraft.mouth = it.mouth; },
+      });
+      choices('Ears', EAR_STYLES, {
+        isSel: (it) => (avatarDraft.ears || 'normal') === it.id,
+        pick: (it) => { avatarDraft.ears = it.id; },
+      });
+      toggle('Freckles', 'freckles');
+      choices('Blush', [{ name: 'On', v: true }, { name: 'Off', v: false }], {
+        isSel: (it) => (avatarDraft.blush !== false) === it.v,
+        pick: (it) => { avatarDraft.blush = it.v; },
+      });
       break;
     }
 
@@ -177,6 +206,7 @@ function renderTabContent() {
         btn.innerHTML = `<span class="avatar-swatch-circle" style="background:${c.color};"></span><span>${c.name}</span>`;
         btn.addEventListener('click', () => {
           avatarDraft.hair = c.color;
+          avatarDraft.brow = darkenHex(c.color, 0.35);
           renderTabContent();
           updatePreviewCanvas();
         });
@@ -226,7 +256,7 @@ function renderTabContent() {
       const { group: styleGroup, grid: styleGrid } = createGroup('Bottom Style');
       for (const b of BOTTOM_STYLES) {
         const unlocked = isItemUnlocked('bottom', b.id, b.cost);
-        const isSel = Boolean(avatarDraft.skirt) === Boolean(b.skirt);
+        const isSel = (avatarDraft.bottom || (avatarDraft.skirt ? 'skirt' : 'pants')) === b.id;
         const btn = document.createElement('button');
         btn.className = `pixel-btn avatar-choice-btn ${isSel ? 'selected' : ''} ${!unlocked ? 'locked' : ''}`;
         btn.textContent = !unlocked ? `${b.name} (💰${b.cost})` : b.name;
@@ -234,7 +264,8 @@ function renderTabContent() {
           if (!unlocked) {
             if (!tryUnlockItem('bottom', b.id, b.name, b.cost)) return;
           }
-          avatarDraft.skirt = b.skirt;
+          avatarDraft.bottom = b.id;
+          avatarDraft.skirt = b.id === 'skirt';
           renderTabContent();
           updatePreviewCanvas();
         });
@@ -259,7 +290,11 @@ function renderTabContent() {
     }
 
     case 'shoes': {
-      const { group: colGroup, grid: colGrid } = createGroup('Shoes & Colour');
+      choices('Shoe Style', SHOE_STYLES, {
+        isSel: (it) => (avatarDraft.shoeStyle || 'sneakers') === it.id,
+        pick: (it) => { avatarDraft.shoeStyle = it.id; },
+      });
+      const { group: colGroup, grid: colGrid } = createGroup('Shoe Colour');
       for (const s of SHOE_COLORS) {
         const unlocked = isItemUnlocked('shoe', s.id, s.cost);
         const btn = document.createElement('button');

@@ -87,7 +87,10 @@ test('getSingaporeParts extracts a 0-23 hour and zero-padded date parts', () => 
 // ---------- v0.12.0 Sky viewing platforms: catalogue + viewer interaction ----------
 
 import { getCatalogueItem, SEED_FURNITURE } from '../js/data.js';
-import { FURNITURE_BUILDERS } from '../js/sprites.js';
+import { fileURLToPath } from 'node:url';
+import { loadAtlasFrames } from '../scripts/atlas-pages.mjs';
+
+const ATLAS = loadAtlasFrames(fileURLToPath(new URL('..', import.meta.url)));
 import { CITY_DEFS, renderCityCanvas, drawWeatherOverlay } from '../js/viewer.js';
 
 const SKY_VIEWER_IDS = ['sky_viewer_nyc', 'sky_viewer_singapore', 'sky_viewer_tokyo', 'sky_viewer_paris'];
@@ -99,7 +102,7 @@ test('catalogue: all 4 sky viewers are walk-up-and-use, mapped to a valid city a
     assert.equal(item.interaction, 'city_view');
     assert.ok(CITY_DEFS[item.city], `item ${id} references unknown city ${item.city}`);
     assert.equal(item.spriteKey, 'skyViewer');
-    assert.equal(typeof FURNITURE_BUILDERS[item.spriteKey], 'function');
+    assert.ok(ATLAS.frames[`furn/${id}/0`], `atlas has a sprite for ${id}`);
     assert.equal(item.seat, false);
   }
 });

@@ -24,6 +24,40 @@ export const MOUTH_PRESETS = [
   { id: 'frown', name: 'Moody', mouth: 'frown' },
   { id: 'open', name: 'Joyful', mouth: 'open' },
   { id: 'lips', name: 'Glamour', mouth: 'lips' },
+  { id: 'grin', name: 'Big Grin', mouth: 'grin' },
+  { id: 'cat', name: 'Cat Smile', mouth: 'cat' },
+];
+
+// v0.14 catalogue: finer face controls. New options are free.
+export const EYE_SHAPES = [
+  { id: 'round', name: 'Round' },
+  { id: 'sparkly', name: 'Sparkly' },
+  { id: 'sleepy', name: 'Sleepy' },
+  { id: 'sharp', name: 'Sharp' },
+];
+
+export const EYE_COLORS = [
+  { id: 'charcoal', name: 'Charcoal', color: '#2b2230' },
+  { id: 'ocean', name: 'Ocean Blue', color: '#2e5b88' },
+  { id: 'emerald', name: 'Emerald', color: '#3b7a57' },
+  { id: 'amber', name: 'Amber Glow', color: '#b06822' },
+  { id: 'hazel', name: 'Hazel', color: '#7a5a2a' },
+  { id: 'violet', name: 'Violet', color: '#6a3fa0' },
+  { id: 'grey', name: 'Storm Grey', color: '#5a6878' },
+  { id: 'ruby', name: 'Ruby', color: '#a02a3a' },
+];
+
+export const BROW_STYLES = [
+  { id: 'soft', name: 'Soft' },
+  { id: 'thick', name: 'Thick' },
+  { id: 'arched', name: 'Arched' },
+  { id: 'thin', name: 'Thin' },
+];
+
+export const EAR_STYLES = [
+  { id: 'normal', name: 'Classic' },
+  { id: 'elf', name: 'Pointy Elf' },
+  { id: 'hidden', name: 'Hidden' },
 ];
 
 // Reuses hairstyles from salon chair styling
@@ -56,6 +90,9 @@ export const TOP_STYLES = [
   { id: 'bellhop', name: 'Hotel Jacket', outfit: 'bellhop', cost: 35 },
   { id: 'labcoat', name: 'Smart Coat', outfit: 'labcoat', cost: 25 },
   { id: 'dress', name: 'Summer Dress', outfit: 'dress', cost: 30 },
+  { id: 'tank', name: 'Tank Top', outfit: 'tank', cost: 0 },
+  { id: 'sweater', name: 'Striped Sweater', outfit: 'sweater', cost: 0 },
+  { id: 'suit', name: 'Sharp Suit', outfit: 'suit', cost: 0 },
 ];
 
 export const TOP_COLORS = [
@@ -72,6 +109,12 @@ export const TOP_COLORS = [
 export const BOTTOM_STYLES = [
   { id: 'pants', name: 'Trousers', skirt: false, cost: 0 },
   { id: 'skirt', name: 'Tailored Skirt', skirt: true, cost: 20 },
+  { id: 'shorts', name: 'Shorts', skirt: false, cost: 0 },
+];
+
+export const SHOE_STYLES = [
+  { id: 'sneakers', name: 'Sneakers' },
+  { id: 'boots', name: 'Boots' },
 ];
 
 export const BOTTOM_COLORS = [
@@ -97,6 +140,10 @@ export const ACCESSORY_STYLES = [
   { id: 'glasses', name: 'Glasses', cost: 20 },
   { id: 'cap', name: 'Baseball Cap', cost: 25 },
   { id: 'headphones', name: 'Headphones', cost: 30 },
+  { id: 'sunglasses', name: 'Sunglasses', cost: 0 },
+  { id: 'beanie', name: 'Beanie', cost: 0 },
+  { id: 'bow', name: 'Hair Bow', cost: 0 },
+  { id: 'earrings', name: 'Earrings', cost: 0 },
 ];
 
 export const ACCESSORY_COLORS = [
@@ -116,11 +163,18 @@ export const DEFAULT_PLAYER_LOOK = {
   mouth: 'smile',
   brow: '#4a2f20',
   lashes: false,
+  eyeShape: 'round',
+  browStyle: 'soft',
+  ears: 'normal',
+  freckles: false,
+  blush: true,
   shirt: '#4da3ff',
   outfit: 'tee',
   pants: '#2c3e63',
   skirt: false,
+  bottom: 'pants',
   shoe: '#f4f4f4',
+  shoeStyle: 'sneakers',
   accessory: 'none',
   accessoryColor: '#2a2030',
 };
@@ -132,9 +186,14 @@ export function isValidHexColor(c) {
 }
 
 const VALID_HAIR_STYLES = new Set(['classic', 'short', 'bob', 'ponytail', 'spiky', 'curls', 'long', 'bald']);
-const VALID_MOUTHS = new Set(['smile', 'frown', 'open', 'lips']);
-const VALID_OUTFITS = new Set(['tee', 'cardigan', 'hoodie', 'bellhop', 'labcoat', 'dress']);
-const VALID_ACCESSORIES = new Set(['none', 'glasses', 'cap', 'headphones']);
+const VALID_MOUTHS = new Set(MOUTH_PRESETS.map((m) => m.mouth));
+const VALID_OUTFITS = new Set(TOP_STYLES.map((t) => t.outfit));
+const VALID_ACCESSORIES = new Set(ACCESSORY_STYLES.map((a) => a.id));
+const VALID_EYE_SHAPES = new Set(EYE_SHAPES.map((e) => e.id));
+const VALID_BROWS = new Set(BROW_STYLES.map((b) => b.id));
+const VALID_EARS = new Set(EAR_STYLES.map((e) => e.id));
+const VALID_BOTTOMS = new Set(BOTTOM_STYLES.map((b) => b.id));
+const VALID_SHOE_STYLES = new Set(SHOE_STYLES.map((s) => s.id));
 
 /**
  * Validates and sanitizes an avatar look object received from peers or storage.
@@ -157,8 +216,16 @@ export function validateAvatarLook(raw) {
   const shirt = isValidHexColor(raw.shirt) ? raw.shirt : DEFAULT_PLAYER_LOOK.shirt;
   const outfit = VALID_OUTFITS.has(raw.outfit) ? raw.outfit : DEFAULT_PLAYER_LOOK.outfit;
   const pants = isValidHexColor(raw.pants) ? raw.pants : DEFAULT_PLAYER_LOOK.pants;
-  const skirt = Boolean(raw.skirt);
+  // bottom style; older saves only had the skirt flag
+  const bottom = VALID_BOTTOMS.has(raw.bottom) ? raw.bottom : (raw.skirt ? 'skirt' : 'pants');
+  const skirt = bottom === 'skirt';
   const shoe = isValidHexColor(raw.shoe) ? raw.shoe : DEFAULT_PLAYER_LOOK.shoe;
+  const shoeStyle = VALID_SHOE_STYLES.has(raw.shoeStyle) ? raw.shoeStyle : DEFAULT_PLAYER_LOOK.shoeStyle;
+  const eyeShape = VALID_EYE_SHAPES.has(raw.eyeShape) ? raw.eyeShape : DEFAULT_PLAYER_LOOK.eyeShape;
+  const browStyle = VALID_BROWS.has(raw.browStyle) ? raw.browStyle : DEFAULT_PLAYER_LOOK.browStyle;
+  const ears = VALID_EARS.has(raw.ears) ? raw.ears : DEFAULT_PLAYER_LOOK.ears;
+  const freckles = Boolean(raw.freckles);
+  const blush = raw.blush === undefined ? DEFAULT_PLAYER_LOOK.blush : Boolean(raw.blush);
   const accessory = VALID_ACCESSORIES.has(raw.accessory)
     ? raw.accessory
     : (raw.glasses ? 'glasses' : 'none');
@@ -174,11 +241,18 @@ export function validateAvatarLook(raw) {
     mouth,
     brow,
     lashes,
+    eyeShape,
+    browStyle,
+    ears,
+    freckles,
+    blush,
     shirt,
     outfit,
     pants,
     skirt,
+    bottom,
     shoe,
+    shoeStyle,
     accessory,
     accessoryColor,
   };
@@ -216,15 +290,22 @@ export function randomizeLook(unlocked = []) {
     skin,
     hair,
     hairStyle,
-    eye: eyePreset.eyeColor,
+    eye: pick(EYE_COLORS).color,
     mouth: mouthPreset.mouth,
     brow: '#4a2f20',
-    lashes: eyePreset.lashes,
+    lashes: Math.random() < 0.4 || eyePreset.lashes,
+    eyeShape: pick(EYE_SHAPES).id,
+    browStyle: pick(BROW_STYLES).id,
+    ears: pick(EAR_STYLES).id,
+    freckles: Math.random() < 0.25,
+    blush: Math.random() < 0.7,
     shirt,
     outfit: topDef.outfit,
     pants,
-    skirt: bottomDef.skirt,
+    skirt: bottomDef.id === 'skirt',
+    bottom: bottomDef.id,
     shoe,
+    shoeStyle: pick(SHOE_STYLES).id,
     accessory,
     accessoryColor,
   };

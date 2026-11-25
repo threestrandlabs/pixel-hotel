@@ -5,11 +5,22 @@
   "description": "A cosy, original pixel-art isometric virtual hotel built with plain HTML/CSS/JS.",
   "type": "module",
   "scripts": {
-    "start": "python3 -m http.server 8080",
-    "test": "node --test tests/logic.test.mjs tests/multiplayer.unit.test.mjs tests/arcade.unit.test.mjs tests/pool.unit.test.mjs tests/gumballs.unit.test.mjs tests/trader.unit.test.mjs tests/avatar.unit.test.mjs tests/minigames.unit.test.mjs tests/adaptive-quality.unit.test.mjs tests/weather.unit.test.mjs tests/pixelart.unit.test.mjs",
+    "art": "node scripts/build-atlas.mjs",
+    "predev": "npm run art",
+    "dev": "vite",
+    "prebuild": "npm run art",
+    "build": "vite build",
+    "preview": "vite preview",
+    "start": "vite",
+    "test": "node --test tests/logic.test.mjs tests/depthsort.unit.test.mjs tests/multiplayer.unit.test.mjs tests/arcade.unit.test.mjs tests/pool.unit.test.mjs tests/gumballs.unit.test.mjs tests/trader.unit.test.mjs tests/avatar.unit.test.mjs tests/minigames.unit.test.mjs tests/adaptive-quality.unit.test.mjs tests/weather.unit.test.mjs tests/art.unit.test.mjs",
     "test:smoke": "node tests/smoke.spec.mjs"
   },
   "devDependencies": {
-    "playwright": "^1.65.0"
+    "playwright": "^1.65.0",
+    "pngjs": "^7.0.0",
+    "vite": "^8.3.8"
+  },
+  "dependencies": {
+    "pixi.js": "^8.23.0"
   }
 }

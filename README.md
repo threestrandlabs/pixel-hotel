@@ -2,7 +2,7 @@
 
 A cosy isometric pixel-art hotel game: check in, chat with the guests, decorate
 the lobby and rooftop lounge, and work through a short list of quests. Built
-with plain HTML/CSS/JS ES modules — no build step, no frameworks. Single-player
+with plain HTML/CSS/JS ES modules, rendered with PixiJS 8 and served by Vite. Single-player
 play makes **zero network calls**; an entirely optional 🌐 Multiplayer panel
 (visit a friend's room, leave guestbook notes, invite-code party rooms with
 live avatars/chat) only talks to a backend after you explicitly click
@@ -11,23 +11,26 @@ live avatars/chat) only talks to a backend after you explicitly click
 This is an original homage to the cosy retro "virtual hotel" genre of the late
 90s/2000s. It is **not affiliated with, endorsed by, or associated with Sulake,
 Nexon, or any other company** — every name, character, room, item and
-line of dialogue here is original, all pixel art/voxel rendering is generated
-procedurally in code, and the floor soundtrack is original music by James
+line of dialogue here is original, all pixel art is hand-authored in code
+(`art/`, see [`docs/art-direction.md`](docs/art-direction.md)), and the floor soundtrack is original music by James
 (see **Assets & Attribution** below).
 
 ## Running it
 
-No build step and no dependencies are needed to play. From this folder:
+Needs Node.js 20+. From this folder:
 
 ```sh
-# Linux / macOS
-python3 -m http.server 8080
-
-# Windows
-python -m http.server 8080
+npm install
+npm run dev        # builds the sprite atlas, then starts Vite on http://localhost:8080
 ```
 
-Then open **http://localhost:8080** in a modern desktop or mobile browser.
+Other commands:
+
+```sh
+npm run art        # rebuild public/assets/atlas.{png,json} from art/sprites/*.js
+npm run build      # production build into dist/ (works offline)
+npm run preview    # serve the production build
+```
 
 ## Controls
 
@@ -39,7 +42,7 @@ Then open **http://localhost:8080** in a modern desktop or mobile browser.
 | Chat | Type in the chat box and press Enter / Send; nearby guests reply |
 | Switch rooms | Walk onto a doorway tile, or open the **🛗 Elevator** (`E`) to travel to any of the 10 floors |
 | Visit My Room | Click **🔑 My Room** or select **Floor 8 — My Room** in the Elevator Directory |
-| Buy / place furniture | Open **Items**, buy from the Shop tab, then **Place** it and click a tile (ghost preview shows green/red for valid/invalid; items render their own voxel icon instead of a flat square) |
+| Buy / place furniture | Open **Items**, buy from the Shop tab, then **Place** it and click a tile (ghost preview shows green/red for valid/invalid; every item shows its own pixel-art icon) |
 | Move / pick up furniture | Open **Items → In This Room**, use **Move** or **Pick up** |
 | Rotate while placing | `R` or the Rotate button |
 | Cancel placing | `Esc` or the Cancel button |
@@ -146,16 +149,20 @@ js/inventory.js       buy/place/move/pickup validation (pure)
 js/quests.js          quest progress, rewards, unlocks (pure)
 js/save.js            versioned localStorage save/load (pure)
 js/npc.js             NPC wandering/dialogue logic (pure)
-js/voxel.js           procedural 3D voxel character models & projection (pure)
-js/sprites.js         procedural pixel-art generation & wall/window geometry
-js/render.js           isometric rendering, depth sort, lighting (canvas)
+js/looks.js           player/NPC appearance presets (pure)
+js/iso.js             isometric projection, camera, storeys, day/night maths (pure)
+js/depthSort.js       footprint-box draw-order sorting (pure)
+js/render/scene.js    PixiJS room renderer: floors, walls, furniture, avatars, lights, icons
+js/render/city.js     sky, street-level city, hotel tower, cars
+js/render/overlay.js  2D overlay (elevator transition)
+art/                  hand-authored pixel art + drawing kits; built by scripts/build-atlas.mjs
 js/multiplayer/        opt-in multiplayer: auth, guestbook, realtime rooms, filter, UI (see docs/v0.8-multiplayer.md)
 js/audio.js            floor MP3 soundtrack + procedural WebAudio fallback/SFX
 js/main.js             game loop, input, UI wiring, debug hooks
 ```
 
 The `js/data.js`, `pathfinding.js`, `inventory.js`, `quests.js`, `save.js`,
-`npc.js` and `voxel.js` modules have no DOM dependency, so they run and test
+`npc.js`, `looks.js`, `iso.js` and `depthSort.js` modules have no DOM dependency, so they run and test
 directly under Node.
 
 For debugging/tests, the running page exposes `window.__pixelHotel` with
@@ -164,13 +171,14 @@ For debugging/tests, the running page exposes `window.__pixelHotel` with
 `getCamera()`, `setZoom(z)`, `resetZoom()`, `tileToScreen(x,y)`,
 `screenToTile(x,y)`, `clickNpc(npcId)`, `closeDialogue()`,
 `getDialogueState()`, `getMusicPlayerState()`, `getAudioState()`, and
-`getItemIcon(itemId)`.
+`getItemIcon(itemId)`, `setDayPhase(p)` and `getRenderStats()`.
 
 ## Tests
 
 ```sh
-npm test         # Node built-in test runner: pathfinding, inventory, quests, save/load, voxel/window rendering, multiplayer filter/rate-limit/mocked-Supabase smoke
-npm run test:smoke   # Playwright end-to-end smoke test (needs: npm i -D playwright && npx playwright install chromium)
+npm test             # Node test runner: pathfinding, inventory, quests, save/load, depth sorting, atlas coverage, multiplayer
+npm run test:smoke   # Playwright end-to-end smoke test against the Vite dev server (needs: npx playwright install chromium)
+node scripts/screenshot.mjs <outDir> --zoom 2 --phase 0.5 lobby pool   # full-size room screenshots
 ```
 
 The smoke test boots a local static server, loads the page in headless

@@ -10,15 +10,14 @@ import {
   createNpcRuntime, tickNpc, findWanderTarget, directionBetween, respondToMessage, pickRandom,
 } from './npc.js';
 import {
-  renderRoom, computeOrigin, screenToTile, tileToScreen, worldToScreen, hitTestNpc, getItemIconDataUrl,
+  renderRoom, hitTestNpc, initRenderer, getItemIconDataUrl, renderCharacter, getRenderStats,
+} from './render/scene.js';
+import {
+  computeOrigin, screenToTile, tileToScreen, worldToScreen,
   DEFAULT_ZOOM, MIN_ZOOM, MAX_ZOOM, clampZoom, zoomAtPoint, centerCameraOnTile, deadzoneCameraTarget,
-  renderSkylineToCanvas, getCachedIsoCityLayout, computeCityVehicles, drawCityVehicles,
-  nearCityLayerTransform, warmUpRoomSprites, clearSpriteCache, warmupRoomCache,
-} from './render.js';
-import { FpsMonitor, resolveBackgroundDetail, resolveSpriteDetail } from './adaptiveQuality.js';
-import { setDetail, getDetail } from './pixelart.js';
-import { snapBakeCtx } from './bakeSnap.js';
-import { clearCharacterCache } from './voxel.js';
+} from './iso.js';
+import { drawElevatorTransition } from './render/overlay.js';
+import { FpsMonitor, resolveBackgroundDetail } from './adaptiveQuality.js';
 import { audio, formatTime, trackForRoom } from './audio.js';
 import {
   initMultiplayerUI, getRemoteMultiplayerEntities, tickMultiplayer, notifyLocalChat, publishOwnRoomSnapshot,
@@ -38,7 +37,6 @@ import { initLibraryUI, openLibraryModal, closeLibraryModal } from './gumballs/l
 import { closeMinigamesModal } from './minigames/ui.js';
 import { initAvatarModal, openAvatarModal, closeAvatarModal, isAvatarModalOpen } from './avatarModal.js';
 import { DEFAULT_PLAYER_LOOK, validateAvatarLook } from './avatar.js';
-import { renderCharacter } from './voxel.js';
 import { EMOTES, EMOTE_IDS, EMOTE_ICONS, EMOTE_DURATION_MS, isEmoteAllowed } from './emotes.js';
 import { initViewerUI, openViewerModal, closeViewerModal, isViewerModalOpen, drawWeatherOverlay } from './viewer.js';
 import { getWeatherState, WEATHER_ICONS, WEATHER_LABELS } from './weather.js';
@@ -47,311 +45,15 @@ const STEP_MS = 240;
 const DAY_CYCLE_MS = 120000;
 const HELP_SEEN_KEY = 'pixelHotel.helpSeen.v1';
 
+// #gameCanvas is now a transparent 2D overlay (weather, elevator transition)
+// that also receives all pointer input; the room itself is drawn by PixiJS on
+// a canvas inserted just beneath it.
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 ctx.imageSmoothingEnabled = false;
-
-// City backdrop bake scale. High Sprite Detail bakes at native 1:1 (crisp, integer CSS scale);
-// Low keeps the cheap 0.25 bake (phones, the 25.2 fps floor) but snaps every rect to whole bake
-// pixels so it reads as clean 4px blocks instead of blended, soft edges.
-const BG_SCALE_LOW = 0.25;
-const BG_SCALE_HIGH = 1;
-const BG_MAX_HIGH_PIXELS = 6e6; // shortcut: above this (huge zoom-out margins) fall back to 0.5, rarely hit
-let bgScale = BG_SCALE_LOW;
-
-function wantedBgScale(width, height, ox, oy) {
-  if (getDetail() < 2) return BG_SCALE_LOW;
-  return (width + 2 * ox) * (height + 2 * oy) > BG_MAX_HIGH_PIXELS ? 0.5 : BG_SCALE_HIGH;
-}
+await initRenderer(document.getElementById('gameArea'), canvas);
 
 const fpsMonitor = new FpsMonitor(2000, 45);
-
-const skyLayer = document.getElementById('skyLayer');
-const skyCanvas = document.getElementById('skyCanvas');
-const bgLayer = document.getElementById('bgLayer');
-const bgCanvas = document.getElementById('bgCanvas');
-const vehicleCanvas = document.getElementById('vehicleCanvas');
-const buildingsCanvas = document.getElementById('buildingsCanvas');
-const beaconCanvas = document.getElementById('beaconCanvas');
-
-const bgState = {
-  floor: null,
-  width: 0,
-  height: 0,
-  phase: -1,
-  beacons: [],
-  ox: 380,
-  oy: 260,
-  rebakeScheduled: false,
-  lastVehicleUpdateAt: 0,
-  lastTransform: '',
-  lastSkyTransform: '',
-  scale: BG_SCALE_LOW,
-};
-
-let rebakeHandle = null;
-
-function cancelPendingRebake() {
-  if (rebakeHandle !== null) {
-    if (typeof cancelIdleCallback !== 'undefined') {
-      cancelIdleCallback(rebakeHandle);
-    } else {
-      clearTimeout(rebakeHandle);
-    }
-    rebakeHandle = null;
-  }
-  bgState.rebakeScheduled = false;
-}
-
-function performBackgroundBake(room, width, height, phase, ox, oy) {
-  cancelPendingRebake();
-  if (!bgCanvas) return;
-  const floor = room?.floor || 1;
-  bgScale = wantedBgScale(width, height, ox, oy);
-  bgState.scale = bgScale;
-  const bgW = Math.max(1, Math.round((width + 2 * ox) * bgScale));
-  const bgH = Math.max(1, Math.round((height + 2 * oy) * bgScale));
-
-  // Near layer (ground, roads, crossings, buildings, trees, lamps): baked at the
-  // same origin the room/tower uses, and locked 1:1 to the camera at draw time
-  // (see updateBackgroundTransform) — no parallax, so the street never drifts
-  // from the tower's base.
-  if (bgCanvas.width !== bgW || bgCanvas.height !== bgH) {
-    bgCanvas.width = bgW;
-    bgCanvas.height = bgH;
-  }
-  bgCanvas.style.left = `${-ox}px`;
-  bgCanvas.style.top = `${-oy}px`;
-  bgCanvas.style.width = `${width + 2 * ox}px`;
-  bgCanvas.style.height = `${height + 2 * oy}px`;
-
-  if (vehicleCanvas) {
-    if (vehicleCanvas.width !== bgW || vehicleCanvas.height !== bgH) {
-      vehicleCanvas.width = bgW;
-      vehicleCanvas.height = bgH;
-    }
-    vehicleCanvas.style.left = `${-ox}px`;
-    vehicleCanvas.style.top = `${-oy}px`;
-    vehicleCanvas.style.width = `${width + 2 * ox}px`;
-    vehicleCanvas.style.height = `${height + 2 * oy}px`;
-  }
-
-  if (buildingsCanvas) {
-    if (buildingsCanvas.width !== bgW || buildingsCanvas.height !== bgH) {
-      buildingsCanvas.width = bgW;
-      buildingsCanvas.height = bgH;
-    }
-    buildingsCanvas.style.left = `${-ox}px`;
-    buildingsCanvas.style.top = `${-oy}px`;
-    buildingsCanvas.style.width = `${width + 2 * ox}px`;
-    buildingsCanvas.style.height = `${height + 2 * oy}px`;
-  }
-
-  if (beaconCanvas) {
-    if (beaconCanvas.width !== bgW || beaconCanvas.height !== bgH) {
-      beaconCanvas.width = bgW;
-      beaconCanvas.height = bgH;
-    }
-    beaconCanvas.style.left = `${-ox}px`;
-    beaconCanvas.style.top = `${-oy}px`;
-    beaconCanvas.style.width = `${width + 2 * ox}px`;
-    beaconCanvas.style.height = `${height + 2 * oy}px`;
-  }
-
-  const g = bgCanvas.getContext('2d');
-  g.setTransform(bgScale, 0, 0, bgScale, ox * bgScale, oy * bgScale);
-  g.imageSmoothingEnabled = false;
-  snapBakeCtx(g, bgScale);
-  renderSkylineToCanvas(g, width, height, phase, floor, room, ox, oy, 'ground');
-
-  let beacons = [];
-  if (buildingsCanvas) {
-    const bCtx = buildingsCanvas.getContext('2d');
-    bCtx.setTransform(1, 0, 0, 1, 0, 0);
-    bCtx.clearRect(0, 0, buildingsCanvas.width, buildingsCanvas.height);
-    bCtx.setTransform(bgScale, 0, 0, bgScale, ox * bgScale, oy * bgScale);
-    bCtx.imageSmoothingEnabled = false;
-    snapBakeCtx(bCtx, bgScale);
-    beacons = renderSkylineToCanvas(bCtx, width, height, phase, floor, room, ox, oy, 'buildings');
-  }
-  bgState.beacons = beacons;
-
-  // Far layer (sky, stars, sun/moon, distant skyline silhouette, hills): has no
-  // world (u,v) coordinates, so it is the only part allowed to parallax.
-  if (skyCanvas) {
-    if (skyCanvas.width !== bgW || skyCanvas.height !== bgH) {
-      skyCanvas.width = bgW;
-      skyCanvas.height = bgH;
-    }
-    skyCanvas.style.left = `${-ox}px`;
-    skyCanvas.style.top = `${-oy}px`;
-    skyCanvas.style.width = `${width + 2 * ox}px`;
-    skyCanvas.style.height = `${height + 2 * oy}px`;
-    const sg = skyCanvas.getContext('2d');
-    sg.setTransform(bgScale, 0, 0, bgScale, ox * bgScale, oy * bgScale);
-    sg.imageSmoothingEnabled = false;
-    snapBakeCtx(sg, bgScale);
-    renderSkylineToCanvas(sg, width, height, phase, floor, room, ox, oy, 'sky');
-  }
-
-  bgState.floor = floor;
-  bgState.width = width;
-  bgState.height = height;
-  bgState.phase = phase;
-  bgState.beacons = beacons || [];
-  bgState.ox = ox;
-  bgState.oy = oy;
-}
-
-function scheduleBackgroundRebake(room, width, height, phase, ox, oy) {
-  cancelPendingRebake();
-  bgState.rebakeScheduled = true;
-  const runner = typeof requestIdleCallback !== 'undefined'
-    ? (cb) => requestIdleCallback(cb, { timeout: 120 })
-    : (cb) => setTimeout(cb, 16);
-  rebakeHandle = runner(() => {
-    rebakeHandle = null;
-    bgState.rebakeScheduled = false;
-    performBackgroundBake(room, width, height, ui.phase, ox, oy);
-  });
-}
-
-// The near layer (ground/roads/buildings/vehicles, baked by performBackgroundBake
-// with layer:'near') shares the room's exact projection, so it must move with
-// EXACTLY the same pan/zoom as the game canvas's camera transform (see
-// renderRoom's ctx.translate/scale in render.js) — any parallax here would slide
-// the street out from under the tower and the room. Only the far sky layer
-// (distant skyline with no world coordinates) is allowed to parallax.
-function updateBackgroundTransform(panX, panY, zoom) {
-  if (bgLayer) {
-    const near = nearCityLayerTransform({ panX, panY, zoom });
-    const transform = `translate3d(${near.panX}px, ${near.panY}px, 0) scale(${near.zoom})`;
-    if (bgState.lastTransform !== transform) {
-      bgState.lastTransform = transform;
-      bgLayer.style.transform = transform;
-    }
-  }
-  if (skyLayer) {
-    const parallax = 0.35;
-    const skyPanX = Math.round(panX * parallax);
-    const skyPanY = Math.round(panY * parallax);
-    const skyZoom = (1 + (zoom - 1) * 0.3).toFixed(4);
-    const transform = `translate3d(${skyPanX}px, ${skyPanY}px, 0) scale(${skyZoom})`;
-    if (bgState.lastSkyTransform !== transform) {
-      bgState.lastSkyTransform = transform;
-      skyLayer.style.transform = transform;
-    }
-  }
-}
-
-const VEHICLE_UPDATE_INTERVAL = 1000 / 12; // ~83.3ms for 12 Hz
-
-function updateVehiclesAndBeacons(now, room, width, height, phase, ox, oy, qualityMode) {
-  if (!vehicleCanvas) return;
-  if (qualityMode === 'low') {
-    if (vehicleCanvas.style.display !== 'none') {
-      vehicleCanvas.style.display = 'none';
-      const vCtx = vehicleCanvas.getContext('2d');
-      vCtx.setTransform(1, 0, 0, 1, 0, 0);
-      vCtx.clearRect(0, 0, vehicleCanvas.width, vehicleCanvas.height);
-    }
-    if (beaconCanvas && beaconCanvas.style.display !== 'none') {
-      beaconCanvas.style.display = 'none';
-      const bCtx = beaconCanvas.getContext('2d');
-      bCtx.setTransform(1, 0, 0, 1, 0, 0);
-      bCtx.clearRect(0, 0, beaconCanvas.width, beaconCanvas.height);
-    }
-    return;
-  }
-  if (vehicleCanvas.style.display === 'none') {
-    vehicleCanvas.style.display = 'block';
-  }
-  if (beaconCanvas && beaconCanvas.style.display === 'none') {
-    beaconCanvas.style.display = 'block';
-  }
-  if (now - bgState.lastVehicleUpdateAt < VEHICLE_UPDATE_INTERVAL) {
-    return;
-  }
-  bgState.lastVehicleUpdateAt = now;
-  const vCtx = vehicleCanvas.getContext('2d');
-  vCtx.setTransform(1, 0, 0, 1, 0, 0);
-  vCtx.clearRect(0, 0, vehicleCanvas.width, vehicleCanvas.height);
-  vCtx.setTransform(bgScale, 0, 0, bgScale, ox * bgScale, oy * bgScale);
-  snapBakeCtx(vCtx, bgScale);
-
-  const roomSpec = room || { id: 'lobby', width: 12, height: 9, floor: 1 };
-  const layout = getCachedIsoCityLayout(roomSpec, width, height, phase, 400 + ox, 320 + oy);
-  const vehicles = computeCityVehicles(layout, now, phase);
-  vCtx.save();
-  vCtx.beginPath();
-  vCtx.rect(-ox, layout.horizonY, width + 2 * ox, height + oy - layout.horizonY);
-  vCtx.clip();
-  drawCityVehicles(vCtx, layout, vehicles, phase, 1);
-  vCtx.restore();
-
-  if (beaconCanvas) {
-    const bCtx = beaconCanvas.getContext('2d');
-    bCtx.setTransform(1, 0, 0, 1, 0, 0);
-    bCtx.clearRect(0, 0, beaconCanvas.width, beaconCanvas.height);
-    bCtx.setTransform(bgScale, 0, 0, bgScale, ox * bgScale, oy * bgScale);
-    snapBakeCtx(bCtx, bgScale);
-    const blinkOn = Math.floor(now / 650) % 2 === 0;
-    for (const b of (bgState.beacons || [])) {
-      // Square lights (no arcs): a flat alpha halo square, then the lamp itself.
-      bCtx.fillStyle = blinkOn ? '#ff3b4e' : '#6e1c28';
-      bCtx.fillRect(b.x - 2, b.y - 2, 4, 4);
-      if (blinkOn) {
-        bCtx.fillStyle = 'rgba(255, 70, 90, 0.28)';
-        bCtx.fillRect(b.x - 5, b.y - 5, 10, 10);
-      }
-    }
-  }
-}
-
-const MARGIN_BUCKET = 160;
-
-// The near layer is now locked 1:1 to the camera, so (unlike the old damped
-// parallax) zooming out or dragging far enough can reveal the edge of the
-// baked bitmap. Compute the margin the current pan/zoom actually needs — using
-// MIN_ZOOM as the worst case so later zoom-outs never need a fresh rebake —
-// and only pay for a (idle-scheduled) rebake when the existing bake falls short.
-function requiredCityMargin(cssDim, pan, zoomNow) {
-  const z = Math.max(MIN_ZOOM, zoomNow || 1);
-  const effZoom = Math.min(1.0, z);
-  const halfVisible = Math.abs(pan) / z + (cssDim / 2) / effZoom;
-  const needed = Math.max(0, halfVisible - cssDim / 2) + cssDim * 0.12;
-  return Math.ceil(needed / MARGIN_BUCKET) * MARGIN_BUCKET;
-}
-
-function updateBackground(now, room, width, height, phase, camera, qualityMode) {
-  const baseOx = Math.max(380, Math.round(width * 0.45));
-  const baseOy = Math.max(260, Math.round(height * 0.45));
-  const neededOx = Math.max(baseOx, requiredCityMargin(width, camera.panX, camera.zoom));
-  const neededOy = Math.max(baseOy, requiredCityMargin(height, camera.panY, camera.zoom));
-  const floor = room?.floor || 1;
-
-  if (bgState.floor === null) {
-    performBackgroundBake(room, width, height, phase, neededOx, neededOy);
-  } else if (
-    !player.walking && (
-      bgState.floor !== floor ||
-      Math.abs(bgState.width - width) > 60 ||
-      Math.abs(bgState.height - height) > 60 ||
-      Math.abs(bgState.phase - phase) >= 0.15 ||
-      bgState.scale !== wantedBgScale(width, height, Math.max(neededOx, bgState.ox), Math.max(neededOy, bgState.oy)) ||
-      neededOx > bgState.ox ||
-      neededOy > bgState.oy
-    )
-  ) {
-    scheduleBackgroundRebake(room, width, height, phase, Math.max(neededOx, bgState.ox), Math.max(neededOy, bgState.oy));
-  }
-
-  updateBackgroundTransform(camera.panX, camera.panY, camera.zoom);
-  // Use the margin of the bake actually on screen right now (bgState.ox/oy),
-  // not the (possibly larger, not-yet-baked) required margin above, so the
-  // vehicle canvas's transform always matches its current backing size.
-  updateVehiclesAndBeacons(now, room, width, height, phase, bgState.ox || baseOx, bgState.oy || baseOy, qualityMode);
-}
 
 let state = loadState(window.localStorage);
 applyRoomTier(state.player.roomTier || 1);
@@ -1412,7 +1114,6 @@ function switchRoom(roomId, toTile) {
   }
   updateRoomLabel();
   recenterCamera(player.x, player.y, ui.camera.zoom);
-  warmUpRoomSprites(targetDef, currentRoomRuntime().placed, ui.dpr || 1);
   audio.setRoomMood(roomId, ui.phase, targetDef.floor || 1);
   refreshAudioUi();
   refreshRoomTab();
@@ -1849,12 +1550,10 @@ function frame(now) {
     (ui.cssW <= 600 && (window.devicePixelRatio || 1) > 1)
   );
   const lowQualityTriggered = fpsMonitor.recordFrame(now);
+  // 'low' background detail skips the animated city extras (cars, clouds).
   const qualityMode = resolveBackgroundDetail(state.settings.backgroundDetail, lowQualityTriggered, isMobile);
-  applySpriteDetail(isMobile, lowQualityTriggered);
 
-  updateBackground(now, room, ui.cssW, ui.cssH, ui.phase, ui.camera, qualityMode);
-
-  renderRoom(ctx, {
+  renderRoom({
     room,
     placedFurniture: placedFurnitureWithFootprint(roomRuntime),
     entities: buildEntities(now),
@@ -1869,8 +1568,13 @@ function frame(now) {
     elevatorAnim: ui.elevatorAnim,
     camera: ui.camera,
     lightsOn: roomRuntime.lightsOn !== false,
+    lowDetail: qualityMode === 'low',
   });
 
+  const overlayDpr = Math.max(1, Math.min(2, ui.dpr || 1));
+  ctx.setTransform(overlayDpr, 0, 0, overlayDpr, 0, 0);
+  ctx.clearRect(0, 0, ui.cssW, ui.cssH);
+  if (ui.elevatorAnim) drawElevatorTransition(ctx, ui.cssW, ui.cssH, ui.elevatorAnim, now);
   if (room.openEdges && state.settings.weatherEffects !== false) {
     drawWeatherOverlay(ctx, ui.cssW, ui.cssH, weatherStateThrottled(now), now, 0.55);
   }
@@ -1952,9 +1656,12 @@ window.addEventListener('mouseup', () => { ui.dragging = false; });
 
 canvas.addEventListener('wheel', (evt) => {
   evt.preventDefault();
+  // Whole-number zoom steps; throttle so one wheel flick moves one step.
+  const t = performance.now();
+  if (t - (ui.lastWheelZoomAt || 0) < 180 || evt.deltaY === 0) return;
+  ui.lastWheelZoomAt = t;
   const { x, y } = getCanvasPos(evt);
-  const delta = evt.deltaY > 0 ? -0.1 : 0.1;
-  setZoomAtPoint(ui.camera.zoom + delta, x, y);
+  setZoomAtPoint(ui.camera.zoom + (evt.deltaY > 0 ? -1 : 1), x, y);
 }, { passive: false });
 
 // Touch controls: pinch-to-zoom, one-finger drag pan, tap to walk/interact, long-press
@@ -2012,8 +1719,12 @@ canvas.addEventListener('touchmove', (evt) => {
     const rect = canvas.getBoundingClientRect();
     const cx = (evt.touches[0].clientX + evt.touches[1].clientX) / 2 - rect.left;
     const cy = (evt.touches[0].clientY + evt.touches[1].clientY) / 2 - rect.top;
-    setZoomAtPoint(ui.camera.zoom * (dist / ui.pinchDist), cx, cy);
-    ui.pinchDist = dist;
+    // Step one whole zoom level each time the pinch grows/shrinks by 35%.
+    const ratio = dist / ui.pinchDist;
+    if (ratio > 1.35 || ratio < 1 / 1.35) {
+      setZoomAtPoint(ui.camera.zoom + (ratio > 1 ? 1 : -1), cx, cy);
+      ui.pinchDist = dist;
+    }
   } else if (evt.touches.length === 1 && ui.dragging) {
     const { x, y } = getCanvasPos(evt);
     const dx = x - ui.dragLast.x;
@@ -2125,8 +1836,8 @@ function rotatePlacing() {
 
 document.getElementById('btnRotate').addEventListener('click', rotatePlacing);
 document.getElementById('btnCancelPlace').addEventListener('click', cancelPlacing);
-document.getElementById('btnZoomIn').addEventListener('click', () => stepZoom(0.15));
-document.getElementById('btnZoomOut').addEventListener('click', () => stepZoom(-0.15));
+document.getElementById('btnZoomIn').addEventListener('click', () => stepZoom(1));
+document.getElementById('btnZoomOut').addEventListener('click', () => stepZoom(-1));
 document.getElementById('btnZoomReset').addEventListener('click', resetZoom);
 document.getElementById('btnCenterPlayer').addEventListener('click', () => { recenterCamera(player.x, player.y, ui.camera.zoom); persistZoom(); });
 document.getElementById('btnFollowCamera').addEventListener('click', () => {
@@ -2326,8 +2037,8 @@ window.addEventListener('keydown', (e) => {
     if (idx >= 0 && idx < EMOTES.length) triggerEmote(EMOTES[idx].id);
   }
   else if (e.key.toLowerCase() === 'r' && ui.placing) rotatePlacing();
-  else if ((e.key === '+' || e.key === '=') && !isTypingTarget(e)) stepZoom(0.15);
-  else if (e.key === '-' && !isTypingTarget(e)) stepZoom(-0.15);
+  else if ((e.key === '+' || e.key === '=') && !isTypingTarget(e)) stepZoom(1);
+  else if (e.key === '-' && !isTypingTarget(e)) stepZoom(-1);
   else if (e.key === '0' && !isTypingTarget(e)) resetZoom();
   else if (e.key.toLowerCase() === 'e' && !isTypingTarget(e)) togglePanel('elevatorPanel');
   else if (e.key.toLowerCase() === 'i' && !isTypingTarget(e)) togglePanel('inventoryPanel');
@@ -2702,25 +2413,6 @@ function syncSettingsState() {
   state.settings.muted = !!(state.settings.musicMuted && state.settings.sfxMuted);
 }
 
-let lastAppliedSpriteDetail = null;
-function applySpriteDetail(isMobile, lowQualityTriggered, force = false) {
-  const targetDetail = resolveSpriteDetail(state.settings.spriteDetail, lowQualityTriggered, isMobile);
-  if (force || targetDetail !== lastAppliedSpriteDetail) {
-    lastAppliedSpriteDetail = targetDetail;
-    setDetail(targetDetail);
-    clearSpriteCache();
-    clearCharacterCache();
-    if (typeof warmupRoomCache === 'function' && typeof currentRoomDef === 'function') {
-      const room = currentRoomDef();
-      const runtime = typeof currentRoomRuntime === 'function' ? currentRoomRuntime() : null;
-      if (room) {
-        const placed = runtime ? placedFurnitureWithFootprint(runtime) : [];
-        warmupRoomCache(room, placed, window.devicePixelRatio || 1);
-      }
-    }
-  }
-}
-
 function setSpriteDetailSetting(mode) {
   const norm = ['auto', 'high', 'low'].includes(String(mode).toLowerCase())
     ? String(mode).toLowerCase()
@@ -2728,13 +2420,6 @@ function setSpriteDetailSetting(mode) {
   state.settings.spriteDetail = norm;
   saveState(window.localStorage, state);
   refreshAudioUi();
-  const isMobile = (typeof window !== 'undefined') && (
-    ('ontouchstart' in window) ||
-    ('navigator' in window && navigator.maxTouchPoints > 0) ||
-    (ui.cssW <= 600 && (window.devicePixelRatio || 1) > 1)
-  );
-  const lowQualityTriggered = fpsMonitor ? fpsMonitor.isTriggered() : false;
-  applySpriteDetail(isMobile, lowQualityTriggered, true);
 }
 
 function refreshFollowCameraButton() {
@@ -3308,9 +2993,6 @@ window.__pixelHotel = Object.assign(window.__pixelHotel || {}, {
     ui.phase = ((p % 1) + 1) % 1;
     audio.setRoomMood(state.player.room, ui.phase);
     refreshAudioUi();
-    const ox = Math.max(380, Math.round(ui.cssW * 0.45));
-    const oy = Math.max(260, Math.round(ui.cssH * 0.45));
-    performBackgroundBake(currentRoomDef(), ui.cssW, ui.cssH, ui.phase, ox, oy);
   }, // 0.5 noon, 0 midnight
   getSaveVersion: () => SAVE_VERSION,
   getVersion: () => '0.13.1',
@@ -3482,6 +3164,7 @@ window.__pixelHotel = Object.assign(window.__pixelHotel || {}, {
     return res;
   },
   getItemIcon: (itemId) => getItemIconDataUrl(itemId, 48, 1),
+  getRenderStats: () => getRenderStats(),
   simulateMusicFileError: (trackId) => {
     audio._handleFileError(trackId || audio.trackId);
     return audio.getMoodInfo();
