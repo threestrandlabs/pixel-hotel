@@ -137,6 +137,28 @@ checklist. The schema lives in
 [`supabase/migrations/0001_v08_multiplayer.sql`](supabase/migrations/0001_v08_multiplayer.sql),
 a single idempotent SQL file meant to be run once via the Supabase SQL Editor.
 
+## Accounts & cloud save (optional)
+
+The 👤 button opens **Account & Cloud Save**. Sign in with a one-time email
+link or Google and your progress (coins, furniture, wardrobe, quests, gumball
+collection, arcade stats) follows you to any device where you sign in.
+Per-device settings (zoom, volumes, graphics detail) stay on each device.
+
+- Not signed in: nothing changes, and the game still makes no network calls.
+- Signed in: the game syncs when it loads, a few seconds after each save, and
+  when you come back to the tab. If two devices both made progress since they
+  last synced, it asks which one to keep instead of overwriting either.
+- **Continue as Guest** signs in with an anonymous identity (the same kind
+  multiplayer uses). Guest progress stays in this browser; adding an email or
+  Google later upgrades the same identity, so nothing is lost. Guest needs only
+  "Allow anonymous sign-ins", which multiplayer already requires.
+- If you already used anonymous multiplayer in this browser, signing in keeps
+  your friend code and shared room.
+
+Setup (Supabase dashboard + the migration) is in
+[`docs/accounts.md`](docs/accounts.md); the schema is
+[`supabase/migrations/0005_v014_cloud_save.sql`](supabase/migrations/0005_v014_cloud_save.sql).
+
 ## Project structure
 
 ```

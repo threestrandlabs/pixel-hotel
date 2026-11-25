@@ -6,6 +6,7 @@ import {
 } from './inventory.js';
 import { advanceQuestsByType, setQuestProgress, claimReward, listQuests } from './quests.js';
 import { loadState, saveState, resetState, sanitizePlacedItemsForRoom } from './save.js';
+import { initAccountUI, isCloudSaveActive } from './account/accountUi.js';
 import {
   createNpcRuntime, tickNpc, findWanderTarget, directionBetween, respondToMessage, pickRandom,
 } from './npc.js';
@@ -2116,6 +2117,7 @@ document.getElementById('btnSkyViewerClose')?.addEventListener('click', closeVie
 document.getElementById('btnInventory').addEventListener('click', () => togglePanel('inventoryPanel'));
 document.getElementById('btnQuests').addEventListener('click', () => togglePanel('questPanel'));
 document.getElementById('btnMultiplayer').addEventListener('click', () => togglePanel('multiplayerPanel'));
+document.getElementById('btnAccount').addEventListener('click', () => togglePanel('accountPanel'));
 document.querySelectorAll('.panel-close').forEach((btn) => {
   btn.addEventListener('click', () => {
     if (btn.dataset.close) {
@@ -2765,7 +2767,10 @@ function manualSave() {
 document.getElementById('btnSave').addEventListener('click', manualSave);
 
 document.getElementById('btnReset').addEventListener('click', () => {
-  if (!window.confirm('Reset all progress? This cannot be undone.')) return;
+  const resetPrompt = isCloudSaveActive()
+    ? 'Reset all progress? You are signed in, so this also resets your cloud save on every device. This cannot be undone.'
+    : 'Reset all progress? This cannot be undone.';
+  if (!window.confirm(resetPrompt)) return;
   state = resetState(window.localStorage);
   location.reload();
 });
@@ -2876,6 +2881,13 @@ function init() {
     playMusic: (trackId) => { audio.setTrack(trackId, true); audio.play(); },
     stopMusic: () => audio.stopLoop(),
     playSfx: (id) => audio.playSfx(id),
+  });
+  initAccountUI({
+    getState: () => state,
+    getSaveVersion: () => SAVE_VERSION,
+    showToast: (msg) => showToast(msg),
+    openPanel: (id) => { const el = document.getElementById(id); if (el && el.classList.contains('hidden')) togglePanel(id); },
+    closePanel: (id) => { const el = document.getElementById(id); if (el && !el.classList.contains('hidden')) togglePanel(id); },
   });
   initArcadeUI({
     getState: () => state,

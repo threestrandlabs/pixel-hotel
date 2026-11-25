@@ -16,6 +16,7 @@
     <div id="weatherBadge" class="weather-badge" title="Current weather" aria-label="Current weather">☀️</div>
     <div id="topQuickButtons">
       <button id="btnMute" class="pixel-btn" title="Audio Mixer &amp; Settings" aria-label="Audio Mixer &amp; Settings">🎚️</button>
+      <button id="btnAccount" class="pixel-btn" title="Sign in to save across devices" aria-label="Sign in to save across devices">👤</button>
       <button id="btnHelp" class="pixel-btn" title="Help (H)" aria-label="Help">❓</button>
     </div>
     <nav id="topButtons" class="action-bar">
@@ -229,6 +230,79 @@
           <button id="btnMpGames" class="pixel-btn">🎮 Games</button>
         </div>
         <div id="mpMemberList"></div>
+      </div>
+    </div>
+  </aside>
+
+  <aside id="accountPanel" class="panel hidden" role="dialog" aria-modal="true" aria-labelledby="accountPanelTitle">
+    <div class="panel-header">
+      <span id="accountPanelTitle">👤 Account &amp; Cloud Save</span>
+      <button class="panel-close" data-close="accountPanel" aria-label="Close">✕</button>
+    </div>
+    <div class="account-body">
+      <div id="accountSignedOut">
+        <div id="accountGuestBanner" class="account-guest-banner hidden">
+          <p><b>You're playing as a Guest.</b> Your progress is saved in this browser only.</p>
+          <p class="mp-hint">Add an email or Google below to keep this hotel on every device. You keep everything you have now.</p>
+        </div>
+        <p id="accountSignedOutIntro" class="account-lead">Sign in to keep your hotel on every device. Your coins, furniture, wardrobe, quests and collection load wherever you sign in.</p>
+        <label class="account-label" for="accountEmailInput">Email</label>
+        <div class="account-row">
+          <input id="accountEmailInput" type="email" autocomplete="email" inputmode="email" maxlength="254" placeholder="you@example.com" />
+          <button id="btnAccountEmail" class="pixel-btn">Email me a link</button>
+        </div>
+        <p class="mp-hint">No password: we email you a one-time sign-in link.</p>
+        <div class="account-divider" aria-hidden="true"><span>or</span></div>
+        <button id="btnAccountGoogle" class="pixel-btn account-google">Continue with Google</button>
+        <div id="accountGuestOption">
+          <button id="btnAccountGuest" class="pixel-btn account-google account-guest-btn">Continue as Guest</button>
+          <p class="mp-hint">Optional. Without signing in, the game works exactly as before and your progress stays in this browser.</p>
+        </div>
+        <div id="accountGuestActions" class="account-row hidden">
+          <button id="btnAccountGuestSignOut" class="pixel-btn">Leave Guest mode</button>
+        </div>
+      </div>
+      <div id="accountSignedIn" class="hidden">
+        <p>Signed in as <b id="accountEmail"></b></p>
+        <p class="mp-hint">Cloud save is on. Last synced: <span id="accountLastSync">never</span></p>
+        <div class="account-row">
+          <button id="btnAccountSync" class="pixel-btn">Sync now</button>
+          <button id="btnAccountSignOut" class="pixel-btn">Sign out</button>
+        </div>
+      </div>
+      <p id="accountStatus" class="mp-hint" role="status" aria-live="polite"></p>
+    </div>
+  </aside>
+
+  <aside id="syncConflictPanel" class="panel hidden" role="alertdialog" aria-modal="true" aria-labelledby="syncConflictTitle" aria-describedby="syncConflictDesc">
+    <div class="panel-header">
+      <span id="syncConflictTitle">☁️ Which progress should we keep?</span>
+    </div>
+    <div class="account-body">
+      <p id="syncConflictDesc">This device and your cloud save have different progress. Pick one; the other is replaced.</p>
+      <div class="conflict-cards">
+        <div class="conflict-card">
+          <h3>This device</h3>
+          <dl>
+            <dt>Coins</dt><dd id="conflictLocalCoins">0</dd>
+            <dt>Items</dt><dd id="conflictLocalItems">0</dd>
+            <dt>Quests done</dt><dd id="conflictLocalQuests">0</dd>
+            <dt>Room tier</dt><dd id="conflictLocalTier">1</dd>
+            <dt>Saved</dt><dd id="conflictLocalWhen">now</dd>
+          </dl>
+          <button id="btnConflictKeepLocal" class="pixel-btn">Keep this device</button>
+        </div>
+        <div class="conflict-card">
+          <h3>Cloud save</h3>
+          <dl>
+            <dt>Coins</dt><dd id="conflictCloudCoins">0</dd>
+            <dt>Items</dt><dd id="conflictCloudItems">0</dd>
+            <dt>Quests done</dt><dd id="conflictCloudQuests">0</dd>
+            <dt>Room tier</dt><dd id="conflictCloudTier">1</dd>
+            <dt>Saved</dt><dd id="conflictCloudWhen">-</dd>
+          </dl>
+          <button id="btnConflictUseCloud" class="pixel-btn">Use cloud save</button>
+        </div>
       </div>
     </div>
   </aside>
