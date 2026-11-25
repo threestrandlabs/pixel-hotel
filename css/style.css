@@ -2286,3 +2286,4 @@ body.has-touch .sky-viewer-hint { display: none; }
   font-size: 12px;
 }
 .event-banner .quest-title { font-size: 13px; }
+.install-section.hidden { display: none; }

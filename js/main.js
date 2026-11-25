@@ -9,6 +9,7 @@ import { checkinStatus, claimCheckin, CHECKIN_REWARDS } from './checkin.js';
 import { daysLeft } from './events.js';
 import { loadState, saveState, resetState, sanitizePlacedItemsForRoom } from './save.js';
 import { initAccountUI, isCloudSaveActive } from './account/accountUi.js';
+import { initInstallPrompt } from './install.js';
 import {
   createNpcRuntime, tickNpc, findWanderTarget, directionBetween, respondToMessage, pickRandom,
 } from './npc.js';
@@ -3005,6 +3006,7 @@ function init() {
     playSfx: (id) => audio.playSfx(id),
   });
   lastGumballPulls = state.gumballs?.totalPulls || 0;
+  initInstallPrompt({ showToast: (msg) => showToast(msg) });
   initAccountUI({
     getState: () => state,
     getSaveVersion: () => SAVE_VERSION,

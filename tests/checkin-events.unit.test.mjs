@@ -135,3 +135,21 @@ test('new permanent quests exist for the new hooks', () => {
   const ids = QUESTS.map((q) => q.id);
   assert.equal(new Set(ids).size, ids.length, 'quest ids unique');
 });
+
+test('install: iOS Safari detection (iPadOS reports as a Mac with touch)', async () => {
+  const { isIosSafari } = await import('../js/install.js');
+  assert.equal(isIosSafari('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit Safari/604.1', 5), true);
+  assert.equal(isIosSafari('Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit Safari/605.1', 5), true, 'iPad');
+  assert.equal(isIosSafari('Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit Safari/605.1', 0), false, 'real Mac');
+  assert.equal(isIosSafari('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) CriOS/130 Safari', 5), false, 'Chrome on iOS');
+  assert.equal(isIosSafari('Mozilla/5.0 (Linux; Android 15) Chrome/130 Mobile Safari/537.36', 5), false);
+});
+
+test('manifest: valid, relative to the site path, icons exist', async () => {
+  const { readFileSync, existsSync } = await import('node:fs');
+  const m = JSON.parse(readFileSync(new URL('../public/manifest.webmanifest', import.meta.url)));
+  assert.equal(m.display, 'standalone');
+  assert.equal(m.start_url, './', 'relative, so it works under /pixel-hotel/');
+  assert.ok(m.icons.some((i) => i.sizes === '512x512' && i.purpose === 'maskable'));
+  for (const i of m.icons) assert.ok(existsSync(new URL(`../public/${i.src}`, import.meta.url)), i.src);
+});

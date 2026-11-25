@@ -4,6 +4,15 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
 <title>Pixel Hotel</title>
+<meta name="description" content="A cosy pixel-art hotel: decorate your room, chat with guests and explore ten floors." />
+<meta name="theme-color" content="#1b1430" />
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png" />
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="Pixel Hotel" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <link rel="stylesheet" href="css/style.css" />
 <link rel="stylesheet" href="css/gumballs.css" />
 </head>
@@ -286,6 +295,12 @@
         </div>
       </div>
       <p id="accountStatus" class="mp-hint" role="status" aria-live="polite"></p>
+      <div id="installSection" class="install-section hidden">
+        <div class="account-divider" aria-hidden="true"><span>app</span></div>
+        <p class="account-lead">Install Pixel Hotel on this device: it opens full-screen from your home screen or dock.</p>
+        <button id="btnInstallApp" class="pixel-btn account-google hidden">📲 Install app</button>
+        <p id="installHint" class="mp-hint hidden"></p>
+      </div>
     </div>
   </aside>
 
