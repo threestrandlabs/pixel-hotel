@@ -4,7 +4,9 @@ import {
   buyItem, placeItem, pickupItem, moveItem, canPlaceAt, footprintCells,
   availableCatalogue, rotatedFootprint, findApproachTile, seatDirFromRot, isDiningSeat,
 } from './inventory.js';
-import { advanceQuestsByType, setQuestProgress, claimReward, listQuests } from './quests.js';
+import { advanceQuestsByType, setQuestProgress, claimReward, listQuests, advanceEventQuests, setEventQuestProgress, trackEventSet, listEventQuests, questDef } from './quests.js';
+import { checkinStatus, claimCheckin, CHECKIN_REWARDS } from './checkin.js';
+import { daysLeft } from './events.js';
 import { loadState, saveState, resetState, sanitizePlacedItemsForRoom } from './save.js';
 import { initAccountUI, isCloudSaveActive } from './account/accountUi.js';
 import {
@@ -501,10 +503,10 @@ function applyInteractionArrival(mover, pending, isPlayer = false, immediate = f
     if (!Array.isArray(state.stats.activitiesUsed)) state.stats.activitiesUsed = [];
     if (!state.stats.activitiesUsed.includes(kind)) state.stats.activitiesUsed.push(kind);
     if (placed.itemId === 'rooftop_sofa') {
-      onQuestProgress(advanceQuestsByType(state, 'sit', 1));
+      progressQuests('sit', 1);
     }
     if (state.player.room === 'restaurant' && (kind === 'sit' || kind === 'eat')) {
-      onQuestProgress(advanceQuestsByType(state, 'sit_restaurant', 1));
+      progressQuests('sit_restaurant', 1);
     }
     if (kind === 'toggle_light' && item?.lightSource) {
       const wasOn = roomRuntime.lightsOn !== false;
@@ -533,6 +535,7 @@ function applyInteractionArrival(mover, pending, isPlayer = false, immediate = f
     if (placed.itemId === 'wardrobe') {
       if (!immediate) openAvatarModal();
     }
+    if (isPlayer && /^arcade_(snake|breakout|drop)/.test(placed.itemId)) progressQuests('arcade_play');
     if (placed.itemId.startsWith('arcade_snake')) {
       openArcadeGame('noodle_snake');
     } else if (placed.itemId.startsWith('arcade_breakout')) {
@@ -551,6 +554,7 @@ function applyInteractionArrival(mover, pending, isPlayer = false, immediate = f
     if (placed.itemId === 'massage_bed') {
       showToast('Relaxing massage... feeling energized! ✨ (+Mood buff: Relaxed & Energized)');
       state.player.buff = { name: 'Relaxed & Energized', expiresAt: Date.now() + 120000 };
+      progressQuests('massage');
       saveState(window.localStorage, state);
     }
     persistPlayerPos();
@@ -584,8 +588,8 @@ function startLapSwimming() {
       headingDeep = true;
       state.stats.lapsCompleted = (state.stats.lapsCompleted || 0) + 1;
       showToast(`Completed lap ${state.stats.lapsCompleted}! 🏊`);
-      onQuestProgress(advanceQuestsByType(state, 'visit_gym', 1));
-      onQuestProgress(advanceQuestsByType(state, 'swim_laps', 1));
+      progressQuests('visit_gym', 1);
+      progressQuests('swim_laps', 1);
       saveState(window.localStorage, state);
       walkMoverTo(player, laneX, 32, room, blocked, { nearestFallback: false });
       lapSwimTimer = setTimeout(checkLap, 800);
@@ -751,6 +755,7 @@ function handleSalonPurchase() {
   if (player) player.look = state.player.look;
   updateLocalLook(state.player.look);
   showToast(`Antoine gave you a fresh new cut! ✨ (-20 coins)`);
+  progressQuests('salon_style');
   saveState(window.localStorage, state);
   closeSalonModal();
 }
@@ -977,6 +982,7 @@ function openNpcDialogue(npc) {
       audio.playSfx('chat');
       if (topic.id === 'checkin') {
         onQuestProgress(setQuestProgress(state, 'greet', Math.max(1, greetedNpcs.size)));
+        onQuestProgress(trackEventSet(state, 'greet', npc.id));
       }
       if (topic.id === 'gumball_trade') {
         closeNpcDialogue();
@@ -991,6 +997,7 @@ function openNpcDialogue(npc) {
     state.stats.greetedNpcs = Array.from(greetedNpcs);
     onQuestProgress(setQuestProgress(state, 'greet', greetedNpcs.size));
   }
+  onQuestProgress(trackEventSet(state, 'greet', npc.id));
 }
 
 function closeNpcDialogue() {
@@ -1112,8 +1119,9 @@ function switchRoom(roomId, toTile) {
   visitedRooms.add(roomId);
   state.stats.visitedRooms = Array.from(visitedRooms);
   onQuestProgress(setQuestProgress(state, 'visit', visitedRooms.size));
+  onQuestProgress(trackEventSet(state, 'visit', roomId));
   if (roomId === 'gym') {
-    onQuestProgress(advanceQuestsByType(state, 'visit_gym', 1));
+    progressQuests('visit_gym', 1);
   }
   updateRoomLabel();
   recenterCamera(player.x, player.y, ui.camera.zoom);
@@ -1201,6 +1209,7 @@ function handleChatSubmit(text) {
       state.stats.greetedNpcs = Array.from(greetedNpcs);
       onQuestProgress(setQuestProgress(state, 'greet', greetedNpcs.size));
     }
+    if (isGreeting) onQuestProgress(trackEventSet(state, 'greet', npc.id));
   } else if (isGreeting) {
     pushChatLine('Hotel', 'No one nearby heard you. Walk closer to a guest!');
   }
@@ -1212,9 +1221,10 @@ function onQuestProgress(newlyCompleteIds) {
   if (!newlyCompleteIds || newlyCompleteIds.length === 0) return;
   for (const id of newlyCompleteIds) {
     const reward = claimReward(state, id);
-    const def = QUESTS.find((q) => q.id === id);
-    if (reward) {
-      showToast(`Quest complete: ${def.title}! +${reward.coins} coins${reward.unlock ? ' • unlocked ' + getCatalogueItem(reward.unlock).name : ''}`);
+    const def = questDef(id);
+    if (reward && def) {
+      const tag = id.startsWith('event:') ? 'Event quest' : 'Quest';
+      showToast(`${tag} complete: ${def.title}! +${reward.coins} coins${reward.unlock ? ' • unlocked ' + getCatalogueItem(reward.unlock).name : ''}`);
       audio.playSfx('quest');
     }
   }
@@ -1223,7 +1233,19 @@ function onQuestProgress(newlyCompleteIds) {
   refreshShopTab();
 }
 
+/** Progress a counted goal: permanent quests and the running event's. */
+function progressQuests(type, amount = 1) {
+  onQuestProgress([...advanceQuestsByType(state, type, amount), ...advanceEventQuests(state, type, amount)]);
+}
+
+let lastGumballPulls = null;
 function onGumballCollectionChanged() {
+  const pulls = state.gumballs?.totalPulls || 0;
+  if (lastGumballPulls !== null && pulls > lastGumballPulls) {
+    onQuestProgress(advanceEventQuests(state, 'gumball_pulls', pulls - lastGumballPulls));
+  }
+  lastGumballPulls = pulls;
+  onQuestProgress(setQuestProgress(state, 'gumball_pulls', pulls));
   onQuestProgress(setQuestProgress(state, 'gumball_common_set', distinctOwnedInRarity(state, 'common')));
   onQuestProgress(setQuestProgress(state, 'gumball_uncommon_set', distinctOwnedInRarity(state, 'uncommon')));
   onQuestProgress(setQuestProgress(state, 'gumball_rare_set', distinctOwnedInRarity(state, 'rare')));
@@ -1806,10 +1828,10 @@ function cancelPlacing() {
 
 function recordPlacementProgress() {
   state.stats.placedCount = (state.stats.placedCount || 0) + 1;
-  onQuestProgress(advanceQuestsByType(state, 'place', 1));
+  progressQuests('place', 1);
   if (state.player.room === 'myroom') {
     state.stats.myRoomPlacedCount = (state.stats.myRoomPlacedCount || 0) + 1;
-    onQuestProgress(advanceQuestsByType(state, 'decorate_myroom', 1));
+    progressQuests('decorate_myroom', 1);
   }
 }
 
@@ -1828,7 +1850,7 @@ function confirmPlacement(tile) {
     if (!ui.placing.moveInstanceId) {
       recordPlacementProgress();
     } else if (state.player.room === 'myroom') {
-      onQuestProgress(advanceQuestsByType(state, 'decorate_myroom', 1));
+      progressQuests('decorate_myroom', 1);
     }
     cancelPlacing();
     refreshBagTab();
@@ -2388,15 +2410,101 @@ function refreshRoomTab() {
   });
 }
 
-function refreshQuestPanel() {
-  const el = document.getElementById('questList');
-  el.innerHTML = listQuests(state).map((q) => `
-    <div class="quest-item">
+function questItemHtml(q, extraClass = '') {
+  return `
+    <div class="quest-item ${extraClass}">
       <div class="quest-title">${q.title} ${q.complete ? '<span class="quest-complete">✓</span>' : ''}</div>
       <div>${q.description}</div>
-      <div class="quest-progress">${q.progress} / ${q.target}${q.reward.unlock ? ' • unlocks ' + getCatalogueItem(q.reward.unlock).name : ''}</div>
-    </div>`).join('');
+      <div class="quest-progress">${q.progress} / ${q.target} • ${q.reward.coins} coins${q.reward.unlock ? ' • unlocks ' + getCatalogueItem(q.reward.unlock).name : ''}</div>
+    </div>`;
 }
+
+function refreshQuestPanel() {
+  const el = document.getElementById('questList');
+  const banner = document.getElementById('eventBanner');
+  const ev = listEventQuests(state);
+  if (banner) {
+    if (ev) {
+      const left = daysLeft(ev);
+      banner.innerHTML = `<div class="event-name">${ev.emoji} ${ev.name}</div>
+        <div class="event-blurb">${ev.blurb}</div>
+        <div class="event-left">${left === 1 ? 'Last day!' : `${left} days left`}</div>
+        ${ev.quests.map((q) => questItemHtml(q, 'event-quest')).join('')}`;
+      banner.classList.remove('hidden');
+    } else {
+      banner.classList.add('hidden');
+    }
+  }
+  // unfinished quests first, so the list reads as a to-do list
+  const all = listQuests(state);
+  const ordered = [...all.filter((q) => !q.complete), ...all.filter((q) => q.complete)];
+  el.innerHTML = ordered.map((q) => questItemHtml(q)).join('');
+}
+
+// ---------- daily check-in ----------
+
+function refreshCheckinButton() {
+  const btn = document.getElementById('btnCheckin');
+  if (!btn) return;
+  const s = checkinStatus(state);
+  btn.classList.toggle('has-badge', s.available);
+  const label = s.available ? `Daily check-in: day ${s.day} reward ready (${s.coins} coins)` : `Daily check-in: done for today (streak ${s.streak})`;
+  btn.title = label;
+  btn.setAttribute('aria-label', label);
+}
+
+function refreshCheckinPanel() {
+  const s = checkinStatus(state);
+  const c = s.current;
+  const lead = document.getElementById('checkinLead');
+  const days = document.getElementById('checkinDays');
+  const claim = document.getElementById('btnCheckinClaim');
+  const stats = document.getElementById('checkinStats');
+  if (!lead || !days || !claim || !stats) return;
+  const doneThrough = s.available ? s.day - 1 : s.day; // days of this week already collected
+  if (s.available) {
+    lead.textContent = s.broken
+      ? `Welcome back! Your ${c.streak}-day streak ended, so you're starting again at day 1.`
+      : s.streak === 1 ? 'Check in every day to build a streak. Day 7 pays the most.' : `Day ${s.streak} in a row. Keep it going!`;
+  } else {
+    lead.textContent = `You've checked in today. Come back tomorrow for day ${(s.day % 7) + 1}.`;
+  }
+  days.innerHTML = CHECKIN_REWARDS.map((coins, i) => {
+    const n = i + 1;
+    const cls = n <= doneThrough ? 'done' : (s.available && n === s.day ? 'today' : '');
+    return `<li class="checkin-day ${cls}"><span class="checkin-n">Day ${n}</span><span class="checkin-coins">💰${coins}</span>${n <= doneThrough ? '<span class="checkin-tick" aria-label="collected">✓</span>' : ''}</li>`;
+  }).join('');
+  claim.disabled = !s.available;
+  claim.textContent = s.available ? `Check in (+${s.coins} coins)` : 'Checked in ✓';
+  stats.textContent = `Current streak: ${s.available ? c.streak && !s.broken ? c.streak : 0 : c.streak} days • Best: ${c.best} • Total days: ${c.totalDays}`;
+}
+
+function openCheckinPanel() {
+  refreshCheckinPanel();
+  const el = document.getElementById('checkinPanel');
+  if (el && el.classList.contains('hidden')) togglePanel('checkinPanel');
+}
+
+function handleCheckinClaim() {
+  const r = claimCheckin(state);
+  if (!r.ok) return;
+  audio.playSfx('coin');
+  showToast(`Day ${r.day} check-in: +${r.coins} coins! ${r.streak > 1 ? `🔥 ${r.streak}-day streak` : ''}`);
+  onQuestProgress(setQuestProgress(state, 'checkin_streak', r.streak));
+  onQuestProgress(setEventQuestProgress(state, 'checkin_streak', r.streak));
+  refreshCoins();
+  refreshCheckinPanel();
+  refreshCheckinButton();
+  saveState(window.localStorage, state);
+}
+
+document.getElementById('btnCheckin')?.addEventListener('click', () => {
+  refreshCheckinPanel();
+  togglePanel('checkinPanel');
+});
+document.getElementById('btnCheckinClaim')?.addEventListener('click', handleCheckinClaim);
+// A new day can start while the game is open.
+setInterval(refreshCheckinButton, 60000);
 
 // ---------- mute / audio / help / save ----------
 
@@ -2877,7 +2985,9 @@ function init() {
   audio.setRoomMood(state.player.room, ui.phase, currentRoomDef().floor || 1);
   refreshAudioUi();
   applyPlayerMinimized();
+  refreshCheckinButton();
   if (!window.localStorage.getItem(HELP_SEEN_KEY)) showHelp();
+  else if (checkinStatus(state).available) setTimeout(openCheckinPanel, 900);
   initMultiplayerUI({
     switchRoom: (roomId) => switchRoom(roomId),
     getPlayerRoom: () => state.player.room,
@@ -2894,6 +3004,7 @@ function init() {
     stopMusic: () => audio.stopLoop(),
     playSfx: (id) => audio.playSfx(id),
   });
+  lastGumballPulls = state.gumballs?.totalPulls || 0;
   initAccountUI({
     getState: () => state,
     getSaveVersion: () => SAVE_VERSION,

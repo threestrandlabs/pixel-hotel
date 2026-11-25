@@ -1,6 +1,7 @@
 // Pure quest tracking logic: progress, completion, coin rewards, catalogue unlocks.
 
 import { QUESTS } from './data.js';
+import { activeEvent } from './events.js';
 
 export function initQuestState() {
   const quests = {};
@@ -10,8 +11,76 @@ export function initQuestState() {
   return quests;
 }
 
-function getQuestDef(id) {
-  return QUESTS.find((q) => q.id === id) || null;
+function getQuestDef(id, now = new Date()) {
+  return QUESTS.find((q) => q.id === id) || (activeEvent(now)?.quests || []).find((q) => q.id === id) || null;
+}
+
+/** A quest definition by id: a permanent quest or one of the running event's. */
+export function questDef(id, now = new Date()) {
+  return getQuestDef(id, now);
+}
+
+function eventProgress(state, type, now, update) {
+  const ev = activeEvent(now);
+  if (!ev) return [];
+  const newlyComplete = [];
+  for (const def of ev.quests) {
+    if (def.type !== type) continue;
+    if (!state.quests[def.id]) state.quests[def.id] = { progress: 0, complete: false, claimed: false };
+    const q = state.quests[def.id];
+    if (q.complete) continue;
+    q.progress = Math.min(def.target, update(q.progress));
+    if (q.progress >= def.target) {
+      q.complete = true;
+      newlyComplete.push(def.id);
+    }
+  }
+  return newlyComplete;
+}
+
+/** Like advanceQuestsByType, for the running seasonal event's quests. */
+export function advanceEventQuests(state, type, amount = 1, now = new Date()) {
+  return eventProgress(state, type, now, (p) => p + amount);
+}
+
+/**
+ * Set-style goals (visit N floors, greet N guests) for the running event:
+ * counts distinct `key`s seen *during this event*, not the lifetime total.
+ */
+export function trackEventSet(state, type, key, now = new Date()) {
+  const ev = activeEvent(now);
+  if (!ev || key == null) return [];
+  const newlyComplete = [];
+  for (const def of ev.quests) {
+    if (def.type !== type) continue;
+    if (!state.quests[def.id]) state.quests[def.id] = { progress: 0, complete: false, claimed: false };
+    const q = state.quests[def.id];
+    if (q.complete) continue;
+    const seen = Array.isArray(q.seen) ? q.seen : [];
+    if (!seen.includes(key)) seen.push(key);
+    q.seen = seen;
+    q.progress = Math.min(def.target, seen.length);
+    if (q.progress >= def.target) {
+      q.complete = true;
+      newlyComplete.push(def.id);
+    }
+  }
+  return newlyComplete;
+}
+
+/** Like setQuestProgress, for the running seasonal event's quests (e.g. a streak length). */
+export function setEventQuestProgress(state, type, value, now = new Date()) {
+  return eventProgress(state, type, now, () => value);
+}
+
+/** The running event (or null) with each quest's current progress. */
+export function listEventQuests(state, now = new Date()) {
+  const ev = activeEvent(now);
+  if (!ev) return null;
+  return {
+    ...ev,
+    quests: ev.quests.map((def) => ({ ...def, progress: 0, complete: false, claimed: false, ...state.quests[def.id] })),
+  };
 }
 
 /**
@@ -57,8 +126,8 @@ export function setQuestProgress(state, type, value) {
  * Claim the reward for a completed-but-unclaimed quest: grants coins and
  * unlocks a catalogue item if any. Returns the reward or null if not claimable.
  */
-export function claimReward(state, questId) {
-  const def = getQuestDef(questId);
+export function claimReward(state, questId, now = new Date()) {
+  const def = getQuestDef(questId, now);
   const q = state.quests[questId];
   if (!def || !q || !q.complete || q.claimed) return null;
   q.claimed = true;

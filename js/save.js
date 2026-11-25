@@ -25,6 +25,7 @@ export function createDefaultState() {
     player: { room: 'lobby', x: ROOMS.lobby.spawn.x, y: ROOMS.lobby.spawn.y, dir: 'down', sitting: null, activity: null, outfit: 'normal', roomTier: 1, look: { ...DEFAULT_PLAYER_LOOK } },
     avatarCustomized: false,
     stats: { greetedNpcs: [], visitedRooms: ['lobby'], placedCount: 0, myRoomPlacedCount: 0, activitiesUsed: [] },
+    checkin: { lastDate: '', streak: 0, best: 0, totalDays: 0 },
     arcade: {
       dailyCoins: 0,
       lastRewardDate: '',

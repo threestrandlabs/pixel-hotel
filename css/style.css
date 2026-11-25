@@ -2213,3 +2213,76 @@ body.has-touch .sky-viewer-hint { display: none; }
   background: #f2b84b;
   border: 2px solid #0e0a1d;
 }
+
+/* Daily check-in (v0.14) */
+#btnCheckin { position: relative; }
+#btnCheckin.has-badge::after {
+  content: '';
+  position: absolute;
+  right: 3px;
+  top: 3px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #ff5a6a;
+  border: 2px solid #0e0a1d;
+}
+#checkinPanel {
+  top: 50%;
+  left: 50%;
+  right: auto;
+  transform: translate(-50%, -50%);
+  width: 460px;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100dvh - 32px);
+  z-index: 40;
+}
+.checkin-days {
+  list-style: none;
+  margin: 4px 0 12px;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+}
+.checkin-day {
+  position: relative;
+  background: #352a5c;
+  border: 2px solid #0e0a1d;
+  border-radius: 6px;
+  padding: 6px 2px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-variant-numeric: tabular-nums;
+}
+.checkin-day:last-child { background: #4a3466; }
+.checkin-n { font-size: 11px; color: var(--text-muted); }
+.checkin-coins { font-size: 12px; font-weight: 700; }
+.checkin-day.done { opacity: 0.6; }
+.checkin-day.today { border-color: #ffd27a; box-shadow: 0 0 0 2px rgba(255, 210, 122, 0.35); }
+.checkin-tick { position: absolute; top: -6px; right: -4px; background: #4fd67f; color: #0e0a1d; border-radius: 50%; width: 16px; height: 16px; font-size: 11px; line-height: 16px; font-weight: 800; }
+.checkin-claim { width: 100%; font-size: 14px; padding: 8px; }
+@media (max-width: 420px) {
+  .checkin-days { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+/* Seasonal event banner in the quest panel */
+.event-banner { margin: 8px 10px 4px; padding: 8px 10px; background: linear-gradient(135deg, #5a3a2a, #3a2a4a); border: 2px solid #0e0a1d; border-radius: 6px; }
+.event-banner.hidden { display: none; }
+.event-name { font-weight: 800; color: #ffd27a; font-size: 14px; }
+.event-blurb { font-size: 12px; color: var(--text-secondary); margin: 2px 0 4px; line-height: 1.4; }
+.event-left { font-size: 11px; font-weight: 700; color: #ffb38a; margin-bottom: 4px; }
+.event-banner .quest-item { background: rgba(14, 10, 29, 0.35); }
+.event-banner .quest-item {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  margin-top: 6px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+.event-banner .quest-title { font-size: 13px; }

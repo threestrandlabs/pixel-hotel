@@ -16,6 +16,7 @@
     <div id="weatherBadge" class="weather-badge" title="Current weather" aria-label="Current weather">☀️</div>
     <div id="topQuickButtons">
       <button id="btnMute" class="pixel-btn" title="Audio Mixer &amp; Settings" aria-label="Audio Mixer &amp; Settings">🎚️</button>
+      <button id="btnCheckin" class="pixel-btn" title="Daily check-in" aria-label="Daily check-in">🎁</button>
       <button id="btnAccount" class="pixel-btn" title="Sign in to save across devices" aria-label="Sign in to save across devices">👤</button>
       <button id="btnHelp" class="pixel-btn" title="Help (H)" aria-label="Help">❓</button>
     </div>
@@ -182,6 +183,7 @@
       <span id="questPanelTitle">Quests</span>
       <button class="panel-close" data-close="questPanel" aria-label="Close">✕</button>
     </div>
+    <div id="eventBanner" class="event-banner hidden"></div>
     <div id="questList"></div>
   </aside>
 
@@ -231,6 +233,19 @@
         </div>
         <div id="mpMemberList"></div>
       </div>
+    </div>
+  </aside>
+
+  <aside id="checkinPanel" class="panel hidden" role="dialog" aria-modal="true" aria-labelledby="checkinTitle">
+    <div class="panel-header">
+      <span id="checkinTitle">🎁 Daily Check-in</span>
+      <button class="panel-close" data-close="checkinPanel" aria-label="Close">✕</button>
+    </div>
+    <div class="account-body">
+      <p id="checkinLead" class="account-lead"></p>
+      <ol id="checkinDays" class="checkin-days" aria-label="This week's rewards"></ol>
+      <button id="btnCheckinClaim" class="pixel-btn checkin-claim">Check in</button>
+      <p id="checkinStats" class="mp-hint"></p>
     </div>
   </aside>
 

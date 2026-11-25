@@ -1996,6 +1996,14 @@ export const QUESTS = [
     target: 20,
     reward: { coins: 300, unlock: 'gumball_trophy' },
   },
+  // v0.14 quests
+  { id: 'quest_laps', title: 'Lap Swimmer', description: 'Swim 3 laps of the Olympic pool.', type: 'swim_laps', target: 3, reward: { coins: 60, unlock: null } },
+  { id: 'quest_regular', title: 'Regular Guest', description: 'Check in on 3 days in a row.', type: 'checkin_streak', target: 3, reward: { coins: 80, unlock: null } },
+  { id: 'quest_loyal', title: 'Loyal Guest', description: 'Check in on 7 days in a row.', type: 'checkin_streak', target: 7, reward: { coins: 200, unlock: null } },
+  { id: 'quest_style', title: 'Fresh Look', description: 'Get a new style at the Azure Salon.', type: 'salon_style', target: 1, reward: { coins: 40, unlock: null } },
+  { id: 'quest_spa', title: 'Spa Day', description: 'Unwind with a massage at the spa.', type: 'massage', target: 1, reward: { coins: 40, unlock: null } },
+  { id: 'quest_arcade', title: 'High Scorer', description: 'Play 3 arcade games.', type: 'arcade_play', target: 3, reward: { coins: 60, unlock: null } },
+  { id: 'quest_gumball_fan', title: 'Gumball Fan', description: 'Pull 10 gumballs from the capsule machine.', type: 'gumball_pulls', target: 10, reward: { coins: 80, unlock: null } },
 ];
 
 export const STARTING_COINS = 120;
