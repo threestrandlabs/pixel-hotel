@@ -53,7 +53,16 @@ export async function fetchDisplayNames(client, userIds) {
   return map;
 }
 
-/** Signs out of the multiplayer session only — never touches the single-player save. */
+/**
+ * Signs out of the multiplayer session only — never touches the single-player
+ * save. A real (email/Google) account stays signed in: it also carries the
+ * cloud save, which has its own Sign out button in the Account panel.
+ */
 export async function signOutMultiplayer(client) {
+  try {
+    const { data } = await client.auth.getSession();
+    const user = data && data.session && data.session.user;
+    if (user && user.is_anonymous === false) return;
+  } catch (e) { /* fall through to a normal sign-out */ }
   await client.auth.signOut();
 }

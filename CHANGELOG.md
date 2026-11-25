@@ -7,6 +7,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added — accounts and cross-device cloud save
+- 👤 Account panel: sign in with a one-time email link or Google. Optional; the
+  game stays fully offline for players who never sign in.
+- Cloud save (`player_saves` table, `put_player_save` RPC with revision checks):
+  syncs on load, after saves and on tab focus; asks which progress to keep when
+  two devices diverged, instead of overwriting. Device settings stay local.
+- Signing in from a browser that used anonymous multiplayer upgrades that
+  identity in place, keeping the friend code. Multiplayer "Disconnect" no
+  longer signs a real account out.
+- Reset warns that it also resets the cloud save when signed in.
+
 ### Changed — PixiJS rebuild and new pixel art
 - Rendering moved from six stacked 2D canvases to one PixiJS 8 scene (Vite + npm).
 - Footprint-box depth sorting: avatars and multi-tile furniture no longer pop

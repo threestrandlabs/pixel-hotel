@@ -2147,3 +2147,54 @@ body.has-touch .sky-viewer-hint { display: none; }
   .mp-spool { animation: none !important; }
   .mp-eq-bar { height: 55% !important; animation: none !important; }
 }
+
+/* Account & cloud save (v0.14) */
+.account-body { padding: 10px 12px 12px; overflow-y: auto; }
+.account-body p { margin: 0 0 8px; line-height: 1.45; }
+.account-lead { color: var(--text-secondary); font-size: 13px; }
+.account-label { display: block; font-size: 12px; font-weight: 600; color: var(--text-muted); margin-bottom: 4px; }
+.account-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 4px; }
+.account-row input {
+  flex: 1 1 160px;
+  min-width: 0;
+  font-family: inherit;
+  background: #1b1430;
+  color: #f4eeff;
+  border: 2px solid #0e0a1d;
+  border-radius: 4px;
+  padding: 6px 10px;
+  font-size: 14px;
+}
+.account-row input:focus-visible { outline: 2px solid #ffd27a; outline-offset: 1px; }
+.account-divider { display: flex; align-items: center; gap: 8px; margin: 10px 0; color: var(--text-muted); font-size: 12px; }
+.account-divider::before, .account-divider::after { content: ''; flex: 1; border-top: 2px solid #4a3a7a; }
+.account-google { width: 100%; }
+#syncConflictPanel {
+  top: 50%;
+  left: 50%;
+  right: auto;
+  transform: translate(-50%, -50%);
+  width: 440px;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100dvh - 32px);
+  z-index: 40;
+}
+.conflict-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.conflict-card { background: #352a5c; border: 2px solid #0e0a1d; border-radius: 6px; padding: 8px; display: flex; flex-direction: column; }
+.conflict-card h3 { margin: 0 0 6px; font-size: 13.5px; color: #ffd27a; }
+.conflict-card dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; margin: 0 0 8px; font-size: 12.5px; flex: 1; }
+.conflict-card dt { color: var(--text-muted); }
+.conflict-card dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+@media (max-width: 420px) { .conflict-cards { grid-template-columns: 1fr; } }
+#btnAccount { position: relative; }
+#btnAccount.account-signed-in::after {
+  content: '';
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #4fd67f;
+  border: 2px solid #0e0a1d;
+}

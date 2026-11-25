@@ -632,13 +632,31 @@ function isPlausibleState(data) {
   );
 }
 
+const saveListeners = new Set();
+let savesSuspended = false;
+
+/** Registers fn(state) to run after every successful save (cloud sync hook). Returns an unsubscribe fn. */
+export function onStateSaved(fn) {
+  saveListeners.add(fn);
+  return () => saveListeners.delete(fn);
+}
+
+/** While suspended, saveState is a no-op (used while a cloud save replaces this one and the page reloads). */
+export function setSavesSuspended(value) {
+  savesSuspended = !!value;
+}
+
 export function saveState(storage, state) {
+  if (savesSuspended) return false;
   try {
     storage.setItem(SAVE_KEY, JSON.stringify(state));
-    return true;
   } catch (e) {
     return false;
   }
+  for (const fn of saveListeners) {
+    try { fn(state); } catch (e) { /* a listener must never break saving */ }
+  }
+  return true;
 }
 
 /**
