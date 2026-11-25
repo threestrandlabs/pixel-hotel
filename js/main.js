@@ -1826,7 +1826,9 @@ function confirmPlacement(tile) {
     autoSave();
     if (state.player.room === 'myroom') publishOwnRoomSnapshot(state.rooms.myroom.placed);
   } else {
-    showToast(result.reason === 'furniture_overlap' ? "Can't place there — occupied." : "Can't place there.");
+    showToast(result.reason === 'furniture_overlap' ? "Can't place there — occupied."
+      : result.reason === 'needs_wall' ? 'This hangs on a wall: place it right against a back wall, facing into the room (R to rotate).'
+        : "Can't place there.");
   }
 }
 

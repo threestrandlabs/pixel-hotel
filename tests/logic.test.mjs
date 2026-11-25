@@ -2480,3 +2480,61 @@ test('v0.9.0 migration: v9 save migrates forward to v10, keeping existing player
 
 
 
+
+test('beds: one sleeper per column, all on the head-end row, drawn toward the foot', async () => {
+  const { lieOffset } = await import('../js/poses.js');
+  for (const rot of [0, 1, 2, 3]) {
+    const slots = interactionSlots({ instanceId: 'b', itemId: 'suite_bed', x: 4, y: 4, rot });
+    assert.equal(slots.length, 2, `rot ${rot}: a double bed sleeps two`);
+    const step = { down: [0, 1], up: [0, -1], right: [1, 0], left: [-1, 0] }[slots[0].dir];
+    const along = (s) => s.x * step[0] + s.y * step[1];
+    assert.equal(along(slots[0]), along(slots[1]), `rot ${rot}: both slots on the head-end row`);
+    const [ox, oy] = lieOffset('suite_bed', slots[0].dir);
+    assert.ok(ox * step[0] + oy * step[1] > 0.5, `rot ${rot}: body drawn toward the foot of the bed`);
+    // the two sleepers are nudged toward each other's side by the same amount
+    const a = lieOffset('suite_bed', slots[0].dir, 1);
+    const b = lieOffset('suite_bed', slots[0].dir, -1);
+    assert.ok(Math.hypot(a[0] - b[0], a[1] - b[1]) > 0.1, `rot ${rot}: pillow inset differs per side`);
+  }
+  assert.equal(interactionSlots({ instanceId: 'm', itemId: 'massage_bed', x: 1, y: 1, rot: 0 }).length, 1, 'one person per massage table');
+  assert.equal(interactionSlots({ instanceId: 'y', itemId: 'yoga_mat', x: 1, y: 1, rot: 0 }).length, 1, 'one person per yoga mat');
+  assert.deepEqual(lieOffset('sofa', 'down'), [0, 0]);
+});
+
+test('wall-mounted lights: only on a back wall, never floating', async () => {
+  const { isOnWall, canPlaceAt } = await import('../js/inventory.js');
+  const room = ROOMS.restaurant;
+  const sconce = getCatalogueItem('wall_sconce');
+  assert.equal(sconce.wallMount, true);
+  assert.equal(isOnWall(room, 1, 2, 1), true, 'west wall, facing into the room');
+  assert.equal(isOnWall(room, 2, 2, 1), false, 'one tile off the wall floats');
+  assert.equal(isOnWall(room, 1, 2, 0), false, 'facing along the wall');
+  assert.equal(isOnWall(room, 5, 1, 2), false, 'facing the wall');
+  const fakeRoom = { ...room, placed: [] };
+  assert.equal(canPlaceAt(fakeRoom, sconce, 4, 8, 0).reason, 'needs_wall');
+  // every seeded wall item on every floor hangs on a wall
+  for (const [roomId, list] of Object.entries(SEED_FURNITURE)) {
+    for (const p of list) {
+      const item = getCatalogueItem(p.itemId);
+      if (item?.wallMount) assert.ok(isOnWall(ROOMS[roomId], p.x, p.y, p.rot || 0), `${roomId}: ${p.itemId} at ${p.x},${p.y}`);
+    }
+  }
+});
+
+test('v15 migration: public floors get the fixed layout, player items are kept', () => {
+  const storage = makeFakeStorage();
+  const old = createDefaultState();
+  old.version = 14;
+  // an old save: sconces one tile off the wall, plus a player-added plant
+  old.rooms.restaurant.placed = old.rooms.restaurant.placed.map((p) => (p.itemId === 'wall_sconce' ? { ...p, x: 2, rot: 0 } : p));
+  old.rooms.restaurant.placed.push({ instanceId: 'mine-1', itemId: 'plant', x: 10, y: 10, rot: 0 });
+  old.rooms.myroom.placed.push({ instanceId: 'mine-2', itemId: 'plant', x: 3, y: 3, rot: 0 });
+  storage.setItem(SAVE_KEY, JSON.stringify(old));
+  const migrated = loadState(storage);
+  assert.equal(migrated.version, SAVE_VERSION);
+  const sconces = migrated.rooms.restaurant.placed.filter((p) => p.itemId === 'wall_sconce');
+  assert.equal(sconces.length, 4);
+  assert.ok(sconces.every((p) => p.x === 1 && p.rot === 1), 'sconces moved onto the west wall');
+  assert.ok(migrated.rooms.restaurant.placed.some((p) => p.instanceId === 'mine-1'), 'player item kept');
+  assert.ok(migrated.rooms.myroom.placed.some((p) => p.instanceId === 'mine-2'), 'My Room untouched');
+});

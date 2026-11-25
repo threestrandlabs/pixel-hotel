@@ -73,7 +73,17 @@ export function interactionSlots(placedItem) {
   if (item.seat || item.interaction === 'lie' || item.interaction === 'swim') {
     const kind = item.interaction || 'sit';
     const dir = seatDirFromRot(rot);
-    return cells.map((c, idx) => ({
+    let slotCells = cells;
+    if (kind === 'lie' || kind === 'spa_massage') {
+      // One body per column: you lie with your head at the head end, so only
+      // the head-end row holds slots (a 2x2 bed sleeps two side by side, a
+      // 1x2 mat or massage table one).
+      const [sx, sy] = { down: [0, 1], up: [0, -1], right: [1, 0], left: [-1, 0] }[dir];
+      const along = (c) => c.x * sx + c.y * sy;
+      const head = Math.min(...cells.map(along));
+      slotCells = cells.filter((c) => along(c) === head);
+    }
+    return slotCells.map((c, idx) => ({
       x: c.x,
       y: c.y,
       dir,
@@ -278,7 +288,23 @@ export function hasDoorArrivalRoute(room, placed = room.placed || []) {
  * @param {string|null} excludeInstanceId - ignore this placed instance (used while moving it)
  * @returns {{ok:boolean, reason?:string, cells?:Array}}
  */
+/**
+ * Wall-mounted items (sconces, signs) must hang on a back wall: row 1 facing
+ * out from the north wall (rot 0) or column 1 facing out from the west wall
+ * (rot 1), on a plain wall or window segment (never a door), and never on an
+ * open-air floor, which has glass railings instead of walls.
+ */
+export function isOnWall(room, x, y, rot = 0) {
+  if (!room || room.openEdges) return false;
+  const r = ((rot % 4) + 4) % 4;
+  const isWallTile = (t) => t === TILE.WALL || t === TILE.WINDOW;
+  if (r === 0) return y === 1 && isWallTile(room.grid[0]?.[x]) && room.grid[1]?.[x] !== TILE.VOID;
+  if (r === 1) return x === 1 && isWallTile(room.grid[y]?.[0]) && room.grid[y]?.[1] !== TILE.VOID;
+  return false;
+}
+
 export function canPlaceAt(room, item, x, y, rot, occupantTiles = [], excludeInstanceId = null) {
+  if (item.wallMount && !isOnWall(room, x, y, rot)) return { ok: false, reason: 'needs_wall' };
   const cells = footprintCells(x, y, item.footprint, rot);
   const itemWalkable = isFurnitureWalkable(item);
   for (const c of cells) {
@@ -301,6 +327,7 @@ export function canPlaceAt(room, item, x, y, rot, occupantTiles = [], excludeIns
       if (!other) continue;
       if (!!other.flat !== !!item.flat) continue; // rugs lie under furniture
       if (!!other.overhead !== !!item.overhead) continue; // overhead chandeliers hang above rugs
+      if (!!other.wallMount !== !!item.wallMount) continue; // a sconce can hang above a sofa
       const otherCells = footprintCells(p.x, p.y, other.footprint, p.rot);
       if (otherCells.some((oc) => oc.x === c.x && oc.y === c.y)) {
         return { ok: false, reason: 'furniture_overlap' };

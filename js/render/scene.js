@@ -15,7 +15,7 @@ import { buildCity, createSky } from './city.js';
 import { sortDrawables, furnitureBox, entityBox } from '../depthSort.js';
 import { LOOKS } from '../looks.js';
 import { faceFor, IRIS_SHAPES } from '../faces.js';
-import { poseFor, LIE_SURFACE } from '../poses.js';
+import { poseFor, LIE_SURFACE, lieOffset, lateralTowardCentre } from '../poses.js';
 import { validateAvatarLook, DEFAULT_PLAYER_LOOK } from '../avatar.js';
 
 TextureStyle.defaultOptions.scaleMode = 'nearest';
@@ -623,9 +623,20 @@ export function renderRoom(opts) {
       entityNodes.set(e.id, rec);
     }
     updateEntityNode(rec.node, e, now, furnitureById);
-    const { sx, sy } = tileToScreen(e.x, e.y, originX, originY);
+    let ex = e.x; let ey = e.y;
+    if (e.lying) {
+      const bed = furnitureById.get(e.sittingInstanceId || e.sitting);
+      let toward = 0;
+      if (bed?.footprint) {
+        // footprints here are already rotated (see main.js)
+        toward = lateralTowardCentre(e.dir, e.x, e.y, bed.x + (bed.footprint.w - 1) / 2, bed.y + (bed.footprint.h - 1) / 2);
+      }
+      const [ox, oy] = lieOffset(bed?.itemId, e.dir, toward);
+      ex += ox; ey += oy;
+    }
+    const { sx, sy } = tileToScreen(ex, ey, originX, originY);
     rec.node.position.set(Math.round(sx), Math.round(sy));
-    const d = { id: `e:${e.id}`, node: rec.node, box: entityBox(e.x, e.y), entity: e };
+    const d = { id: `e:${e.id}`, node: rec.node, box: entityBox(ex, ey), entity: e };
     if (e.sitting && e.sittingInstanceId) seatOf.set(e.sittingInstanceId, d);
     drawables.push(d);
 

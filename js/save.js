@@ -3,7 +3,7 @@
 
 import { SAVE_VERSION, STARTING_COINS, ROOMS, SEED_FURNITURE, TILE, getCatalogueItem } from './data.js';
 import { initQuestState } from './quests.js';
-import { footprintCells, isFurnitureWalkable, isTileBlockedByFurniture } from './inventory.js';
+import { isOnWall, footprintCells, isFurnitureWalkable, isTileBlockedByFurniture } from './inventory.js';
 import { DEFAULT_PLAYER_LOOK } from './avatar.js';
 
 export const SAVE_KEY = 'pixelHotel.save.v1'; // gitleaks:allow
@@ -78,6 +78,7 @@ export function sanitizePlacedItemsForRoom(roomDef, placedList, returnedInventor
   const solidOccupied = new Set();
   const flatOccupied = new Set();
   const overheadOccupied = new Set();
+  const wallOccupied = new Set();
 
   for (const p of placedList) {
     if (!p || typeof p !== 'object') continue;
@@ -86,6 +87,13 @@ export function sanitizePlacedItemsForRoom(roomDef, placedList, returnedInventor
     const rot = ((p.rot || 0) % 4 + 4) % 4;
     const cells = footprintCells(p.x, p.y, item.footprint, rot);
     const walkable = isFurnitureWalkable(item);
+    if (item.wallMount && !isOnWall(roomDef, p.x, p.y, rot)) {
+      // never leave a sconce or sign floating mid-room
+      if (p.instanceId && !String(p.instanceId).startsWith('seed-')) {
+        returnedInventory.push({ instanceId: p.instanceId, itemId: p.itemId });
+      }
+      continue;
+    }
 
     // Check bounds, walls, doors, windows, VOID, and door landing clearance
     const validBounds = cells.every((c) => {
@@ -102,7 +110,7 @@ export function sanitizePlacedItemsForRoom(roomDef, placedList, returnedInventor
       continue;
     }
 
-    const occSet = item.overhead ? overheadOccupied : (item.flat ? flatOccupied : solidOccupied);
+    const occSet = item.wallMount ? wallOccupied : item.overhead ? overheadOccupied : (item.flat ? flatOccupied : solidOccupied);
     const overlaps = cells.some((c) => occSet.has(`${c.x},${c.y}`));
     if (!overlaps) {
       for (const c of cells) occSet.add(`${c.x},${c.y}`);
@@ -111,7 +119,14 @@ export function sanitizePlacedItemsForRoom(roomDef, placedList, returnedInventor
     }
 
     // Relocate overlapping item to nearest free tile in the room, or return to inventory
+    // (wall-mounted items are never moved onto the open floor).
     let relocated = false;
+    if (item.wallMount) {
+      if (p.instanceId && !String(p.instanceId).startsWith('seed-')) {
+        returnedInventory.push({ instanceId: p.instanceId, itemId: p.itemId });
+      }
+      continue;
+    }
     for (let y = 1; y < roomDef.height && !relocated; y++) {
       for (let x = 1; x < roomDef.width && !relocated; x++) {
         const tryCells = footprintCells(x, y, item.footprint, rot);
@@ -135,6 +150,10 @@ export function sanitizePlacedItemsForRoom(roomDef, placedList, returnedInventor
   }
   return accepted;
 }
+
+// Seed-list lengths at save v14, so the v15 migration knows which seed
+// entries are new (see MIGRATIONS[14]).
+const SEED_LEN_V14 = { lobby: 38, cafe: 18, restaurant: 55, gym: 21, pool: 137, arcade: 18, library: 33, myroom: 7, garden: 17, rooftop: 23 };
 
 // Migration chain: each entry upgrades a save from its key version to key+1.
 const MIGRATIONS = {
@@ -605,6 +624,52 @@ const MIGRATIONS = {
         backgroundDetail: 'auto',
       },
     };
+  },
+  // v0.14: hotel layout fixes (wall sconces and signs on walls, the salon,
+  // pool ladders and starting blocks) and the daily check-in streak.
+  // Seed furniture is identified by list index (seed-<room>-<i>), so:
+  //   - a seed piece still placed takes its current seed position/item;
+  //   - a seed piece the player picked up stays picked up;
+  //   - seed entries appended after v14 are added.
+  // Anything the player added stays where it still fits, else goes back to
+  // their inventory.
+  14: (old) => {
+    const def = createDefaultState();
+    const returnedInventory = Array.isArray(old.inventory) ? [...old.inventory] : [];
+    const owned = new Set(returnedInventory.map((i) => i && i.instanceId));
+    const rooms = { ...def.rooms };
+    if (old.rooms && typeof old.rooms === 'object') {
+      for (const [roomId, rState] of Object.entries(old.rooms)) {
+        const roomDef = ROOMS[roomId];
+        if (!roomDef || !rState || !Array.isArray(rState.placed)) continue;
+        if (roomId === 'myroom') {
+          rooms[roomId] = { ...rooms[roomId], ...rState };
+          continue;
+        }
+        const seedById = new Map(def.rooms[roomId].placed.map((p) => [p.instanceId, p]));
+        const present = new Set();
+        const next = [];
+        for (const p of rState.placed) {
+          const id = String(p.instanceId || '');
+          if (id.startsWith('seed-')) {
+            const seed = seedById.get(id);
+            if (seed) { next.push({ ...seed }); present.add(id); }
+            continue; // a seed slot that no longer exists is dropped
+          }
+          next.push(p);
+        }
+        const v14Len = SEED_LEN_V14[roomId] ?? Infinity;
+        def.rooms[roomId].placed.forEach((seed, i) => {
+          if (i >= v14Len && !present.has(seed.instanceId) && !owned.has(seed.instanceId)) next.push({ ...seed });
+        });
+        rooms[roomId] = {
+          ...rooms[roomId],
+          ...rState,
+          placed: sanitizePlacedItemsForRoom(roomDef, next, returnedInventory),
+        };
+      }
+    }
+    return { ...def, ...old, version: 15, rooms, inventory: returnedInventory };
   },
 };
 

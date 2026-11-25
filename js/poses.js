@@ -21,6 +21,41 @@ const EMOTE_POSES = {
 // Height (px) of the surface someone lies on, per catalogue item.
 export const LIE_SURFACE = { suite_bed: 24, massage_bed: 21, yoga_mat: 1 };
 
+// Where a lying body is drawn relative to its slot tile (the head-end tile),
+// measured on screen: the lie sprite's bulk sits ahead of and slightly to one
+// side of its pivot.
+//   along:   tiles toward the feet (bed: head on the pillow; 1x2: centred)
+//   lateral: sprite bias toward body-space +a, plus `inset` toward the item's
+//            centre line so each sleeper on a double bed lies on their pillow
+const LIE_ALONG = { suite_bed: 1.0, massage_bed: 0.95, yoga_mat: 0.95 };
+const LIE_LATERAL_BIAS = 0.3;
+const LIE_INSET = { suite_bed: 0.1 };
+
+const DIR_STEP = { down: [0, 1], up: [0, -1], right: [1, 0], left: [-1, 0] };
+// body-space +a for each facing (see FACING in art/sprites/character.js)
+const DIR_LATERAL = { down: [1, 0], right: [0, -1], up: [-1, 0], left: [0, 1] };
+
+/**
+ * Tile offset [dx, dy] at which to draw someone lying on `itemId` facing
+ * `dir`. `towardCentre` is -1/0/1: which lateral way the item's centre line
+ * lies from this slot, measured along body-space +a.
+ */
+export function lieOffset(itemId, dir, towardCentre = 0) {
+  if (!(itemId in LIE_ALONG)) return [0, 0];
+  const along = LIE_ALONG[itemId];
+  const lateral = LIE_LATERAL_BIAS + (LIE_INSET[itemId] || 0) * towardCentre;
+  const [fx, fy] = DIR_STEP[dir] || DIR_STEP.down;
+  const [lx, ly] = DIR_LATERAL[dir] || DIR_LATERAL.down;
+  return [fx * along + lx * lateral, fy * along + ly * lateral];
+}
+
+/** Which lateral way (-1/0/1, along body-space +a) an item's centre is from slot (sx, sy). */
+export function lateralTowardCentre(dir, slotX, slotY, centreX, centreY) {
+  const [lx, ly] = DIR_LATERAL[dir] || DIR_LATERAL.down;
+  const d = (centreX - slotX) * lx + (centreY - slotY) * ly;
+  return Math.abs(d) < 0.01 ? 0 : Math.sign(d);
+}
+
 const frame = (now, ms, count) => Math.floor(now / ms) % count;
 
 /**

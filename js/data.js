@@ -8,7 +8,7 @@ export const TILE = {
   VOID: 4,
 };
 
-export const SAVE_VERSION = 14;
+export const SAVE_VERSION = 15;
 
 // Grid is row-major: grid[y][x]
 export function makeRoomGrid(w, h, { doors = [], windows = [], cutouts = [] } = {}) {
@@ -471,12 +471,14 @@ export const CATALOGUE = [
     category: 'lighting',
     footprint: { w: 1, h: 1 },
     seat: false,
+    wallMount: true, // hangs on a back wall; see isOnWall() in inventory.js
+    walkable: true,
     lightSource: true,
     interaction: 'toggle_light',
     emissive: { color: '#ff6ad5', radius: 64, intensity: 0.45 },
     spriteKey: 'neonSign',
     unlockRequires: 'quest_place',
-    description: 'A glowing art-deco electric neon sign mounted on an iron frame.',
+    description: 'A glowing art-deco electric neon sign that hangs on a wall.',
   },
   {
     id: 'jukebox',
@@ -552,7 +554,7 @@ export const CATALOGUE = [
   { id: 'wine_wall', name: 'Grand Wine Wall', price: 80, category: 'decor', footprint: { w: 2, h: 1 }, seat: false, interaction: 'use', spriteKey: 'wineWall', unlockRequires: null, description: 'Floor-to-ceiling temperature-controlled mahogany wine bottle cellar display.' },
   { id: 'maitre_d_podium', name: "Maître D' Podium", price: 45, category: 'decor', footprint: { w: 1, h: 1 }, seat: false, interaction: 'use', spriteKey: 'maitreDPodium', unlockRequires: null, description: "Polished brass and walnut reservation lectern for the restaurant host." },
   { id: 'grand_piano', name: 'Concert Grand Piano', price: 120, category: 'entertainment', footprint: { w: 2, h: 2 }, seat: true, sitDir: 1, interaction: 'piano', seatOffsets: [{ dx: 0, dy: 0 }], spriteKey: 'grandPiano', unlockRequires: null, description: 'Lacquer ebony grand piano played by resident artists during dinner service.' },
-  { id: 'wall_sconce', name: 'Brass Wall Sconce', price: 25, category: 'lighting', footprint: { w: 1, h: 1 }, seat: false, lightSource: true, interaction: 'toggle_light', emissive: { color: '#ffd27d', radius: 52, intensity: 0.42 }, spriteKey: 'wallSconce', unlockRequires: null, description: 'Vintage fluted brass sconce with glowing warm amber shade.' },
+  { id: 'wall_sconce', name: 'Brass Wall Sconce', price: 25, category: 'lighting', footprint: { w: 1, h: 1 }, seat: false, wallMount: true, walkable: true, lightSource: true, interaction: 'toggle_light', emissive: { color: '#ffd27d', radius: 52, intensity: 0.42 }, spriteKey: 'wallSconce', unlockRequires: null, description: 'Vintage fluted brass sconce with glowing warm amber shade.' },
   { id: 'kitchen_range', name: 'Commercial Stove Range', price: 95, category: 'kitchen_food', footprint: { w: 2, h: 1 }, seat: false, interaction: 'cook_stove', emissive: { color: '#ff6622', radius: 50, intensity: 0.4 }, spriteKey: 'kitchenRange', unlockRequires: null, description: 'Stainless heavy-duty gas range with simmering pots, pans and glowing blue flames.' },
   { id: 'kitchen_prep_table', name: 'Stainless Prep Counter', price: 60, category: 'kitchen_food', footprint: { w: 2, h: 1 }, seat: false, interaction: 'use', spriteKey: 'kitchenPrepTable', unlockRequires: null, description: 'Commercial food-prep station with butcher block, chef knife and mise en place bowls.' },
   { id: 'kitchen_sink', name: 'Commercial Double Sink', price: 65, category: 'kitchen_food', footprint: { w: 2, h: 1 }, seat: false, interaction: 'use', spriteKey: 'kitchenSink', unlockRequires: null, description: 'Deep stainless pot-washing basin with tall goose-neck spray faucet.' },
@@ -710,10 +712,11 @@ export const SEED_FURNITURE = {
     { itemId: 'chandelier', x: 27, y: 15, rot: 0 },
     { itemId: 'chandelier', x: 15, y: 25, rot: 0 },
     { itemId: 'chandelier', x: 27, y: 25, rot: 0 },
-    { itemId: 'wall_sconce', x: 2, y: 6, rot: 0 },
-    { itemId: 'wall_sconce', x: 2, y: 14, rot: 0 },
-    { itemId: 'wall_sconce', x: 2, y: 22, rot: 0 },
-    { itemId: 'wall_sconce', x: 2, y: 30, rot: 0 },
+    // on the west wall, between the windows at rows 6 / 14 / 22 / 30
+    { itemId: 'wall_sconce', x: 1, y: 2, rot: 1 },
+    { itemId: 'wall_sconce', x: 1, y: 10, rot: 1 },
+    { itemId: 'wall_sconce', x: 1, y: 18, rot: 1 },
+    { itemId: 'wall_sconce', x: 1, y: 26, rot: 1 },
     // Decor & planters
     { itemId: 'plant', x: 2, y: 2, rot: 0 },
     { itemId: 'plant', x: 32, y: 2, rot: 0 },
@@ -927,7 +930,7 @@ export const SEED_FURNITURE = {
     { itemId: 'karaoke_machine', x: 16, y: 2, rot: 0 },
     { itemId: 'jukebox', x: 18, y: 2, rot: 0 },
     { itemId: 'capsule_dispenser', x: 2, y: 6, rot: 0 },
-    { itemId: 'neon_sign', x: 17, y: 6, rot: 0 },
+    { itemId: 'neon_sign', x: 17, y: 1, rot: 0 }, // on the north wall above the karaoke machine and jukebox
     { itemId: 'arcade_leaderboard', x: 6, y: 6, rot: 0 },
     { itemId: 'pool_table', x: 9, y: 9, rot: 0 },
     { itemId: 'bar_counter', x: 14, y: 11, rot: 0 },

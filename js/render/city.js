@@ -121,7 +121,9 @@ function makeClouds(w, h) {
 
 // ---------- street level ----------
 
-const FACADES = [0x8fa3c4, 0xc98f6e, 0xd8cdb8, 0x7c8796, 0xb7a6d2, 0x9bb5a5, 0xd6b27e];
+// None of these may be close to the hotel's own stone (0xd8c3a5): a tall
+// neighbour in the hotel's colour reads as a misaligned piece of the tower.
+const FACADES = [0x8fa3c4, 0xc98f6e, 0xa9b8c9, 0x7c8796, 0xb7a6d2, 0x9bb5a5, 0xc7a3a0];
 
 function roadLines(start, end, size) {
   // road centre lines on one axis: just outside the tower, then every BLOCK
@@ -206,7 +208,8 @@ export function buildCity(room, originX, originY, tex) {
       const behind = isBehind(box, towerBox);
       // anything in front of the tower stays well below the current floor so it
       // never crowds the room; buildings behind it may tower over it
-      const maxH = behind ? 420 : Math.max(0, Math.round(G * 0.55) - 20);
+      const frontMaxH = Math.max(0, Math.round(G * 0.55) - 20);
+      const maxH = behind ? 420 : frontMaxH;
       if (maxH < 30 || r() < 0.22) {
         quad(ground, [gp(u0, v0), gp(u1, v0), gp(u1, v1), gp(u0, v1)], 0x7fae5c);
         for (let k = 0; k < 6; k++) {
@@ -225,7 +228,11 @@ export function buildCity(room, originX, originY, tex) {
         const bv0 = alongU ? v0 : v0 + (v1 - v0) * a0 + 0.2;
         const bv1 = alongU ? v1 : v0 + (v1 - v0) * a1 - 0.2;
         const storeys = 2 + Math.floor(r() * (behind ? 12 : 6));
-        const height = Math.min(maxH, storeys * 28);
+        // A tall building behind the tower whose silhouette reaches the
+        // tower's left or right outline would appear to grow out of the
+        // hotel's corner; keep those below the floor like the ones in front.
+        const capped = behind && hugsTowerOutline(bu0, bv0, bu1, bv1, W, H) ? frontMaxH : maxH;
+        const height = Math.min(capped, storeys * 28);
         if (height < 28) continue;
         addBuilding(bu0, bv0, bu1, bv1, height, FACADES[Math.floor(r() * FACADES.length)]);
       }
@@ -389,6 +396,17 @@ export function buildCity(room, originX, originY, tex) {
   node.addChild(haze);
 
   return { node, update, haze, objectCount: () => statics.length, carCount: () => cars.length };
+}
+
+/**
+ * True when a building's screen silhouette (iso x is proportional to u - v)
+ * reaches within `margin` tiles of the tower's left (-H) or right (W) outline.
+ */
+export function hugsTowerOutline(u0, v0, u1, v1, W, H, margin = 2) {
+  const left = u0 - v1;
+  const right = u1 - v0;
+  const near = (edge) => left - margin < edge && right + margin > edge;
+  return near(W) || near(-H);
 }
 
 function overlapX(a, b) {

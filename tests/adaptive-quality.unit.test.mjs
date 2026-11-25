@@ -116,7 +116,7 @@ test('save migration: migrates v13 save to v14 with backgroundDetail default aut
   storage.setItem(SAVE_KEY, JSON.stringify(oldV13));
 
   const migrated = loadState(storage);
-  assert.equal(migrated.version, 14);
+  assert.equal(migrated.version, SAVE_VERSION);
   assert.equal(migrated.settings.backgroundDetail, 'auto');
 });
 
