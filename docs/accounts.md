@@ -12,8 +12,10 @@ device. Adding an email or Google upgrades the guest in place.
 ## One-time setup (Supabase dashboard)
 
 1. **SQL Editor:** paste and run
-   [`supabase/migrations/0005_v014_cloud_save.sql`](../supabase/migrations/0005_v014_cloud_save.sql).
-   It is idempotent, so running it again is safe.
+   [`supabase/migrations/0005_v014_cloud_save.sql`](../supabase/migrations/0005_v014_cloud_save.sql),
+   then [`0006_v014_social.sql`](../supabase/migrations/0006_v014_social.sql)
+   (friends, showcase and trades). Both are idempotent, so running them again
+   is safe.
 2. **Authentication → Sign In / Providers**
    - **Email:** enabled. Magic links need no password.
    - **Google:** enabled. Create an OAuth client in Google Cloud Console

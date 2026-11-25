@@ -159,6 +159,37 @@ Setup (Supabase dashboard + the migration) is in
 [`docs/accounts.md`](docs/accounts.md); the schema is
 [`supabase/migrations/0005_v014_cloud_save.sql`](supabase/migrations/0005_v014_cloud_save.sql).
 
+## Daily check-in, quests and events
+
+- **🎁 Daily check-in:** claim once a day for 20 → 100 coins over a 7-day
+  cycle. Missing a day restarts the streak; your best streak is kept.
+- **Quests** cover every floor, including laps, streaks, the salon, the spa,
+  the arcade and the gumball machine. Quests pay out as soon as they're done.
+- **Seasonal events** run all year (❄️ Winter Lights, 🌸 Spring Bloom,
+  ☀️ Summer Splash, 🍂 Autumn Harvest), each with limited-time quests shown at
+  the top of the quest panel.
+
+## Friends, showcase and trades (online, optional)
+
+In the 🌐 Multiplayer panel, once connected:
+
+- **Friends:** add someone with their friend code; see who's online, visit
+  their room, and trade once they've added you back.
+- **Showcase:** tick "List my room in the showcase" to let everyone browse
+  and like your shared room (off by default). Sort by Top or New.
+- **Trades:** offer one of your gumballs for one of a mutual friend's. Your
+  gumball is set aside while the offer is open and comes back if it's
+  declined or cancelled.
+
+Server setup: run [`supabase/migrations/0006_v014_social.sql`](supabase/migrations/0006_v014_social.sql)
+in the Supabase SQL Editor (after 0001–0005).
+
+## Install as an app
+
+Open **👤 → Install app** (Chrome, Edge, Android), or on iPhone/iPad use
+**Share → Add to Home Screen**. The installed app opens full-screen and
+always loads the latest version (there's no offline cache).
+
 ## Project structure
 
 ```

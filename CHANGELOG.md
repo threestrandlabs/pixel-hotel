@@ -5,6 +5,45 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 
+## [0.14.0] — 2026-11-25
+
+### Added — daily check-in, quests and seasonal events
+- 🎁 Daily check-in: 7-day reward cycle (20 → 100 coins), streak / best /
+  total days, opens once on the first visit of the day.
+- Seven new quests (laps, 3- and 7-day streaks, salon, spa, arcade,
+  gumball pulls) and seasonal events (Winter Lights, Spring Bloom, Summer
+  Splash, Autumn Harvest) with limited-time quests in the quest panel.
+
+### Added — friends, showcase and trades (needs `supabase/migrations/0006`)
+- Friends list with online status (add by friend code; mutual when both
+  add each other), Visit and Trade buttons.
+- Opt-in room showcase: browse shared rooms by Top or New, like, visit.
+- Gumball trades between mutual friends, settled exactly once per side
+  through a ledger in the save (set aside, swapped, or refunded).
+
+### Added — install as an app
+- Web app manifest, pixel-art icons and an "Install app" option in the
+  Account panel (Share → Add to Home Screen hint on iPhone/iPad). No
+  service worker, so the game always loads the latest version.
+
+### Added — the Azure salon
+- Styling stations (wall mirror, chair, trolley), wash basins, hood
+  dryers, product display, manicure station and a waiting lounge.
+
+### Fixed
+- Sleeping on the suite bed: head on the pillow, one sleeper per side
+  (and one person per massage table / yoga mat).
+- Pool: swimming pose while moving, the laps / free-roam prompt only when
+  stepping in, ladders that face and reach over the water, starting
+  blocks facing the pool, calmer water.
+- Wall sconces and neon signs hang on walls (and can only be placed on
+  one); light glows lie on the floor instead of washing over furniture.
+- Arcade cabinets are played from the front, never from inside/behind.
+- City buildings no longer line up with the tower's corners or share its
+  colour, so they can't read as a misaligned hotel wall.
+- Save v15 migration moves existing saves to the fixed layouts and keeps
+  everything the player placed or picked up.
+
 ## [Unreleased]
 
 ### Added — accounts and cross-device cloud save

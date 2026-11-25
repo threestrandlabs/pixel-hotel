@@ -2486,6 +2486,14 @@ function openCheckinPanel() {
   if (el && el.classList.contains('hidden')) togglePanel('checkinPanel');
 }
 
+/** On load: offer today's check-in, unless something else (e.g. the "which save?" dialog) is open. */
+function autoOfferCheckin() {
+  if (!checkinStatus(state).available) return;
+  const busy = Array.from(document.querySelectorAll('.panel, .modal')).some((el) => !el.classList.contains('hidden') && el.id !== 'checkinPanel');
+  if (busy) return; // the 🎁 button keeps its red dot
+  openCheckinPanel();
+}
+
 function handleCheckinClaim() {
   const r = claimCheckin(state);
   if (!r.ok) return;
@@ -2988,7 +2996,7 @@ function init() {
   applyPlayerMinimized();
   refreshCheckinButton();
   if (!window.localStorage.getItem(HELP_SEEN_KEY)) showHelp();
-  else if (checkinStatus(state).available) setTimeout(openCheckinPanel, 900);
+  else setTimeout(autoOfferCheckin, 900);
   initMultiplayerUI({
     switchRoom: (roomId) => switchRoom(roomId),
     getPlayerRoom: () => state.player.room,
@@ -3134,7 +3142,7 @@ window.__pixelHotel = Object.assign(window.__pixelHotel || {}, {
     refreshAudioUi();
   }, // 0.5 noon, 0 midnight
   getSaveVersion: () => SAVE_VERSION,
-  getVersion: () => '0.13.1',
+  getVersion: () => '0.14.0',
   getBackgroundDetail: () => state.settings.backgroundDetail || 'auto',
   setBackgroundDetail: (mode) => {
     state.settings.backgroundDetail = mode;
