@@ -142,18 +142,37 @@ export default function build(add) {
     }
   });
 
+  // Pool-edge ladder on the deck tile beside the water; its front (+v) faces
+  // the pool. Each grab rail stands up from the deck, curves over the coping
+  // and comes down on the water side; chrome treads sit just over the water.
   item(add, 'pool_ladder', [1, 1], 50, (k) => {
-    for (const u of [0.25, 0.75]) {
-      k.custom(u - 0.05, 0.05, u + 0.05, 0.6, 0, 44, ({ P, cv }) => {
-        for (let t = 0; t <= 1; t += 0.01) {
-          const a = t * Math.PI;
-          const [x, y] = P(u, 0.1 + Math.sin(a) * 0.35, 4 + (1 - Math.cos(a)) * 18);
-          cv.set(Math.round(x), Math.round(y), M.chrome[1]);
-          cv.set(Math.round(x) + 1, Math.round(y), M.chrome[3]);
+    const path = (t) => {
+      // 0..0.45: straight up from the deck; 0.45..0.8: arc over; 0.8..1: down
+      if (t < 0.45) return [0.6, (t / 0.45) * 30];
+      if (t < 0.8) {
+        const a = ((t - 0.45) / 0.35) * Math.PI;
+        return [0.6 + 0.2 * (1 - Math.cos(a)), 30 + Math.sin(a) * 6];
+      }
+      return [1.0 + (t - 0.8) * 0.3, 30 - ((t - 0.8) / 0.2) * 26];
+    };
+    for (const u of [0.22, 0.78]) {
+      k.custom(u - 0.06, 0.5, u + 0.06, 1.08, 0, 38, ({ P, cv }) => {
+        let prev = null;
+        for (let t = 0; t <= 1.0001; t += 0.004) {
+          const [v, z] = path(t);
+          const [x, y] = P(u, v, z);
+          const px = Math.round(x); const py = Math.round(y);
+          if (prev && prev[0] === px && prev[1] === py) continue;
+          prev = [px, py];
+          cv.set(px, py, M.chrome[1]);
+          cv.set(px + 1, py, M.chrome[3]);
         }
+        const [bx, by] = P(u, 0.6, 0); // base flange
+        cv.set(Math.round(bx) - 1, Math.round(by), M.chrome[2]);
+        cv.set(Math.round(bx) + 2, Math.round(by), M.chrome[2]);
       });
     }
-    for (const z of [4, 12]) k.box(0.25, 0.08, 0.75, 0.18, z, z + 2, M.chrome, { edge: false });
+    for (const z of [2, 9]) k.box(0.25, 0.98, 0.75, 1.06, z, z + 2, M.chrome, { edge: false });
   });
 
   item(add, 'telescope', [1, 1], 70, (k) => {

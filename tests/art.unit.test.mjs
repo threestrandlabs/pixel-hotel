@@ -193,6 +193,7 @@ import { POSES } from '../art/sprites/character.js';
 test('poses: activities, lying, swimming and emotes pick the right pose', () => {
   assert.equal(poseFor({ walking: true }, 0).pose, 'walk0');
   assert.deepEqual(poseFor({ action: 'swim' }, 0), { pose: 'swim0', face: 'swim' });
+  assert.equal(poseFor({ action: 'swim', walking: true }, 0).face, 'swim', 'moving through water is swimming, not walking');
   assert.deepEqual(poseFor({ lying: true, sitting: 'bed1', action: 'lie' }, 0), { pose: 'lie0', face: 'lie' });
   assert.equal(poseFor({ action: 'treadmill' }, 0).pose, 'run0');
   assert.equal(poseFor({ action: 'exercise_bike', sitting: 'b' }, 0).face, 'sit');

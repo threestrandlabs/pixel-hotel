@@ -120,9 +120,11 @@ export async function initRenderer(host, beforeEl) {
   layers.overhead = new Container();
   layers.frontRails = new Container();
   layers.glow = new Container();
+  // Light pools sit on the floor, under walls, furniture and people: drawn on
+  // top they washed out the lower half of every lit cabinet and anyone near it.
   layers.world.addChild(
-    layers.city, layers.floor, layers.floorDecor, layers.overlay, layers.walls,
-    layers.sorted, layers.frontRails, layers.overhead, layers.glow,
+    layers.city, layers.floor, layers.floorDecor, layers.overlay, layers.glow, layers.walls,
+    layers.sorted, layers.frontRails, layers.overhead,
   );
   layers.labels = new Container();
   app.stage.addChild(sky.node, layers.world, layers.labels);
@@ -600,7 +602,7 @@ export function renderRoom(opts) {
   }
   if (poolItems.length) {
     const pool = buildPool(poolItems, originX, originY);
-    const f = Math.floor(now / 160) % WATER_FRAMES;
+    const f = Math.floor(now / 320) % WATER_FRAMES; // slow, calm swell
     for (const w of pool.water) w.texture = tex[`water/frame${f}_${w.parity}`];
     flats.unshift(pool.node);
   } else if (poolRec) {
@@ -774,7 +776,14 @@ function updateGlows(placedFurniture, originX, originY, lightsOn, strength) {
         layers.glow.addChild(sp);
         glowNodes.set(id, sp);
       }
-      const { sx, sy } = tileToScreen(f.x + f.footprint.w / 2 - 0.5, f.y + f.footprint.h / 2 - 0.5, originX, originY);
+      let gx = f.x + f.footprint.w / 2 - 0.5;
+      let gy = f.y + f.footprint.h / 2 - 0.5;
+      if (item.wallMount) {
+        // a wall light pools on the floor in front of the wall
+        const r4 = ((f.rot || 0) % 4 + 4) % 4;
+        if (r4 === 0) gy += 0.6; else if (r4 === 1) gx += 0.6;
+      }
+      const { sx, sy } = tileToScreen(gx, gy, originX, originY);
       sp.position.set(Math.round(sx), Math.round(sy));
       sp.scale.set((em.radius || 60) / 48);
       sp.tint = hexNum(em.color, 0xffe29a);

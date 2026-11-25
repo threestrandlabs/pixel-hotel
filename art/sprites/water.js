@@ -26,14 +26,15 @@ function waterFrame(f, pu, pv) {
     const [lu, lv] = uv(x, y);
     const u = lu + pu;
     const v = lv + pv;
-    const a = Math.sin(TAU * (1.5 * u + 0.5 * v) + ph);
-    const b = Math.sin(TAU * (0.5 * u - 1.5 * v) - ph);
-    const c = Math.sin(TAU * (u + 1.5 * v) + 2 * ph) * Math.cos(TAU * 0.5 * (u - v));
-    const n = a + b + 0.5 * c;
-    // caustic web: thin bright ridges where the waves meet
-    if (Math.abs(a - b) < 0.16 && n > 0.3) cv.set(x, y, w[0]);
-    else if (Math.abs(a - b) < 0.34 && n > 0) cv.set(x, y, w[1]);
-    else if (n < -1.6) cv.set(x, y, w[3]);
+    // Calm water: two broad, slow swells. Only their crests and troughs are
+    // tinted, a step from the base colour, so the surface reads as gently
+    // moving rather than sparkling.
+    const a = Math.sin(TAU * (u + 0.5 * v) + ph);
+    const b = Math.sin(TAU * (0.5 * u - v) - ph);
+    const n = a + b;
+    if (n > 1.6) cv.set(x, y, mix(w[2], w[1], 0.55));
+    else if (n > 1.2) cv.set(x, y, mix(w[2], w[1], 0.28));
+    else if (n < -1.6) cv.set(x, y, mix(w[2], w[3], 0.35));
   }
   return cv;
 }

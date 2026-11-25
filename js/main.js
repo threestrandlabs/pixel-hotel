@@ -840,6 +840,8 @@ function tryWalkPlayer(tx, ty) {
   ui.walkTarget = nextWalkTarget(ui.walkTarget, result, tx, ty, performance.now());
   if (!result.ok) return false;
   if (result.ignoredDuplicate) return true;
+  // steering yourself ends automatic lap swimming
+  if (lapSwimTimer) { clearTimeout(lapSwimTimer); lapSwimTimer = null; }
   player.sitting = null;
   player.lying = false;
   player.activity = isWaterTile(room, roomRuntime, tx, ty) ? { kind: 'swim', loop: true, startedAt: performance.now() } : null;
@@ -1624,10 +1626,18 @@ function handleCanvasTap(cx, cy) {
   const room = currentRoomDef();
   const roomRuntime = currentRoomRuntime();
   const furn = interactiveFurnitureAt(room, roomRuntime, tile.x, tile.y);
-  if (furn && tryInteractPlayer(furn)) {
+  // Already swimming: clicking more water just swims there. The laps / free
+  // roam prompt is only for stepping into the pool from the deck.
+  const swimOnward = furn?.itemId === 'pool_water' && isPlayerInWater();
+  if (furn && !swimOnward && tryInteractPlayer(furn)) {
     return;
   }
   tryWalkPlayer(tile.x, tile.y);
+}
+
+function isPlayerInWater() {
+  if (player.activity?.kind === 'swim') return true;
+  return isWaterTile(currentRoomDef(), currentRoomRuntime(), player.x, player.y);
 }
 
 canvas.addEventListener('mousemove', (evt) => {

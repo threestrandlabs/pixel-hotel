@@ -135,6 +135,15 @@ export function isDiningSeat(placedOrRoom, placedSeat, slotTile = null) {
  * Resolves either a direct occupyable slot (for seats/beds/treadmills/pools) or a safe
  * unblocked adjacent approach tile facing a solid interactive item (counters, tables, games).
  */
+// Machines you operate from their front (screens, controls, doors). Using one
+// from behind would put you inside or behind the cabinet, so the back side is
+// never an approach tile and the sides are only a last resort.
+export const FRONT_OPERATED = new Set([
+  'arcade_snake_1', 'arcade_snake_2', 'arcade_breakout_1', 'arcade_breakout_2', 'arcade_drop_1', 'arcade_drop_2',
+  'arcade_leaderboard', 'mini_arcade', 'jukebox', 'karaoke_machine', 'capsule_dispenser', 'water_cooler',
+  'computer_desk', 'kitchen_range', 'wardrobe',
+]);
+
 export function findApproachTile(room, placedItem, isBlocked, fromPos, occupants = [], reservations = []) {
   const item = getCatalogueItem(placedItem.itemId);
   if (!item) return null;
@@ -226,9 +235,12 @@ export function findApproachTile(room, placedItem, isBlocked, fromPos, occupants
     { dx: -1, dy: 0, faceDir: 'right', side: 'left' },
   ];
 
+  const frontOnly = FRONT_OPERATED.has(placedItem.itemId);
+  const backSide = oppositeDir(frontDir);
   const seen = new Set();
   for (const fc of fCells) {
     for (const d of deltas) {
+      if (frontOnly && d.side === backSide) continue;
       const ax = fc.x + d.dx;
       const ay = fc.y + d.dy;
       const k = `${ax},${ay}`;
@@ -239,7 +251,7 @@ export function findApproachTile(room, placedItem, isBlocked, fromPos, occupants
       if ((ax !== fromPos.x || ay !== fromPos.y) && isBlocked(ax, ay)) continue;
       const path = findPath(room.width, room.height, isBlocked, fromPos, { x: ax, y: ay });
       if (path) {
-        const isFront = d.side === frontDir ? 0 : 1;
+        const isFront = d.side === frontDir ? 0 : (frontOnly ? 20 : 1);
         candidates.push({
           x: ax,
           y: ay,

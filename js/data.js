@@ -758,9 +758,9 @@ export const SEED_FURNITURE = {
     // Standard Olympic-style lap pool (50m x 25m ratio = 24 x 12 tiles, 4 lanes)
     // Starting blocks with lane numbers 1-4 (rot 0..3)
     { itemId: 'starting_block', x: 7, y: 9, rot: 0 },
-    { itemId: 'starting_block', x: 10, y: 9, rot: 1 },
-    { itemId: 'starting_block', x: 13, y: 9, rot: 2 },
-    { itemId: 'starting_block', x: 16, y: 9, rot: 3 },
+    { itemId: 'starting_block', x: 10, y: 9, rot: 0 },
+    { itemId: 'starting_block', x: 13, y: 9, rot: 0 },
+    { itemId: 'starting_block', x: 16, y: 9, rot: 0 }, // all four face the water
 
     // 12x6 grid of 2x2 blocks = 24 tiles long (y=10..33) by 12 tiles wide (x=6..17)
     { itemId: 'pool_water', x: 6, y: 10, rot: 0 },
@@ -848,10 +848,11 @@ export const SEED_FURNITURE = {
     { itemId: 'pool_water', x: 16, y: 32, rot: 0 },
 
     // Chrome pool exit ladders at deck edge
-    { itemId: 'pool_ladder', x: 5, y: 10, rot: 0 },
-    { itemId: 'pool_ladder', x: 18, y: 10, rot: 0 },
-    { itemId: 'pool_ladder', x: 5, y: 32, rot: 0 },
-    { itemId: 'pool_ladder', x: 18, y: 32, rot: 0 },
+    // ladders face the water: left deck faces right (rot 1), right deck faces left (rot 3)
+    { itemId: 'pool_ladder', x: 5, y: 10, rot: 1 },
+    { itemId: 'pool_ladder', x: 18, y: 10, rot: 3 },
+    { itemId: 'pool_ladder', x: 5, y: 32, rot: 1 },
+    { itemId: 'pool_ladder', x: 18, y: 32, rot: 3 },
 
     // West deck loungers & umbrellas
     { itemId: 'pool_lounger', x: 3, y: 11, rot: 0 },

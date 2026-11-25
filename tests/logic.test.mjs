@@ -2051,14 +2051,19 @@ test('v0.8.9-spa: Olympic pool 50m x 25m ratio, changing cubicles, and enclosed 
   assert.equal(maxX - minX + 1, 12, 'pool width is 12 tiles (25m scale)');
   assert.equal(maxY - minY + 1, 24, 'pool length is 24 tiles (50m scale, 2:1 ratio)');
 
-  // Starting blocks 1-4 with distinct rotation/lane numbers
+  // Starting blocks: one per lane, all facing the water
   const blocks = placed.filter((p) => p.itemId === 'starting_block');
   assert.equal(blocks.length, 4);
-  assert.deepEqual(blocks.map((b) => b.rot).sort(), [0, 1, 2, 3]);
+  assert.ok(blocks.every((b) => (b.rot || 0) === 0 && b.y === minY - 1), 'blocks on the north deck, facing the pool');
 
-  // Pool exit ladders
+  // Pool exit ladders, each on the deck beside the water and facing it
   const ladders = placed.filter((p) => p.itemId === 'pool_ladder');
   assert.equal(ladders.length, 4);
+  for (const l of ladders) {
+    if (l.x === minX - 1) assert.equal(l.rot, 1, 'left-deck ladder faces right, into the pool');
+    else if (l.x === maxX + 1) assert.equal(l.rot, 3, 'right-deck ladder faces left, into the pool');
+    else assert.fail(`ladder at ${l.x},${l.y} is not beside the water`);
+  }
 
   // Changing room cubicles and louvered door
   const cubicles = placed.filter((p) => p.itemId === 'changing_cubicle');
@@ -2537,4 +2542,18 @@ test('v15 migration: public floors get the fixed layout, player items are kept',
   assert.ok(sconces.every((p) => p.x === 1 && p.rot === 1), 'sconces moved onto the west wall');
   assert.ok(migrated.rooms.restaurant.placed.some((p) => p.instanceId === 'mine-1'), 'player item kept');
   assert.ok(migrated.rooms.myroom.placed.some((p) => p.instanceId === 'mine-2'), 'My Room untouched');
+});
+
+test('arcade cabinets are played from the front, never from behind', async () => {
+  const { findApproachTile } = await import('../js/inventory.js');
+  const room = { ...ROOMS.arcade, placed: [] };
+  const cab = { instanceId: 'c', itemId: 'arcade_snake_1', x: 6, y: 3, rot: 0 };
+  room.placed = [cab];
+  const open = () => false;
+  // standing right behind it (closest tile is the back), the player still walks round to the front
+  const a = findApproachTile(room, cab, open, { x: 6, y: 1 });
+  assert.ok(a, 'reachable');
+  assert.notDeepEqual(a.tile, { x: 6, y: 2 }, 'never the tile behind the cabinet');
+  assert.deepEqual(a.tile, { x: 6, y: 4 }, 'the front tile');
+  assert.equal(a.dir, 'up', 'facing the screen');
 });

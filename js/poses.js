@@ -64,9 +64,10 @@ const frame = (now, ms, count) => Math.floor(now / ms) % count;
  * @returns {{pose: string, face: 'stand'|'sit'|'lie'|'swim'}}
  */
 export function poseFor(e, now = 0) {
-  if (e.walking) return { pose: `walk${frame(now, 140, 4)}`, face: 'stand' };
   const act = e.action || null;
-  if (act === 'swim') return { pose: `swim${frame(now, 240, 4)}`, face: 'swim' };
+  // in the water you swim, whether moving or treading water
+  if (act === 'swim') return { pose: `swim${frame(now, e.walking ? 180 : 240, 4)}`, face: 'swim' };
+  if (e.walking) return { pose: `walk${frame(now, 140, 4)}`, face: 'stand' };
   if (e.lying) return { pose: 'lie0', face: 'lie' };
   if (act === 'treadmill') return { pose: `run${frame(now, 110, 4)}`, face: 'stand' };
   if (act === 'exercise_bike') return { pose: `pedal${frame(now, 260, 2)}`, face: 'sit' };
