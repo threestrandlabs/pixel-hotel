@@ -244,6 +244,92 @@ export default function build(add) {
     k.box(0.35, 0.85, 0.65, 0.95, 4, 8, M.chrome, { edge: false });
   });
 
+  // ---- salon ----
+  // Styling mirror that hangs on a back wall: gilt frame, glass with a soft
+  // diagonal sheen, a little vanity shelf with products and a light bar.
+  item(add, 'salon_mirror', [1, 1], 84, (k) => {
+    k.box(0.12, 0.0, 0.88, 0.05, 32, 78, M.gold, { front: (d) => {
+      d.rect(0.17, 0.83, 36, 74, '#cfe6ee');
+      d.rect(0.17, 0.83, 36, 39, '#b7d5df');
+      for (let i = 0; i < 3; i++) d.rect(0.26 + i * 0.05, 0.29 + i * 0.05, 52 + i * 4, 70 - i * 2, '#eef8fb');
+    } });
+    k.box(0.2, 0.0, 0.8, 0.04, 78, 81, M.porcelain, { edge: false }); // light bar
+    k.box(0.1, 0.0, 0.9, 0.2, 28, 31, M.walnut); // vanity shelf
+    const bottles = [[0.2, M.sakura, 7], [0.32, M.azure, 5], [0.62, M.gold, 8], [0.74, M.lavender, 6]];
+    for (const [u, mat, h] of bottles) k.box(u, 0.06, u + 0.07, 0.14, 31, 31 + h, mat, { edge: false });
+  });
+
+  // Rolling stylist trolley: three drawers, a hairdryer and a comb on top.
+  item(add, 'salon_trolley', [1, 1], 36, (k) => {
+    for (const [u, v] of [[0.3, 0.35], [0.7, 0.35], [0.3, 0.65], [0.7, 0.65]]) k.cyl(u, v, 0.04, 0, 3, M.chrome);
+    k.box(0.25, 0.3, 0.75, 0.7, 3, 26, M.dark, { front: (d) => {
+      for (const z of [8, 15, 22]) { d.rect(0.3, 0.7, z - 1, z, M.dark[0]); d.rect(0.46, 0.54, z + 1, z + 2, M.chrome[1]); }
+    } });
+    k.box(0.3, 0.36, 0.52, 0.5, 26, 30, M.sakura); // hairdryer body
+    k.box(0.46, 0.4, 0.62, 0.46, 26, 29, M.dark, { edge: false }); // nozzle
+    k.box(0.55, 0.56, 0.72, 0.6, 26, 27, M.porcelain, { edge: false }); // comb
+  });
+
+  // Shampoo station: porcelain basin against the wall, a reclined chair in
+  // front of it facing the room.
+  item(add, 'wash_basin', [1, 1], 48, (k) => {
+    k.box(0.32, 0.04, 0.68, 0.24, 0, 20, M.porcelain);
+    k.box(0.18, 0.0, 0.82, 0.36, 20, 28, M.porcelain, { top: M.porcelain[1] });
+    k.box(0.26, 0.06, 0.74, 0.3, 27, 28, M.slate, { edge: false }); // bowl
+    k.box(0.47, 0.0, 0.53, 0.07, 28, 37, M.chrome, { edge: false }); // tap
+    k.box(0.44, 0.04, 0.56, 0.12, 35, 37, M.chrome, { edge: false });
+    k.box(0.25, 0.45, 0.75, 0.9, 0, 12, M.dark);
+    k.box(0.2, 0.46, 0.8, 0.96, 12, 18, M.dark, { lit: 0 });
+    k.custom(0.2, 0.3, 0.8, 0.5, 18, 30, ({ P, cv }) => {
+      cv.poly([P(0.22, 0.5, 18), P(0.78, 0.5, 18), P(0.78, 0.36, 29), P(0.22, 0.36, 29)], M.dark[1]);
+    });
+    for (const u of [0.2, 0.8]) k.box(u - 0.04, 0.5, u + 0.04, 0.9, 18, 22, M.chrome, { edge: false });
+  });
+
+  // Hood dryer: padded chair with a dome dryer on a stand behind it.
+  item(add, 'hood_dryer', [1, 1], 66, (k) => {
+    k.cyl(0.5, 0.6, 0.26, 0, 3, M.chrome);
+    k.cyl(0.5, 0.6, 0.06, 3, 12, M.chrome);
+    k.box(0.2, 0.32, 0.8, 0.88, 12, 18, M.lavender, { lit: 0 });
+    k.box(0.2, 0.22, 0.8, 0.34, 18, 40, M.lavender);
+    k.box(0.47, 0.06, 0.53, 0.14, 0, 60, M.chrome, { edge: false }); // stand
+    k.box(0.47, 0.1, 0.53, 0.42, 57, 60, M.chrome, { edge: false }); // arm
+    k.cyl(0.5, 0.4, 0.22, 44, 58, M.porcelain, { top: M.porcelain[1] }); // dome
+    k.box(0.32, 0.6, 0.68, 0.66, 44, 46, M.sakura, { edge: false }); // rim trim
+  });
+
+  // Retail display: open walnut shelving lined with colourful products.
+  item(add, 'product_shelf', [2, 1], 60, (k) => {
+    k.box(0.05, 0.1, 1.95, 0.2, 0, 52, M.walnut);
+    k.box(0.05, 0.1, 0.12, 0.85, 0, 52, M.walnut);
+    k.box(1.88, 0.1, 1.95, 0.85, 0, 52, M.walnut);
+    const mats = [M.sakura, M.azure, M.gold, M.leaf, M.lavender, M.porcelain, M.terracotta];
+    for (const [si, z] of [2, 16, 30, 44].entries()) {
+      k.box(0.12, 0.2, 1.88, 0.85, z - 2, z, M.walnut, { edge: false });
+      if (z >= 44) continue;
+      for (let i = 0; i < 7; i++) {
+        const u = 0.2 + i * 0.24;
+        const h = 6 + ((i + si) % 3) * 2;
+        k.box(u, 0.4, u + 0.12, 0.58, z, z + h, mats[(i + si * 2) % mats.length], { edge: false });
+      }
+    }
+    k.box(0.4, 0.1, 1.6, 0.16, 52, 58, M.sakura, { front: (d) => d.rect(0.5, 1.5, 54, 56, M.linen[0]) });
+  });
+
+  // Manicure station: pink-topped table with drawers, polish rack, hand
+  // cushion and a task lamp.
+  item(add, 'nail_station', [2, 1], 44, (k) => {
+    k.box(0.08, 0.15, 1.92, 0.85, 0, 20, M.porcelain, { front: (d) => {
+      for (const u of [0.25, 0.85, 1.45]) d.rect(u, u + 0.3, 9, 11, M.porcelain[3]);
+    } });
+    k.box(0.05, 0.1, 1.95, 0.9, 20, 23, M.sakura, { lit: 0 });
+    k.box(0.85, 0.45, 1.15, 0.75, 23, 25, M.linen, { edge: false }); // hand cushion
+    const polish = [M.red, M.sakura, M.purple, M.gold, M.azure, M.leaf];
+    polish.forEach((mat, i) => k.box(0.15 + i * 0.09, 0.15, 0.21 + i * 0.09, 0.24, 23, 28, mat, { edge: false }));
+    k.box(1.62, 0.2, 1.68, 0.26, 23, 40, M.chrome, { edge: false });
+    k.cyl(1.58, 0.42, 0.1, 38, 42, M.chrome);
+  });
+
   item(add, 'massage_bed', [1, 2], 40, (k) => {
     for (const [u, v] of [[0.2, 0.2], [0.8, 0.2], [0.2, 1.8], [0.8, 1.8]]) k.box(u - 0.04, v - 0.04, u + 0.04, v + 0.04, 0, 16, M.walnut, { edge: false });
     k.box(0.12, 0.1, 0.88, 1.9, 16, 22, M.linen, { lit: 0, front: (d) => d.rect(0.12, 0.88, 12, 16, M.linen[2]) });

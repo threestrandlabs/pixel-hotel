@@ -472,7 +472,6 @@ export const CATALOGUE = [
     footprint: { w: 1, h: 1 },
     seat: false,
     wallMount: true, // hangs on a back wall; see isOnWall() in inventory.js
-    walkable: true,
     lightSource: true,
     interaction: 'toggle_light',
     emissive: { color: '#ff6ad5', radius: 64, intensity: 0.45 },
@@ -554,7 +553,7 @@ export const CATALOGUE = [
   { id: 'wine_wall', name: 'Grand Wine Wall', price: 80, category: 'decor', footprint: { w: 2, h: 1 }, seat: false, interaction: 'use', spriteKey: 'wineWall', unlockRequires: null, description: 'Floor-to-ceiling temperature-controlled mahogany wine bottle cellar display.' },
   { id: 'maitre_d_podium', name: "Maître D' Podium", price: 45, category: 'decor', footprint: { w: 1, h: 1 }, seat: false, interaction: 'use', spriteKey: 'maitreDPodium', unlockRequires: null, description: "Polished brass and walnut reservation lectern for the restaurant host." },
   { id: 'grand_piano', name: 'Concert Grand Piano', price: 120, category: 'entertainment', footprint: { w: 2, h: 2 }, seat: true, sitDir: 1, interaction: 'piano', seatOffsets: [{ dx: 0, dy: 0 }], spriteKey: 'grandPiano', unlockRequires: null, description: 'Lacquer ebony grand piano played by resident artists during dinner service.' },
-  { id: 'wall_sconce', name: 'Brass Wall Sconce', price: 25, category: 'lighting', footprint: { w: 1, h: 1 }, seat: false, wallMount: true, walkable: true, lightSource: true, interaction: 'toggle_light', emissive: { color: '#ffd27d', radius: 52, intensity: 0.42 }, spriteKey: 'wallSconce', unlockRequires: null, description: 'Vintage fluted brass sconce with glowing warm amber shade.' },
+  { id: 'wall_sconce', name: 'Brass Wall Sconce', price: 25, category: 'lighting', footprint: { w: 1, h: 1 }, seat: false, wallMount: true, lightSource: true, interaction: 'toggle_light', emissive: { color: '#ffd27d', radius: 52, intensity: 0.42 }, spriteKey: 'wallSconce', unlockRequires: null, description: 'Vintage fluted brass sconce with glowing warm amber shade.' },
   { id: 'kitchen_range', name: 'Commercial Stove Range', price: 95, category: 'kitchen_food', footprint: { w: 2, h: 1 }, seat: false, interaction: 'cook_stove', emissive: { color: '#ff6622', radius: 50, intensity: 0.4 }, spriteKey: 'kitchenRange', unlockRequires: null, description: 'Stainless heavy-duty gas range with simmering pots, pans and glowing blue flames.' },
   { id: 'kitchen_prep_table', name: 'Stainless Prep Counter', price: 60, category: 'kitchen_food', footprint: { w: 2, h: 1 }, seat: false, interaction: 'use', spriteKey: 'kitchenPrepTable', unlockRequires: null, description: 'Commercial food-prep station with butcher block, chef knife and mise en place bowls.' },
   { id: 'kitchen_sink', name: 'Commercial Double Sink', price: 65, category: 'kitchen_food', footprint: { w: 2, h: 1 }, seat: false, interaction: 'use', spriteKey: 'kitchenSink', unlockRequires: null, description: 'Deep stainless pot-washing basin with tall goose-neck spray faucet.' },
@@ -569,6 +568,12 @@ export const CATALOGUE = [
   { id: 'changing_room_door', name: 'Changing Room Louvered Door', price: 45, category: 'outdoor_pool', footprint: { w: 1, h: 1 }, seat: false, interaction: 'swimsuit_change', spriteKey: 'changingRoomDoor', unlockRequires: null, description: 'Louvered cedar door to the private changing cubicles. Use to change into or out of your swimsuit.' },
   { id: 'salon_chair', name: 'Salon Styling Chair', price: 55, category: 'seating', footprint: { w: 1, h: 1 }, seat: true, sitDir: 2, interaction: 'salon_styling', seatOffsets: [{ dx: 0, dy: 0 }], spriteKey: 'salonChair', unlockRequires: null, description: 'Hydraulic barber and salon chair for haircuts and styling consultations.' },
   { id: 'massage_bed', name: 'Spa Massage Bed', price: 70, category: 'seating', footprint: { w: 1, h: 2 }, seat: true, sitDir: 0, interaction: 'spa_massage', seatOffsets: [{ dx: 0, dy: 0 }, { dx: 0, dy: 1 }], spriteKey: 'massageBed', unlockRequires: null, description: 'Padded treatment table draped in white linens with lavender aromatherapy.' },
+  { id: 'salon_mirror', name: 'Salon Styling Mirror', price: 40, category: 'decor', footprint: { w: 1, h: 1 }, seat: false, wallMount: true, spriteKey: 'salonMirror', unlockRequires: null, description: 'Gilt-framed styling mirror with a light bar and a vanity shelf of products. Hangs on a wall.' },
+  { id: 'salon_trolley', name: 'Stylist Trolley', price: 20, category: 'decor', footprint: { w: 1, h: 1 }, seat: false, spriteKey: 'salonTrolley', unlockRequires: null, description: 'Rolling three-drawer trolley with a hairdryer and comb on top.' },
+  { id: 'wash_basin', name: 'Shampoo Basin', price: 50, category: 'seating', footprint: { w: 1, h: 1 }, seat: true, interaction: 'sit', seatOffsets: [{ dx: 0, dy: 0 }], spriteKey: 'washBasin', unlockRequires: null, description: 'Reclined shampoo chair with a porcelain wash basin behind it.' },
+  { id: 'hood_dryer', name: 'Hood Dryer Chair', price: 45, category: 'seating', footprint: { w: 1, h: 1 }, seat: true, interaction: 'sit', seatOffsets: [{ dx: 0, dy: 0 }], spriteKey: 'hoodDryer', unlockRequires: null, description: 'Padded salon chair with a retro dome hair dryer on a stand.' },
+  { id: 'product_shelf', name: 'Salon Product Display', price: 45, category: 'decor', footprint: { w: 2, h: 1 }, seat: false, spriteKey: 'productShelf', unlockRequires: null, description: 'Open walnut retail shelving lined with shampoos, oils and styling products.' },
+  { id: 'nail_station', name: 'Manicure Station', price: 50, category: 'tables', footprint: { w: 2, h: 1 }, seat: false, interaction: 'use', spriteKey: 'nailStation', unlockRequires: null, description: 'Pink-topped manicure table with a polish rack, hand cushion and task lamp.' },
   { id: 'spa_partition', name: 'Spa Glass Partition Wall', price: 40, category: 'decor', footprint: { w: 1, h: 1 }, seat: false, spriteKey: 'spaPartition', unlockRequires: null, description: 'Frosted aquamarine glass partition wall with brushed bronze framing.' },
   { id: 'spa_door', name: 'Spa Glass Door Archway', price: 50, category: 'decor', footprint: { w: 2, h: 1 }, seat: false, walkable: true, spriteKey: 'spaDoor', unlockRequires: null, description: 'Arched glass doorway portal leading from the pool deck into the Azure Spa.' },
   { id: 'pergola', name: 'Garden Pergola with Vines', price: 85, category: 'plants', footprint: { w: 2, h: 2 }, seat: false, flat: true, walkable: true, spriteKey: 'pergola', unlockRequires: null, description: 'Timber garden arbor draped with flowering wisteria and jasmine vines.' },
@@ -899,10 +904,12 @@ export const SEED_FURNITURE = {
 
     // Inside the Enclosed Azure Spa Room (x=26..42)
     // Salon styling station (chairs + vanity mirrors)
-    { itemId: 'salon_chair', x: 30, y: 6, rot: 0 },
-    { itemId: 'salon_chair', x: 34, y: 6, rot: 0 },
-    { itemId: 'gym_mirror', x: 30, y: 5, rot: 0 },
-    { itemId: 'gym_mirror', x: 34, y: 5, rot: 0 },
+    // Salon: styling stations on the north wall, each a chair facing a
+    // wall mirror (more stations, trolleys and basins are appended below)
+    { itemId: 'salon_chair', x: 28, y: 2, rot: 2 },
+    { itemId: 'salon_chair', x: 30, y: 2, rot: 2 },
+    { itemId: 'salon_mirror', x: 28, y: 1, rot: 0 },
+    { itemId: 'salon_mirror', x: 30, y: 1, rot: 0 },
 
     // Salon waiting lounge
     { itemId: 'rug', x: 28, y: 10, rot: 0 },
@@ -920,6 +927,31 @@ export const SEED_FURNITURE = {
     { itemId: 'plant', x: 26, y: 20, rot: 0 },
     { itemId: 'sauna_cabin', x: 38, y: 22, rot: 0 },
     { itemId: 'towel_rack', x: 41, y: 22, rot: 0 },
+    // ---- v0.14 salon fit-out (appended: seed ids are list positions) ----
+    { itemId: 'salon_mirror', x: 32, y: 1, rot: 0 },
+    { itemId: 'salon_chair', x: 32, y: 2, rot: 2 },
+    { itemId: 'salon_trolley', x: 29, y: 2, rot: 0 },
+    { itemId: 'salon_trolley', x: 31, y: 2, rot: 0 },
+    { itemId: 'salon_trolley', x: 33, y: 2, rot: 0 },
+    { itemId: 'wash_basin', x: 36, y: 1, rot: 0 },
+    { itemId: 'wash_basin', x: 37, y: 1, rot: 0 },
+    { itemId: 'wash_basin', x: 38, y: 1, rot: 0 },
+    { itemId: 'hood_dryer', x: 40, y: 1, rot: 0 },
+    { itemId: 'hood_dryer', x: 41, y: 1, rot: 0 },
+    { itemId: 'plant', x: 42, y: 1, rot: 0 },
+    // waiting lounge
+    { itemId: 'cafe_table', x: 30, y: 10, rot: 0 },
+    { itemId: 'sofa', x: 28, y: 12, rot: 2 },
+    { itemId: 'plant', x: 32, y: 9, rot: 0 },
+    // reception retail and the manicure corner
+    { itemId: 'product_shelf', x: 32, y: 20, rot: 0 },
+    { itemId: 'nail_station', x: 36, y: 17, rot: 0 },
+    { itemId: 'stool', x: 36, y: 18, rot: 0 },
+    { itemId: 'stool', x: 37, y: 18, rot: 0 },
+    { itemId: 'water_cooler', x: 25, y: 12, rot: 1 },
+    { itemId: 'plant', x: 25, y: 27, rot: 0 },
+    { itemId: 'plant', x: 34, y: 27, rot: 0 },
+    { itemId: 'plant', x: 42, y: 27, rot: 0 },
   ],
   arcade: [
     { itemId: 'arcade_snake_1', x: 2, y: 2, rot: 0 },
@@ -1386,10 +1418,12 @@ export const NPCS = [
     color: '#c06c84',
     personality: 'flamboyant salon artist',
     room: 'pool',
-    home: { x: 30, y: 7 },
+    home: { x: 30, y: 4 },
+    // stands behind each styling chair in turn
     routine: [
-      { x: 30, y: 6, activity: 'interact', dwell: [8000, 15000] },
-      { x: 34, y: 6, activity: 'interact', dwell: [8000, 15000] },
+      { x: 28, y: 3, dwell: [8000, 15000] },
+      { x: 30, y: 3, dwell: [8000, 15000] },
+      { x: 32, y: 3, dwell: [8000, 15000] },
     ],
     greetLines: ['Bonjour darling! Looking for a fabulous new look?', 'Step into my salon chair on Floor 5!'],
     ambientLines: [
@@ -1459,6 +1493,7 @@ export const NPCS = [
     home: { x: 29, y: 19 },
     routine: [
       { x: 28, y: 20, activity: 'interact', dwell: [10000, 20000] },
+      { x: 36, y: 16, dwell: [6000, 12000] }, // manicure station, technician side
       { x: 40, y: 22, dwell: [3000, 6000] },
     ],
     greetLines: ['Welcome to Azure Spa & Salon.', 'Appointments for styling and massage are always available.'],
