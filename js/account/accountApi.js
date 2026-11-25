@@ -61,6 +61,21 @@ export async function startGoogleSignIn(client, redirectTo) {
   return { linked: false };
 }
 
+/**
+ * "Continue as Guest": a Supabase anonymous identity. Reuses the browser's
+ * existing session (e.g. from multiplayer) instead of creating a new one.
+ * A guest can later add an email or Google to the same identity.
+ */
+export async function signInAsGuest(client) {
+  const current = await getAccountUser(client);
+  if (current) return current;
+  const { data, error } = await client.auth.signInAnonymously();
+  if (error) throw error;
+  const user = data && data.user;
+  if (!user) throw new Error('guest_sign_in_failed');
+  return { id: user.id, email: '', isAnonymous: true };
+}
+
 export async function signOutAccount(client) {
   const { error } = await client.auth.signOut();
   if (error) throw error;

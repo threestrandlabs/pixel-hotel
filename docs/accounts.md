@@ -2,6 +2,13 @@
 
 Optional sign-in so a player's progress follows them across devices.
 
+## Guest mode
+
+**Continue as Guest** works as soon as "Allow anonymous sign-ins" is on (already
+required by multiplayer), so it can be tested before any of the setup below.
+Guests have no cloud save: an anonymous identity cannot sign in on a second
+device. Adding an email or Google upgrades the guest in place.
+
 ## One-time setup (Supabase dashboard)
 
 1. **SQL Editor:** paste and run

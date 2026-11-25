@@ -17,6 +17,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   identity in place, keeping the friend code. Multiplayer "Disconnect" no
   longer signs a real account out.
 - Reset warns that it also resets the cloud save when signed in.
+- **Continue as Guest**: anonymous sign-in (no email needed); progress stays in
+  the browser, and the guest can add an email or Google later without losing
+  anything.
 
 ### Changed — PixiJS rebuild and new pixel art
 - Rendering moved from six stacked 2D canvases to one PixiJS 8 scene (Vite + npm).

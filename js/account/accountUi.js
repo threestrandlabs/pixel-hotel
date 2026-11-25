@@ -7,7 +7,7 @@
 import { getSupabaseClient } from '../multiplayer/client.js';
 import { SAVE_KEY, onStateSaved, setSavesSuspended } from '../save.js';
 import {
-  getAccountUser, requestEmailLink, startGoogleSignIn, signOutAccount, fetchCloudSave, putCloudSave, isValidEmail,
+  getAccountUser, requestEmailLink, startGoogleSignIn, signInAsGuest, signOutAccount, fetchCloudSave, putCloudSave, isValidEmail,
 } from './accountApi.js';
 import {
   cloudPayload, mergeCloudIntoLocal, saveFingerprint, hasMeaningfulProgress, summarizeSave, decideSync,
@@ -53,12 +53,20 @@ function formatWhen(iso) {
 
 function render() {
   const signedIn = !!(ctx.user && !ctx.user.isAnonymous);
+  const guest = !!(ctx.user && ctx.user.isAnonymous);
   byId('accountSignedOut')?.classList.toggle('hidden', signedIn);
   byId('accountSignedIn')?.classList.toggle('hidden', !signedIn);
+  byId('accountGuestBanner')?.classList.toggle('hidden', !guest);
+  byId('accountSignedOutIntro')?.classList.toggle('hidden', guest);
+  byId('accountGuestOption')?.classList.toggle('hidden', guest);
+  byId('accountGuestActions')?.classList.toggle('hidden', !guest);
   const btn = byId('btnAccount');
   if (btn) {
     btn.classList.toggle('account-signed-in', signedIn);
-    const label = signedIn ? `Account: ${ctx.user.email || 'signed in'} (cloud save on)` : 'Sign in to save across devices';
+    btn.classList.toggle('account-guest', guest);
+    const label = signedIn
+      ? `Account: ${ctx.user.email || 'signed in'} (cloud save on)`
+      : guest ? 'Playing as Guest: add an email or Google to save across devices' : 'Sign in to save across devices';
     btn.title = label;
     btn.setAttribute('aria-label', label);
   }
@@ -236,7 +244,7 @@ async function resolveConflict(choice) {
 async function onSignedIn(user) {
   ctx.user = user;
   const meta = readCloudMeta(storage());
-  writeCloudMeta(storage(), { ...meta, enabled: true });
+  writeCloudMeta(storage(), { ...meta, enabled: true, guest: false });
   render();
   await syncNow();
 }
@@ -251,24 +259,33 @@ async function start({ fromCallback }) {
       if (err) ctx.deps.showToast(`Sign-in failed: ${err}`);
       try { window.history.replaceState(null, '', redirectUrl()); } catch (e) { /* ignore */ }
     }
-    ctx.client.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_OUT') {
-        ctx.user = null;
-        render();
-      } else if (session && session.user && !session.user.is_anonymous && (!ctx.user || ctx.user.isAnonymous)) {
-        // e.g. the magic link was opened in another tab of this browser
-        setTimeout(() => onSignedIn({
-          id: session.user.id, email: session.user.email || '', isAnonymous: false,
-        }), 0);
-      }
-    });
+    if (!ctx.authListening) {
+      ctx.authListening = true;
+      ctx.client.auth.onAuthStateChange((event, session) => {
+        if (event === 'SIGNED_OUT') {
+          ctx.user = null;
+          const m = readCloudMeta(storage());
+          if (m.guest) writeCloudMeta(storage(), { ...m, guest: false });
+          render();
+        } else if (session && session.user && session.user.is_anonymous && !ctx.user) {
+          // multiplayer Connect created an anonymous identity in this tab
+          ctx.user = { id: session.user.id, email: '', isAnonymous: true };
+          render();
+        } else if (session && session.user && !session.user.is_anonymous && (!ctx.user || ctx.user.isAnonymous)) {
+          // e.g. the magic link was opened in another tab of this browser
+          setTimeout(() => onSignedIn({
+            id: session.user.id, email: session.user.email || '', isAnonymous: false,
+          }), 0);
+        }
+      });
+    }
     if (user && !user.isAnonymous) {
       if (fromCallback) ctx.deps.showToast(`☁️ Signed in as ${user.email || 'your account'}. Cloud save is on.`);
       await onSignedIn(user);
     } else {
       ctx.user = user;
       const meta = readCloudMeta(storage());
-      if (meta.enabled) writeCloudMeta(storage(), { ...meta, enabled: false });
+      writeCloudMeta(storage(), { ...meta, enabled: false, guest: !!user });
       render();
     }
   } catch (e) {
@@ -296,6 +313,39 @@ async function handleEmailClick() {
   } finally {
     if (btn) btn.disabled = false;
   }
+}
+
+async function handleGuestClick() {
+  const btn = byId('btnAccountGuest');
+  if (btn) btn.disabled = true;
+  setStatus('Signing in as Guest…');
+  try {
+    await ensureClient();
+    if (!ctx.authListening) await start({ fromCallback: false });
+    const user = ctx.user && ctx.user.isAnonymous ? ctx.user : await signInAsGuest(ctx.client);
+    if (!user.isAnonymous) { await onSignedIn(user); return; }
+    ctx.user = user;
+    writeCloudMeta(storage(), { ...readCloudMeta(storage()), guest: true });
+    render();
+    setStatus('You\'re playing as a Guest. Progress stays in this browser.');
+    ctx.deps.showToast('👤 Signed in as Guest.');
+  } catch (e) {
+    const msg = String((e && e.message) || e);
+    setStatus(/anonymous/i.test(msg)
+      ? 'Guest sign-in is turned off for this server (enable anonymous sign-ins in Supabase).'
+      : 'Could not sign in as Guest. Check your connection and try again.');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function handleGuestSignOutClick() {
+  if (!window.confirm('Leave Guest mode? Your progress stays in this browser, but this guest identity (and its multiplayer friend code) cannot be recovered.')) return;
+  try { await signOutAccount(ctx.client); } catch (e) { /* already gone */ }
+  writeCloudMeta(storage(), { ...readCloudMeta(storage()), guest: false });
+  ctx.user = null;
+  render();
+  setStatus('Signed out of Guest mode.');
 }
 
 async function handleGoogleClick() {
@@ -341,6 +391,8 @@ export function initAccountUI(deps) {
   byId('btnAccountEmail')?.addEventListener('click', handleEmailClick);
   byId('accountEmailInput')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') handleEmailClick(); });
   byId('btnAccountGoogle')?.addEventListener('click', handleGoogleClick);
+  byId('btnAccountGuest')?.addEventListener('click', handleGuestClick);
+  byId('btnAccountGuestSignOut')?.addEventListener('click', handleGuestSignOutClick);
   byId('btnAccountSync')?.addEventListener('click', () => { ctx.conflict = null; syncNow(); });
   byId('btnAccountSignOut')?.addEventListener('click', handleSignOutClick);
   byId('btnConflictKeepLocal')?.addEventListener('click', () => resolveConflict('local'));
@@ -359,5 +411,6 @@ export function initAccountUI(deps) {
 
   render();
   const fromCallback = AUTH_CALLBACK_RE.test(window.location.href);
-  if (fromCallback || readCloudMeta(storage()).enabled) start({ fromCallback });
+  const bootMeta = readCloudMeta(storage());
+  if (fromCallback || bootMeta.enabled || bootMeta.guest) start({ fromCallback });
 }

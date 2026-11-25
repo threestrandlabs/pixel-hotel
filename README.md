@@ -148,6 +148,10 @@ Per-device settings (zoom, volumes, graphics detail) stay on each device.
 - Signed in: the game syncs when it loads, a few seconds after each save, and
   when you come back to the tab. If two devices both made progress since they
   last synced, it asks which one to keep instead of overwriting either.
+- **Continue as Guest** signs in with an anonymous identity (the same kind
+  multiplayer uses). Guest progress stays in this browser; adding an email or
+  Google later upgrades the same identity, so nothing is lost. Guest needs only
+  "Allow anonymous sign-ins", which multiplayer already requires.
 - If you already used anonymous multiplayer in this browser, signing in keeps
   your friend code and shared room.
 

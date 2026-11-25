@@ -241,7 +241,11 @@
     </div>
     <div class="account-body">
       <div id="accountSignedOut">
-        <p class="account-lead">Sign in to keep your hotel on every device. Your coins, furniture, wardrobe, quests and collection load wherever you sign in.</p>
+        <div id="accountGuestBanner" class="account-guest-banner hidden">
+          <p><b>You're playing as a Guest.</b> Your progress is saved in this browser only.</p>
+          <p class="mp-hint">Add an email or Google below to keep this hotel on every device. You keep everything you have now.</p>
+        </div>
+        <p id="accountSignedOutIntro" class="account-lead">Sign in to keep your hotel on every device. Your coins, furniture, wardrobe, quests and collection load wherever you sign in.</p>
         <label class="account-label" for="accountEmailInput">Email</label>
         <div class="account-row">
           <input id="accountEmailInput" type="email" autocomplete="email" inputmode="email" maxlength="254" placeholder="you@example.com" />
@@ -250,7 +254,13 @@
         <p class="mp-hint">No password: we email you a one-time sign-in link.</p>
         <div class="account-divider" aria-hidden="true"><span>or</span></div>
         <button id="btnAccountGoogle" class="pixel-btn account-google">Continue with Google</button>
-        <p class="mp-hint">Optional. Without signing in, the game works exactly as before and your progress stays in this browser.</p>
+        <div id="accountGuestOption">
+          <button id="btnAccountGuest" class="pixel-btn account-google account-guest-btn">Continue as Guest</button>
+          <p class="mp-hint">Optional. Without signing in, the game works exactly as before and your progress stays in this browser.</p>
+        </div>
+        <div id="accountGuestActions" class="account-row hidden">
+          <button id="btnAccountGuestSignOut" class="pixel-btn">Leave Guest mode</button>
+        </div>
       </div>
       <div id="accountSignedIn" class="hidden">
         <p>Signed in as <b id="accountEmail"></b></p>

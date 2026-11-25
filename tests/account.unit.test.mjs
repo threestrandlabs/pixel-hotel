@@ -12,7 +12,7 @@ import {
   readCloudMeta, writeCloudMeta, clearCloudMeta, isConflictError, CLOUD_META_KEY,
 } from '../js/account/cloudSave.js';
 import {
-  isValidEmail, getAccountUser, requestEmailLink, startGoogleSignIn, fetchCloudSave, putCloudSave,
+  isValidEmail, getAccountUser, requestEmailLink, startGoogleSignIn, signInAsGuest, fetchCloudSave, putCloudSave,
 } from '../js/account/accountApi.js';
 import { createDefaultState, saveState, onStateSaved, setSavesSuspended, SAVE_KEY } from '../js/save.js';
 import { signOutMultiplayer } from '../js/multiplayer/auth.js';
@@ -46,6 +46,11 @@ function fakeSupabase({ user = null, linkFails = false, emailTaken = false } = {
         return linkFails ? { error: { message: 'Manual linking is disabled' } } : { data: {}, error: null };
       },
       async signInWithOAuth(args) { calls.push(['signInWithOAuth', args]); return { data: {}, error: null }; },
+      async signInAnonymously() {
+        calls.push(['signInAnonymously']);
+        session = { user: { id: 'anon-new', is_anonymous: true } };
+        return { data: { user: session.user, session }, error: null };
+      },
       async signOut() { calls.push(['signOut']); session = null; return { error: null }; },
     },
     from(table) {
@@ -272,6 +277,28 @@ test('two devices: phone plays, laptop pulls, then both edit -> conflict', async
 test('anonymous identities cannot write a cloud save', async () => {
   const c = fakeSupabase({ user: { id: 'anon1', is_anonymous: true } });
   await assert.rejects(() => putCloudSave(c, {}, 14, null), (e) => /not_signed_in/.test(e.message));
+});
+
+test('guest: creates an anonymous identity, or reuses the existing session', async () => {
+  const fresh = fakeSupabase();
+  const g = await signInAsGuest(fresh);
+  assert.deepEqual(g, { id: 'anon-new', email: '', isAnonymous: true });
+  assert.deepEqual(fresh.calls.map((x) => x[0]), ['signInAnonymously']);
+
+  const existingAnon = fakeSupabase({ user: { id: 'anon-old', is_anonymous: true } });
+  assert.equal((await signInAsGuest(existingAnon)).id, 'anon-old');
+  assert.equal(existingAnon.calls.length, 0);
+
+  const real = fakeSupabase({ user: ALICE });
+  assert.equal((await signInAsGuest(real)).isAnonymous, false);
+});
+
+test('guest can later upgrade to email in place', async () => {
+  const c = fakeSupabase();
+  await signInAsGuest(c);
+  const r = await requestEmailLink(c, 'alice@example.com', 'https://x/');
+  assert.equal(r.linked, true);
+  assert.deepEqual(c.calls.map((x) => x[0]), ['signInAnonymously', 'updateUser']);
 });
 
 // ------------------------------------------------------------ save.js hooks
